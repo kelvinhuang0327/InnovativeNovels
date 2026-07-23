@@ -1,10 +1,45 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  display: block;
+  padding: 0;
+}
+
+button {
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid #8d3f2f;
+  border-radius: 999px;
+  color: #fffdf8;
+  background: #8d3f2f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #713125;
+}
+
+button:focus-visible {
+  outline: 3px solid #e1a867;
+  outline-offset: 3px;
+}
+
+.button-secondary {
+  color: #713125;
+  background: transparent;
+}
+
 .app-shell {
-  max-width: 42rem;
-  padding: 4rem;
-  border: 1px solid #ded8cd;
-  border-radius: 1.5rem;
-  background: rgba(255, 253, 248, 0.92);
-  box-shadow: 0 1.5rem 4rem rgba(43, 34, 20, 0.08);
+  width: min(100%, 46rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 4rem);
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: 0 0 4rem rgba(43, 34, 20, 0.08);
 }
 
 .eyebrow {
@@ -16,18 +51,64 @@
   text-transform: uppercase;
 }
 
-.app-shell h1 {
+.screen-heading {
   margin: 0;
   color: #2b221a;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(2.4rem, 7vw, 4.8rem);
-  line-height: 1;
+  font-size: clamp(2.25rem, 8vw, 4.5rem);
+  line-height: 1.05;
 }
 
-.app-shell p:last-child {
-  max-width: 34rem;
-  margin: 1.5rem 0 0;
+.screen-copy,
+.book-description,
+.reader-prose p,
+.locked-notice {
   color: #65594d;
-  font-size: 1.1rem;
-  line-height: 1.7;
+  font-size: 1.08rem;
+  line-height: 1.8;
+}
+
+.book-card {
+  margin-top: 2rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid #ded8cd;
+  border-radius: 1.25rem;
+  background: #fffdf8;
+}
+
+.book-card h2 {
+  margin-top: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.8rem;
+}
+
+.book-meta {
+  color: #8d3f2f;
+  font-weight: 700;
+}
+
+.actions,
+.reader-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.reader-prose {
+  margin-top: 2rem;
+}
+
+.locked-notice {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border-left: 0.35rem solid #8d3f2f;
+  background: #f6ede4;
+}
+
+@media (max-width: 32rem) {
+  .actions button,
+  .reader-navigation button {
+    width: 100%;
+  }
 }
