@@ -1,0 +1,33 @@
+.app-shell {
+  max-width: 42rem;
+  padding: 4rem;
+  border: 1px solid #ded8cd;
+  border-radius: 1.5rem;
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 0 1.5rem 4rem rgba(43, 34, 20, 0.08);
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #8d3f2f;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.app-shell h1 {
+  margin: 0;
+  color: #2b221a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(2.4rem, 7vw, 4.8rem);
+  line-height: 1;
+}
+
+.app-shell p:last-child {
+  max-width: 34rem;
+  margin: 1.5rem 0 0;
+  color: #65594d;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
