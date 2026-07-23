@@ -113,4 +113,25 @@ export class LocalStorageReadingStateRepository
       // Storage failures leave the reading journey usable without persistence.
     }
   }
+
+  listSavedPositions(): readonly ReadingPosition[] {
+    try {
+      const envelope = parseEnvelope(
+        this.storage.getItem(READING_STATE_STORAGE_KEY),
+      )
+
+      if (!envelope) {
+        return []
+      }
+
+      return Object.values(envelope.positions).map((position) => ({
+        bookId: bookId(position.bookId),
+        chapterId: chapterId(position.chapterId),
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      }))
+    } catch {
+      return []
+    }
+  }
 }

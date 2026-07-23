@@ -137,3 +137,40 @@ export function navigateToAdjacentChapter(
       )
     : undefined
 }
+
+export interface ContinueReadingEntry {
+  readonly book: ContentBook
+  readonly chapter: Chapter
+  readonly position: ReadingPosition
+}
+
+export function listContinueReading(
+  contentRepository: ContentRepository,
+  readingStateRepository: ReadingStateRepository,
+): readonly ContinueReadingEntry[] {
+  const savedByBookId = new Map(
+    readingStateRepository
+      .listSavedPositions()
+      .map((position) => [position.bookId, position] as const),
+  )
+
+  const entries: ContinueReadingEntry[] = []
+
+  for (const book of contentRepository.listBooks()) {
+    const saved = savedByBookId.get(book.book.id)
+
+    if (!saved) {
+      continue
+    }
+
+    const chapter = findReadableChapter(book, saved.chapterId)
+
+    if (!chapter) {
+      continue
+    }
+
+    entries.push({ book, chapter, position: saved })
+  }
+
+  return entries
+}

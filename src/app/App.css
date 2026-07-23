@@ -106,9 +106,123 @@ button:focus-visible {
   background: #f6ede4;
 }
 
+.section-heading {
+  margin: 2rem 0 0;
+  color: #2b221a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.4rem;
+}
+
+.catalog-controls {
+  margin-top: 1.5rem;
+}
+
+.catalog-search-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.catalog-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 999px;
+  background: #fffdf8;
+  color: #2b221a;
+  font: inherit;
+}
+
+.catalog-search-input:focus-visible {
+  outline: 3px solid #e1a867;
+  outline-offset: 3px;
+}
+
+.genre-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.genre-filter button {
+  border-color: #ded8cd;
+  color: #713125;
+  background: transparent;
+}
+
+.genre-filter button[aria-pressed='true'] {
+  color: #fffdf8;
+  background: #8d3f2f;
+}
+
+.catalog-controls > .button-secondary {
+  margin-top: 1rem;
+}
+
+.empty-state {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px dashed #ded8cd;
+  border-radius: 1.25rem;
+  color: #65594d;
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.continue-reading-shelf {
+  margin-top: 1.5rem;
+}
+
+.continue-reading-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.continue-reading-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid #ded8cd;
+  border-radius: 1.25rem;
+  background: #fffdf8;
+}
+
+.continue-reading-title {
+  margin: 0.15rem 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.25rem;
+  color: #2b221a;
+}
+
+.continue-reading-chapter {
+  margin: 0.15rem 0 0;
+  color: #65594d;
+}
+
 @media (max-width: 32rem) {
   .actions button,
   .reader-navigation button {
+    width: 100%;
+  }
+
+  .continue-reading-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .continue-reading-item button {
     width: 100%;
   }
 }

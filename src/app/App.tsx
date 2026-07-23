@@ -5,6 +5,7 @@ import {
 } from '../application/catalog/catalogUseCases'
 import type { ContentRepository } from '../application/catalog/contentRepository'
 import {
+  listContinueReading,
   navigateToAdjacentChapter,
   openReadingChapter,
   resolveStartOrContinue,
@@ -96,6 +97,11 @@ function App({ dependencies = createDefaultDependencies() }: AppProps) {
       {screen.name === 'catalog' && (
         <CatalogScreen
           books={listCatalog(dependencies.contentRepository)}
+          continueReading={listContinueReading(
+            dependencies.contentRepository,
+            dependencies.readingStateRepository,
+          )}
+          onContinueBook={openReader}
           onOpenBook={openBookDetail}
         />
       )}
