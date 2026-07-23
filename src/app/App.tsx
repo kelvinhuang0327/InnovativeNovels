@@ -12,11 +12,16 @@ import {
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
 import type { ReadingStateRepository } from '../application/reading/readingStateRepository'
+import type { PwaDependencies } from '../application/pwa/pwaPorts'
+import { usePwaController } from '../application/pwa/usePwaController'
 import { BookDetailScreen } from '../features/book-detail/BookDetailScreen'
 import { CatalogScreen } from '../features/catalog/CatalogScreen'
+import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
+import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
+import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
 import './App.css'
 
 export interface AppDependencies {
@@ -26,6 +31,7 @@ export interface AppDependencies {
 
 interface AppProps {
   readonly dependencies?: AppDependencies
+  readonly pwaDependencies?: PwaDependencies
 }
 
 type Screen =
@@ -34,6 +40,10 @@ type Screen =
   | { readonly name: 'reader'; readonly openedChapter: OpenedChapter }
 
 const defaultContentRepository = new StaticContentRepository()
+const defaultPwaDependencies: PwaDependencies = {
+  browser: new BrowserPwaAdapter(window, window.navigator),
+  serviceWorker: new ViteServiceWorkerAdapter(),
+}
 
 function createDefaultDependencies(): AppDependencies {
   return {
@@ -44,8 +54,12 @@ function createDefaultDependencies(): AppDependencies {
   }
 }
 
-function App({ dependencies = createDefaultDependencies() }: AppProps) {
+function App({
+  dependencies = createDefaultDependencies(),
+  pwaDependencies = defaultPwaDependencies,
+}: AppProps) {
   const [screen, setScreen] = useState<Screen>({ name: 'catalog' })
+  const pwa = usePwaController(pwaDependencies)
 
   const openBookDetail = (bookId: string) => {
     setScreen({ name: 'book-detail', bookId })
@@ -93,6 +107,7 @@ function App({ dependencies = createDefaultDependencies() }: AppProps) {
   return (
     <main className="app-shell">
       <p className="eyebrow">InnovativeNovels</p>
+      <PwaControls {...pwa} />
 
       {screen.name === 'catalog' && (
         <CatalogScreen

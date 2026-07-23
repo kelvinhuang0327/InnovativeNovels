@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">InnovativeNovels open book mark</title>
+  <rect width="512" height="512" rx="112" fill="#8d3f2f"/>
+  <path d="M88 132c58-18 114-5 168 38v244c-54-43-110-56-168-38V132Z" fill="#fffdf8"/>
+  <path d="M424 132c-58-18-114-5-168 38v244c54-43 110-56 168-38V132Z" fill="#f2d8b5"/>
+  <path d="M256 170v244" stroke="#713125" stroke-width="18" stroke-linecap="round"/>
+  <path d="M126 250c34-5 66 2 96 20M126 306c34-5 66 2 96 20M386 250c-34-5-66 2-96 20M386 306c-34-5-66 2-96 20" fill="none" stroke="#8d3f2f" stroke-width="14" stroke-linecap="round"/>
+</svg>

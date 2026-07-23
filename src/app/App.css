@@ -4,7 +4,9 @@
 
 body {
   display: block;
+  min-width: 0;
   padding: 0;
+  overflow-x: clip;
 }
 
 button {
@@ -49,6 +51,35 @@ button:focus-visible {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.pwa-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 1rem;
+  background: #f6ede4;
+}
+
+.pwa-status {
+  flex: 1 1 16rem;
+  margin: 0;
+  color: #65594d;
+  line-height: 1.5;
+}
+
+.pwa-update {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #65594d;
 }
 
 .screen-heading {
@@ -223,6 +254,17 @@ button:focus-visible {
   }
 
   .continue-reading-item button {
+    width: 100%;
+  }
+
+  .pwa-controls,
+  .pwa-update {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pwa-controls button,
+  .pwa-update button {
     width: 100%;
   }
 }
