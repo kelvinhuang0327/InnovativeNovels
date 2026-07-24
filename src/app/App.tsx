@@ -4,21 +4,36 @@ import {
   listCatalog,
 } from '../application/catalog/catalogUseCases'
 import type { ContentRepository } from '../application/catalog/contentRepository'
+import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
+import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
+  addChapterBookmark,
+  isChapterBookmarked,
+  listChapterBookmarks,
   listContinueReading,
   navigateToAdjacentChapter,
   openReadingChapter,
+  removeChapterBookmark,
   resolveStartOrContinue,
+  type BookmarkEntry,
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
 import type { ReadingStateRepository } from '../application/reading/readingStateRepository'
 import type { PwaDependencies } from '../application/pwa/pwaPorts'
 import { usePwaController } from '../application/pwa/usePwaController'
+import { bookId as toBookId, chapterId as toChapterId } from '../domain/catalog/identifiers'
+import type { ChapterBookmark } from '../domain/reading/chapterBookmark'
+import {
+  DEFAULT_READER_PREFERENCES,
+  type ReaderPreferences,
+} from '../domain/reading/readerPreferences'
 import { BookDetailScreen } from '../features/book-detail/BookDetailScreen'
 import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
+import { LocalStorageChapterBookmarksRepository } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
 import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
 import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
@@ -27,6 +42,8 @@ import './App.css'
 export interface AppDependencies {
   readonly contentRepository: ContentRepository
   readonly readingStateRepository: ReadingStateRepository
+  readonly readerPreferencesRepository?: ReaderPreferencesRepository
+  readonly chapterBookmarksRepository?: ChapterBookmarksRepository
 }
 
 interface AppProps {
@@ -45,10 +62,47 @@ const defaultPwaDependencies: PwaDependencies = {
   serviceWorker: new ViteServiceWorkerAdapter(),
 }
 
+class MemoryPreferencesRepository implements ReaderPreferencesRepository {
+  private prefs: ReaderPreferences = DEFAULT_READER_PREFERENCES
+  load(): ReaderPreferences {
+    return this.prefs
+  }
+  save(preferences: ReaderPreferences): void {
+    this.prefs = preferences
+  }
+}
+
+class MemoryBookmarksRepository implements ChapterBookmarksRepository {
+  private items: ChapterBookmark[] = []
+  list(): readonly ChapterBookmark[] {
+    return this.items
+  }
+  add(bookmark: ChapterBookmark): void {
+    if (
+      !this.items.some(
+        (i) => i.bookId === bookmark.bookId && i.chapterId === bookmark.chapterId,
+      )
+    ) {
+      this.items.push(bookmark)
+    }
+  }
+  remove(bookId: string, chapterId: string): void {
+    this.items = this.items.filter(
+      (i) => !(i.bookId === bookId && i.chapterId === chapterId),
+    )
+  }
+}
+
 function createDefaultDependencies(): AppDependencies {
   return {
     contentRepository: defaultContentRepository,
     readingStateRepository: new LocalStorageReadingStateRepository(
+      window.localStorage,
+    ),
+    readerPreferencesRepository: new LocalStorageReaderPreferencesRepository(
+      window.localStorage,
+    ),
+    chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
       window.localStorage,
     ),
   }
@@ -58,8 +112,73 @@ function App({
   dependencies = createDefaultDependencies(),
   pwaDependencies = defaultPwaDependencies,
 }: AppProps) {
+  const prefRepo =
+    dependencies.readerPreferencesRepository ??
+    new MemoryPreferencesRepository()
+  const bookmarkRepo =
+    dependencies.chapterBookmarksRepository ?? new MemoryBookmarksRepository()
+
   const [screen, setScreen] = useState<Screen>({ name: 'catalog' })
+  const [preferences, setPreferences] = useState<ReaderPreferences>(() =>
+    prefRepo.load(),
+  )
+  const [bookmarks, setBookmarks] = useState<readonly BookmarkEntry[]>(() =>
+    listChapterBookmarks(dependencies.contentRepository, bookmarkRepo),
+  )
+
   const pwa = usePwaController(pwaDependencies)
+
+  const handleUpdatePreferences = (newPrefs: ReaderPreferences) => {
+    prefRepo.save(newPrefs)
+    setPreferences(newPrefs)
+  }
+
+  const handleResetPreferences = () => {
+    prefRepo.save(DEFAULT_READER_PREFERENCES)
+    setPreferences(DEFAULT_READER_PREFERENCES)
+  }
+
+  const refreshBookmarks = () => {
+    setBookmarks(
+      listChapterBookmarks(dependencies.contentRepository, bookmarkRepo),
+    )
+  }
+
+  const handleToggleBookmark = (bookId: string, chapterId: string) => {
+    if (isChapterBookmarked(bookmarkRepo, bookId, chapterId)) {
+      removeChapterBookmark(bookmarkRepo, bookId, chapterId)
+    } else {
+      addChapterBookmark(
+        dependencies.contentRepository,
+        bookmarkRepo,
+        bookId,
+        chapterId,
+      )
+    }
+    refreshBookmarks()
+  }
+
+  const handleRemoveBookmark = (bookId: string, chapterId: string) => {
+    removeChapterBookmark(bookmarkRepo, bookId, chapterId)
+    refreshBookmarks()
+  }
+
+  const handleJumpBookmark = (targetBookId: string, targetChapterId: string) => {
+    const openedChapter = openReadingChapter(
+      dependencies.contentRepository,
+      dependencies.readingStateRepository,
+      {
+        bookId: toBookId(targetBookId),
+        chapterId: toChapterId(targetChapterId),
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
+    )
+
+    if (openedChapter) {
+      setScreen({ name: 'reader', openedChapter })
+    }
+  }
 
   const openBookDetail = (bookId: string) => {
     setScreen({ name: 'book-detail', bookId })
@@ -151,6 +270,23 @@ function App({
       {screen.name === 'reader' && (
         <ReaderScreen
           openedChapter={screen.openedChapter}
+          preferences={preferences}
+          isBookmarked={isChapterBookmarked(
+            bookmarkRepo,
+            screen.openedChapter.book.book.id,
+            screen.openedChapter.chapter.id,
+          )}
+          bookmarks={bookmarks}
+          onChangePreferences={handleUpdatePreferences}
+          onResetPreferences={handleResetPreferences}
+          onToggleBookmark={() =>
+            handleToggleBookmark(
+              screen.openedChapter.book.book.id,
+              screen.openedChapter.chapter.id,
+            )
+          }
+          onSelectBookmark={handleJumpBookmark}
+          onRemoveBookmark={handleRemoveBookmark}
           onBackToBook={() =>
             setScreen({
               name: 'book-detail',

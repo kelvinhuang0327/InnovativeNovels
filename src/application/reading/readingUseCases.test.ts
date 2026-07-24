@@ -2,12 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence, type Chapter } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
+import type { ChapterBookmark } from '../../domain/reading/chapterBookmark'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type {
   ContentBook,
   ContentRepository,
 } from '../catalog/contentRepository'
-import { listContinueReading } from './readingUseCases'
+import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
+import {
+  addChapterBookmark,
+  isChapterBookmarked,
+  listChapterBookmarks,
+  listContinueReading,
+  removeChapterBookmark,
+} from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
 
 function chapter(
@@ -70,6 +78,30 @@ class FakeReadingStateRepository implements ReadingStateRepository {
 
   listSavedPositions(): readonly ReadingPosition[] {
     return this.positions
+  }
+}
+
+class FakeBookmarksRepository implements ChapterBookmarksRepository {
+  private items: ChapterBookmark[]
+
+  constructor(initial: ChapterBookmark[] = []) {
+    this.items = [...initial]
+  }
+
+  list(): readonly ChapterBookmark[] {
+    return this.items
+  }
+
+  add(bookmark: ChapterBookmark): void {
+    if (!this.items.some((b) => b.bookId === bookmark.bookId && b.chapterId === bookmark.chapterId)) {
+      this.items.push(bookmark)
+    }
+  }
+
+  remove(targetBookId: string, targetChapterId: string): void {
+    this.items = this.items.filter(
+      (b) => !(b.bookId === targetBookId && b.chapterId === targetChapterId),
+    )
   }
 }
 
@@ -148,5 +180,62 @@ describe('listContinueReading', () => {
     expect(
       listContinueReading(new FakeContentRepository(catalog), readingStateRepository),
     ).toEqual([])
+  })
+})
+
+describe('Chapter Bookmarks Use Cases', () => {
+  const bookA = makeBook('book-a', [
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+  ])
+  const bookB = makeBook('book-b', [
+    chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-b', 'b-2', 2, CHAPTER_ACCESS.LOCKED),
+  ])
+  const repo = new FakeContentRepository([bookA, bookB])
+
+  it('can bookmark accessible chapters and remove bookmarks', () => {
+    const bookmarksRepo = new FakeBookmarksRepository()
+
+    expect(addChapterBookmark(repo, bookmarksRepo, 'book-a', 'a-1')).toBe(true)
+    expect(isChapterBookmarked(bookmarksRepo, 'book-a', 'a-1')).toBe(true)
+
+    removeChapterBookmark(bookmarksRepo, 'book-a', 'a-1')
+    expect(isChapterBookmarked(bookmarksRepo, 'book-a', 'a-1')).toBe(false)
+  })
+
+  it('prevents bookmarking locked chapters', () => {
+    const bookmarksRepo = new FakeBookmarksRepository()
+
+    expect(addChapterBookmark(repo, bookmarksRepo, 'book-b', 'b-2')).toBe(false)
+    expect(isChapterBookmarked(bookmarksRepo, 'book-b', 'b-2')).toBe(false)
+  })
+
+  it('lists bookmarks in catalog and explicit chapter order', () => {
+    const bookmarksRepo = new FakeBookmarksRepository([
+      { bookId: bookId('book-b'), chapterId: chapterId('b-1') },
+      { bookId: bookId('book-a'), chapterId: chapterId('a-2') },
+      { bookId: bookId('book-a'), chapterId: chapterId('a-1') },
+    ])
+
+    const list = listChapterBookmarks(repo, bookmarksRepo)
+    expect(list).toHaveLength(3)
+    expect(list[0].book.book.id).toBe('book-a')
+    expect(list[0].chapter.id).toBe('a-1')
+    expect(list[1].book.book.id).toBe('book-a')
+    expect(list[1].chapter.id).toBe('a-2')
+    expect(list[2].book.book.id).toBe('book-b')
+    expect(list[2].chapter.id).toBe('b-1')
+  })
+
+  it('ignores stale book and chapter IDs and locked bookmarks', () => {
+    const bookmarksRepo = new FakeBookmarksRepository([
+      { bookId: bookId('stale-book'), chapterId: chapterId('a-1') },
+      { bookId: bookId('book-a'), chapterId: chapterId('stale-chapter') },
+      { bookId: bookId('book-b'), chapterId: chapterId('b-2') }, // locked
+    ])
+
+    const list = listChapterBookmarks(repo, bookmarksRepo)
+    expect(list).toEqual([])
   })
 })

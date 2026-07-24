@@ -4,6 +4,8 @@ import bookDetailSource from '../features/book-detail/BookDetailScreen.tsx?raw'
 import catalogSource from '../features/catalog/CatalogScreen.tsx?raw'
 import continueReadingShelfSource from '../features/library/ContinueReadingShelf.tsx?raw'
 import pwaControlsSource from '../features/pwa/PwaControls.tsx?raw'
+import bookmarksModalSource from '../features/reader/ChapterBookmarksModal.tsx?raw'
+import comfortControlsSource from '../features/reader/ReaderComfortControls.tsx?raw'
 import readerSource from '../features/reader/ReaderScreen.tsx?raw'
 import browserPwaAdapterSource from '../infrastructure/pwa/browserPwaAdapter.ts?raw'
 import serviceWorkerAdapterSource from '../infrastructure/pwa/viteServiceWorkerAdapter.ts?raw'
@@ -12,6 +14,8 @@ const featureFiles = [
   ['CatalogScreen.tsx', catalogSource],
   ['BookDetailScreen.tsx', bookDetailSource],
   ['ReaderScreen.tsx', readerSource],
+  ['ReaderComfortControls.tsx', comfortControlsSource],
+  ['ChapterBookmarksModal.tsx', bookmarksModalSource],
   ['ContinueReadingShelf.tsx', continueReadingShelfSource],
   ['PwaControls.tsx', pwaControlsSource],
 ]

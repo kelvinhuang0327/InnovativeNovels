@@ -8,6 +8,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
 import {
+  LocalStorageChapterBookmarksRepository,
+  CHAPTER_BOOKMARKS_STORAGE_KEY,
+} from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import {
+  LocalStorageReaderPreferencesRepository,
+  READER_PREFERENCES_STORAGE_KEY,
+} from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
+import {
   LocalStorageReadingStateRepository,
   READING_STATE_STORAGE_KEY,
 } from '../infrastructure/persistence/localStorageReadingStateRepository'
@@ -17,6 +25,12 @@ function createDependencies(): AppDependencies {
   return {
     contentRepository: new StaticContentRepository(),
     readingStateRepository: new LocalStorageReadingStateRepository(
+      window.localStorage,
+    ),
+    readerPreferencesRepository: new LocalStorageReaderPreferencesRepository(
+      window.localStorage,
+    ),
+    chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
       window.localStorage,
     ),
   }
@@ -325,4 +339,141 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
       expect(proseRequest).not.toHaveBeenCalledWith(lockedChapterId)
     },
   )
+})
+
+describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  function openFirstBookReader() {
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)$/ }))
+  }
+
+  it('persists and restores reader preferences across remounts and resets to default', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    fireEvent.click(screen.getByRole('radio', { name: '大' }))
+    fireEvent.click(screen.getByRole('radio', { name: '寬鬆' }))
+    fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
+
+    const savedPrefs = JSON.parse(
+      window.localStorage.getItem(READER_PREFERENCES_STORAGE_KEY) ?? '',
+    )
+    expect(savedPrefs).toEqual({
+      schemaVersion: 1,
+      fontScale: 'large',
+      lineSpacing: 'spacious',
+      theme: 'sepia',
+    })
+
+    firstMount.unmount()
+
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    const section = screen.getByLabelText('閱讀器')
+    expect(section.getAttribute('data-theme')).toBe('sepia')
+    expect(section.getAttribute('data-font-scale')).toBe('large')
+    expect(section.getAttribute('data-line-spacing')).toBe('spacious')
+
+    fireEvent.click(screen.getByRole('button', { name: '重設預設值' }))
+    expect(section.getAttribute('data-theme')).toBe('light')
+    expect(section.getAttribute('data-font-scale')).toBe('medium')
+    expect(section.getAttribute('data-line-spacing')).toBe('comfortable')
+  })
+
+  it('handles preference changes without altering ReadingPosition', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    const initialPos = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    fireEvent.click(screen.getByRole('radio', { name: '暗黑' }))
+    const afterPos = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+
+    expect(initialPos).toBe(afterPos)
+  })
+
+  it('allows bookmarking accessible chapter, listing bookmarks, and jumping via bookmark', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    // Bookmark Chapter 1 of Book 0 (潮聲來信)
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+
+    const savedBookmarks = JSON.parse(
+      window.localStorage.getItem(CHAPTER_BOOKMARKS_STORAGE_KEY) ?? '',
+    )
+    expect(savedBookmarks.bookmarks).toEqual([
+      { bookId: 'book-tide-city', chapterId: 'chapter-tide-letter' },
+    ])
+
+    // Move to Chapter 2
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+
+    // Open Bookmarks Modal
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+
+    const modal = screen.getByRole('dialog', { name: '章節書籤' })
+    expect(within(modal).getByText('第一章：潮聲來信')).toBeInTheDocument()
+
+    // Jump to Chapter 1 via bookmark
+    fireEvent.click(within(modal).getByRole('button', { name: '移至章節' }))
+
+    expect(
+      screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+    ).toBeInTheDocument()
+  })
+
+  it('prevents bookmarking locked chapters and does not render bookmark button on locked chapters', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    // Chapter 1 -> Chapter 2 -> Chapter 3 (Locked)
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+
+    expect(
+      screen.getByRole('heading', { name: '第三章：封印之門' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '加入章節書籤' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('retains independent bookmarks across multiple books and preserves stable order', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    // Book 1 (霜劍仙途) -> Chapter 1 (拾劍) -> Bookmark
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[1])
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+
+    // Back to Catalog -> Book 0 (潮汐之城) -> Chapter 1 (潮聲來信) -> Bookmark
+    fireEvent.click(screen.getByRole('button', { name: '返回書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+
+    // Open Bookmarks Modal in Reader
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    const modal = screen.getByRole('dialog', { name: '章節書籤' })
+
+    const chapterTitles = within(modal)
+      .getAllByText(/^(第一章：潮聲來信|第一章：拾劍)$/)
+      .map((node) => node.textContent)
+
+    // Catalog order places 潮汐之城 before 霜劍仙途
+    expect(chapterTitles).toEqual(['第一章：潮聲來信', '第一章：拾劍'])
+  })
 })

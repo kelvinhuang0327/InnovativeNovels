@@ -1,0 +1,115 @@
+import type {
+  FontScale,
+  LineSpacing,
+  ReaderPreferences,
+  ReaderTheme,
+} from '../../domain/reading/readerPreferences'
+
+interface ReaderComfortControlsProps {
+  readonly preferences: ReaderPreferences
+  readonly onChangePreferences: (newPreferences: ReaderPreferences) => void
+  readonly onResetPreferences: () => void
+}
+
+const FONT_SCALE_LABELS: Record<FontScale, string> = {
+  small: '小',
+  medium: '中',
+  large: '大',
+  'extra-large': '特大',
+}
+
+const LINE_SPACING_LABELS: Record<LineSpacing, string> = {
+  compact: '緊密',
+  comfortable: '舒適',
+  spacious: '寬鬆',
+}
+
+const THEME_LABELS: Record<ReaderTheme, string> = {
+  light: '明亮',
+  sepia: '護眼',
+  dark: '暗黑',
+}
+
+export function ReaderComfortControls({
+  preferences,
+  onChangePreferences,
+  onResetPreferences,
+}: ReaderComfortControlsProps) {
+  const setFontScale = (fontScale: FontScale) => {
+    onChangePreferences({ ...preferences, fontScale })
+  }
+
+  const setLineSpacing = (lineSpacing: LineSpacing) => {
+    onChangePreferences({ ...preferences, lineSpacing })
+  }
+
+  const setTheme = (theme: ReaderTheme) => {
+    onChangePreferences({ ...preferences, theme })
+  }
+
+  return (
+    <div className="reader-comfort-controls" aria-label="閱讀舒適度設定">
+      <div className="control-group" role="radiogroup" aria-label="字型大小">
+        <span className="control-label">字級：</span>
+        {(['small', 'medium', 'large', 'extra-large'] as const).map((scale) => (
+          <button
+            key={scale}
+            type="button"
+            className={`comfort-option ${
+              preferences.fontScale === scale ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.fontScale === scale}
+            onClick={() => setFontScale(scale)}
+          >
+            {FONT_SCALE_LABELS[scale]}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-group" role="radiogroup" aria-label="行距">
+        <span className="control-label">行距：</span>
+        {(['compact', 'comfortable', 'spacious'] as const).map((spacing) => (
+          <button
+            key={spacing}
+            type="button"
+            className={`comfort-option ${
+              preferences.lineSpacing === spacing ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.lineSpacing === spacing}
+            onClick={() => setLineSpacing(spacing)}
+          >
+            {LINE_SPACING_LABELS[spacing]}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-group" role="radiogroup" aria-label="閱讀主題">
+        <span className="control-label">主題：</span>
+        {(['light', 'sepia', 'dark'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`comfort-option theme-option-${t} ${
+              preferences.theme === t ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.theme === t}
+            onClick={() => setTheme(t)}
+          >
+            {THEME_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="button-secondary reset-preferences-button"
+        onClick={onResetPreferences}
+      >
+        重設預設值
+      </button>
+    </div>
+  )
+}

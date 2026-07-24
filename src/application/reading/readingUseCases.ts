@@ -4,7 +4,9 @@ import type {
 } from '../catalog/contentRepository'
 import { decideChapterAccess } from '../../domain/access/chapterAccessPolicy'
 import type { Chapter } from '../../domain/catalog/chapter'
+import { bookId as toBookId, chapterId as toChapterId } from '../../domain/catalog/identifiers'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
+import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
 import type { ReadingStateRepository } from './readingStateRepository'
 
 export interface ReadingDestination {
@@ -19,6 +21,12 @@ export interface OpenedChapter {
   readonly isLocked: boolean
   readonly hasPrevious: boolean
   readonly hasNext: boolean
+}
+
+export interface BookmarkEntry {
+  readonly book: ContentBook
+  readonly chapter: Chapter
+  readonly position: ReadingPosition
 }
 
 function chaptersByExplicitOrder(book: ContentBook): readonly Chapter[] {
@@ -170,6 +178,83 @@ export function listContinueReading(
     }
 
     entries.push({ book, chapter, position: saved })
+  }
+
+  return entries
+}
+
+export function isChapterBookmarked(
+  bookmarksRepository: ChapterBookmarksRepository,
+  bookId: string,
+  chapterId: string,
+): boolean {
+  return bookmarksRepository
+    .list()
+    .some((b) => b.bookId === bookId && b.chapterId === chapterId)
+}
+
+export function addChapterBookmark(
+  contentRepository: ContentRepository,
+  bookmarksRepository: ChapterBookmarksRepository,
+  bookId: string,
+  chapterId: string,
+): boolean {
+  const book = contentRepository.getBook(bookId)
+
+  if (!book) {
+    return false
+  }
+
+  const chapter = findReadableChapter(book, chapterId)
+
+  if (!chapter) {
+    return false
+  }
+
+  bookmarksRepository.add({
+    bookId: toBookId(bookId),
+    chapterId: toChapterId(chapterId),
+  })
+
+  return true
+}
+
+export function removeChapterBookmark(
+  bookmarksRepository: ChapterBookmarksRepository,
+  bookId: string,
+  chapterId: string,
+): void {
+  bookmarksRepository.remove(bookId, chapterId)
+}
+
+export function listChapterBookmarks(
+  contentRepository: ContentRepository,
+  bookmarksRepository: ChapterBookmarksRepository,
+): readonly BookmarkEntry[] {
+  const rawBookmarks = bookmarksRepository.list()
+  if (rawBookmarks.length === 0) {
+    return []
+  }
+
+  const bookmarkMap = new Set(
+    rawBookmarks.map((b) => `${b.bookId}:${b.chapterId}`),
+  )
+
+  const entries: BookmarkEntry[] = []
+
+  for (const book of contentRepository.listBooks()) {
+    const orderedChapters = chaptersByExplicitOrder(book)
+    for (const chapter of orderedChapters) {
+      if (bookmarkMap.has(`${book.book.id}:${chapter.id}`)) {
+        if (decideChapterAccess(chapter.access).canOpen) {
+          entries.push({
+            book,
+            chapter,
+            position: chapterPosition(chapter),
+          })
+        }
+      }
+    }
   }
 
   return entries
