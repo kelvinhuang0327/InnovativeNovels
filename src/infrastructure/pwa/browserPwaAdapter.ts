@@ -10,10 +10,31 @@ export interface BeforeInstallPromptEventLike extends Event {
 }
 
 type StandaloneDetector = () => boolean
+type ManualInstallEligibilityDetector = () => boolean
+
+/**
+ * Capability-first iOS/iPadOS manual "Add to Home Screen" eligibility.
+ * Desktop-mode iPadOS reports a Mac-like platform, so touch support (not
+ * viewport size) is what separates it from an ordinary macOS browser.
+ */
+export function detectIosManualInstallEligibility(
+  browserNavigator: Navigator,
+): boolean {
+  const userAgent = browserNavigator.userAgent ?? ''
+  const platform = browserNavigator.platform ?? ''
+  const maxTouchPoints = browserNavigator.maxTouchPoints ?? 0
+
+  const isIPhoneOrIPod = /iPhone|iPod/.test(userAgent)
+  const isIPadUserAgent = /iPad/.test(userAgent)
+  const isDesktopModeIPad = platform === 'MacIntel' && maxTouchPoints > 1
+
+  return isIPhoneOrIPod || isIPadUserAgent || isDesktopModeIPad
+}
 
 export class BrowserPwaAdapter implements BrowserPwaPort {
   private readonly browserWindow: Window
   private readonly detectStandalone: StandaloneDetector
+  private readonly manualInstallEligible: boolean
   private installPrompt: BeforeInstallPromptEventLike | undefined
   private listeners = new Set<SnapshotListener<BrowserPwaSnapshot>>()
   private listening = false
@@ -28,7 +49,10 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
     }
 
     this.installPrompt = event as BeforeInstallPromptEventLike
-    this.updateSnapshot({ installAvailable: true })
+    this.updateSnapshot({
+      installAvailable: true,
+      manualInstallAvailable: this.computeManualInstallAvailable(true),
+    })
   }
 
   private readonly onAppInstalled = () => {
@@ -51,11 +75,15 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
         true ||
       (browserNavigator as Navigator & { readonly standalone?: boolean })
         .standalone === true,
+    detectManualInstallEligibility: ManualInstallEligibilityDetector = () =>
+      detectIosManualInstallEligibility(browserNavigator),
   ) {
     this.browserWindow = browserWindow
     this.detectStandalone = detectStandalone
+    this.manualInstallEligible = detectManualInstallEligibility()
     this.snapshot = {
       installAvailable: false,
+      manualInstallAvailable: this.computeManualInstallAvailable(false),
       online: browserNavigator.onLine,
     }
   }
@@ -99,6 +127,12 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
     return this.detectStandalone()
   }
 
+  private computeManualInstallAvailable(installAvailable: boolean): boolean {
+    return (
+      this.manualInstallEligible && !this.isStandalone() && !installAvailable
+    )
+  }
+
   private startListening(): void {
     if (this.listening) {
       return
@@ -131,7 +165,10 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
 
   private clearInstallPrompt(): void {
     this.installPrompt = undefined
-    this.updateSnapshot({ installAvailable: false })
+    this.updateSnapshot({
+      installAvailable: false,
+      manualInstallAvailable: this.computeManualInstallAvailable(false),
+    })
   }
 
   private updateSnapshot(next: Partial<BrowserPwaSnapshot>): void {
@@ -139,6 +176,7 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
 
     if (
       updated.installAvailable === this.snapshot.installAvailable &&
+      updated.manualInstallAvailable === this.snapshot.manualInstallAvailable &&
       updated.online === this.snapshot.online
     ) {
       return

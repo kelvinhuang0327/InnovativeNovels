@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import usePwaControllerSource from '../application/pwa/usePwaController.ts?raw'
 import bookDetailSource from '../features/book-detail/BookDetailScreen.tsx?raw'
 import catalogSource from '../features/catalog/CatalogScreen.tsx?raw'
 import continueReadingShelfSource from '../features/library/ContinueReadingShelf.tsx?raw'
@@ -35,5 +36,18 @@ describe('feature boundaries', () => {
     expect(pwaControlsSource).not.toMatch(/\bcaches\b|\bCacheStorage\b/)
     expect(serviceWorkerAdapterSource).toMatch(/\bregisterSW\b/)
     expect(browserPwaAdapterSource).not.toMatch(/\blocalStorage\b/)
+  })
+
+  it('keeps platform/capability detection out of PWA feature UI', () => {
+    expect(pwaControlsSource).not.toMatch(/\bnavigator\b/)
+    expect(pwaControlsSource).not.toMatch(/\buserAgent\b/)
+    expect(pwaControlsSource).not.toMatch(/\bplatform\b/)
+    expect(pwaControlsSource).not.toMatch(/\bmaxTouchPoints\b/)
+    expect(browserPwaAdapterSource).toMatch(/\bdetectIosManualInstallEligibility\b/)
+  })
+
+  it('keeps manual install guidance dismissal free of persistence', () => {
+    expect(usePwaControllerSource).not.toMatch(/\blocalStorage\b/)
+    expect(usePwaControllerSource).not.toMatch(/ReadingState/)
   })
 })

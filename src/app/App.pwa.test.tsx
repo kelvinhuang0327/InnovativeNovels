@@ -13,7 +13,11 @@ import App from './App'
 
 class OfflineBrowserPort implements BrowserPwaPort {
   getSnapshot(): BrowserPwaSnapshot {
-    return { installAvailable: false, online: false }
+    return {
+      installAvailable: false,
+      manualInstallAvailable: false,
+      online: false,
+    }
   }
 
   subscribe(listener: SnapshotListener<BrowserPwaSnapshot>) {

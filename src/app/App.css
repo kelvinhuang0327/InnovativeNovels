@@ -82,6 +82,30 @@ button:focus-visible {
   color: #65594d;
 }
 
+.pwa-ios-guidance {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: #65594d;
+}
+
+.pwa-ios-guidance h2 {
+  margin: 0;
+  color: #2b221a;
+  font-size: 1rem;
+}
+
+.pwa-ios-guidance ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.6;
+}
+
+.pwa-ios-guidance button {
+  align-self: flex-start;
+}
+
 .screen-heading {
   margin: 0;
   color: #2b221a;
@@ -261,6 +285,10 @@ button:focus-visible {
   .pwa-update {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .pwa-ios-guidance button {
+    align-self: stretch;
   }
 
   .pwa-controls button,

@@ -1,5 +1,6 @@
 export interface BrowserPwaSnapshot {
   readonly installAvailable: boolean
+  readonly manualInstallAvailable: boolean
   readonly online: boolean
 }
 
