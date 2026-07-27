@@ -104,7 +104,7 @@ describe('Wave 1 core reading journey', () => {
     const firstMount = render(<App dependencies={createDependencies()} />)
     openBookDetail()
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
     expect(
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
@@ -136,8 +136,8 @@ describe('Wave 1 core reading journey', () => {
     )
     openBookDetail()
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
     const reader = screen.getByLabelText('閱讀器')
     expect(
@@ -205,7 +205,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
 
     openBookAt(1)
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(
       screen.getByRole('heading', { name: '第二章：入山門' }),
     ).toBeInTheDocument()
@@ -249,7 +249,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
 
     openBookAt(2)
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     backToCatalog()
 
     const shelf = screen.getByRole('region', { name: '繼續閱讀' })
@@ -327,8 +327,8 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
 
       openBookAt(bookIndex)
       fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
-      fireEvent.click(screen.getByRole('button', { name: '下一章' }))
-      fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+      fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+      fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
       const reader = screen.getByLabelText('閱讀器')
       expect(
@@ -415,7 +415,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     ])
 
     // Move to Chapter 2
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
@@ -439,8 +439,8 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     openFirstBookReader()
 
     // Chapter 1 -> Chapter 2 -> Chapter 3 (Locked)
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
     expect(
       screen.getByRole('heading', { name: '第三章：封印之門' }),
@@ -583,20 +583,20 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     // Bookmark chapter 1 so it can be reached again via the bookmarks modal.
     fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
 
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 3 / 3 章')
 
-    fireEvent.click(screen.getByRole('button', { name: '上一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
     fireEvent.click(tocButtonFor('第一章：潮聲來信'))
     expect(progress()).toHaveTextContent('第 1 / 3 章')
 
-    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
@@ -607,3 +607,97 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     expect(progress()).toHaveTextContent('第 1 / 3 章')
   })
 })
+
+describe('Persistent reader chapter navigation integrated journey', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  function openFirstBookReader() {
+    render(<App dependencies={createDependencies()} />)
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+  }
+
+  it('navigates via persistent previous and next controls, synchronizing ReadingPosition, TOC, progress, and bookmark status', () => {
+    openFirstBookReader()
+
+    const persistentNav = screen.getByTestId('reader-persistent-navigation')
+    const persistentPrev = within(persistentNav).getByRole('button', { name: '上一章' })
+    const persistentNext = within(persistentNav).getByRole('button', { name: '下一章' })
+
+    // On Chapter 1 (first chapter): Previous is disabled, Next is enabled
+    expect(persistentPrev).toBeDisabled()
+    expect(persistentNext).not.toBeDisabled()
+    expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
+
+    // Add bookmark on Chapter 1
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+    expect(screen.getByRole('button', { name: '移除章節書籤' })).toBeInTheDocument()
+
+    // Click persistent Next button to go to Chapter 2 (第二章：燈塔守望)
+    fireEvent.click(persistentNext)
+
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 2 / 3 章')
+    expect(within(persistentNav).getByText('第 2 / 3 章')).toBeInTheDocument()
+    // Chapter 2 is not bookmarked
+    expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeInTheDocument()
+
+    // Verify ReadingPosition persisted in localStorage
+    const storedState = JSON.parse(
+      window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '{}',
+    )
+    expect(storedState.positions['book-tide-city']).toEqual(
+      expect.objectContaining({ bookId: 'book-tide-city', chapterId: 'chapter-lighthouse-watch' }),
+    )
+
+    // Verify TOC current marker synchronized
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    const tocDialog = screen.getByRole('dialog', { name: '章節目錄' })
+    const ch2Button = within(tocDialog).getByRole('button', { name: /第二章：燈塔守望/ })
+    expect(ch2Button).toHaveAttribute('aria-current', 'true')
+    fireEvent.keyDown(tocDialog, { key: 'Escape' })
+
+    // Click persistent Next button to go to Chapter 3 (第三章：封印之門, which is locked)
+    fireEvent.click(persistentNext)
+    expect(screen.getByRole('heading', { name: '第三章：封印之門' })).toBeInTheDocument()
+    expect(screen.getByText('本章尚未開放，沒有載入任何內文。')).toBeInTheDocument()
+    expect(persistentNext).toBeDisabled()
+    expect(persistentPrev).not.toBeDisabled()
+
+    // Click persistent Previous button to return to Chapter 2
+    fireEvent.click(persistentPrev)
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    expect(persistentNext).not.toBeDisabled()
+    expect(persistentPrev).not.toBeDisabled()
+  })
+
+
+
+  it('preserves reader preferences across persistent navigation', () => {
+    openFirstBookReader()
+
+    // Change theme to sepia (護眼) and font scale to large (大)
+    fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
+    fireEvent.click(screen.getByRole('radio', { name: '大' }))
+
+    const section = screen.getByRole('region', { name: '閱讀器' })
+    expect(section).toHaveAttribute('data-theme', 'sepia')
+    expect(section).toHaveAttribute('data-font-scale', 'large')
+
+    // Navigate to next chapter via persistent nav
+    const persistentNav = screen.getByTestId('reader-persistent-navigation')
+    fireEvent.click(within(persistentNav).getByRole('button', { name: '下一章' }))
+
+    // Preferences should remain intact
+    expect(section).toHaveAttribute('data-theme', 'sepia')
+    expect(section).toHaveAttribute('data-font-scale', 'large')
+  })
+})
+
+

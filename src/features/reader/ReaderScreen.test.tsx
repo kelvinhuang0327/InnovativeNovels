@@ -372,3 +372,184 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
     expect(document.activeElement).toBe(trigger)
   })
 })
+
+describe('ReaderScreen Persistent Chapter Navigation', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const navBook = {
+    book: {
+      id: bookId('nav-book'),
+      title: 'Nav Book',
+      authorName: 'Author',
+      categoryLabel: 'Fiction',
+    },
+    description: 'Desc',
+    chapters: [
+      {
+        id: chapterId('n1'),
+        bookId: bookId('nav-book'),
+        title: 'Chapter 1',
+        sequence: chapterSequence(1),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('n2'),
+        bookId: bookId('nav-book'),
+        title: 'Chapter 2',
+        sequence: chapterSequence(2),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+    ],
+  }
+
+  const firstChapter = {
+    book: navBook,
+    chapter: navBook.chapters[0],
+    prose: ['Paragraph 1'],
+    isLocked: false,
+    hasPrevious: false,
+    hasNext: true,
+  }
+
+  const lastChapter = {
+    book: navBook,
+    chapter: navBook.chapters[1],
+    prose: ['Paragraph 2'],
+    isLocked: false,
+    hasPrevious: true,
+    hasNext: false,
+  }
+
+  it('renders persistent navigation controls in ReaderScreen with aria-label', () => {
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    const persistentNav = screen.getByTestId('reader-persistent-navigation')
+    expect(persistentNav).toBeInTheDocument()
+    expect(persistentNav).toHaveAttribute('aria-label', '章節快捷導覽')
+    expect(within(persistentNav).getByRole('button', { name: '上一章' })).toBeInTheDocument()
+    expect(within(persistentNav).getByRole('button', { name: '下一章' })).toBeInTheDocument()
+    expect(within(persistentNav).getByText('第 1 / 2 章')).toBeInTheDocument()
+  })
+
+  it('disables previous control when on the first chapter and enables next control', () => {
+    const onPrevious = vi.fn()
+    const onNext = vi.fn()
+
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />,
+    )
+
+    const persistentNav = screen.getByTestId('reader-persistent-navigation')
+    const prevBtn = within(persistentNav).getByRole('button', { name: '上一章' })
+    const nextBtn = within(persistentNav).getByRole('button', { name: '下一章' })
+
+    expect(prevBtn).toBeDisabled()
+    expect(prevBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(nextBtn).not.toBeDisabled()
+
+    fireEvent.click(nextBtn)
+    expect(onNext).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(prevBtn)
+    expect(onPrevious).not.toHaveBeenCalled()
+  })
+
+  it('disables next control when on the last available chapter', () => {
+    const onPrevious = vi.fn()
+    const onNext = vi.fn()
+
+    render(
+      <ReaderScreen
+        openedChapter={lastChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 2, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />,
+    )
+
+    const persistentNav = screen.getByTestId('reader-persistent-navigation')
+    const prevBtn = within(persistentNav).getByRole('button', { name: '上一章' })
+    const nextBtn = within(persistentNav).getByRole('button', { name: '下一章' })
+
+    expect(nextBtn).toBeDisabled()
+    expect(nextBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(prevBtn).not.toBeDisabled()
+
+    fireEvent.click(prevBtn)
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+  })
+
+  it('provides an accessible polite live region announcing chapter change', () => {
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    const liveRegion = screen.getByRole('status')
+    expect(liveRegion).toHaveAttribute('aria-live', 'polite')
+    expect(liveRegion).toHaveTextContent('已切換至：Chapter 1')
+  })
+})
+

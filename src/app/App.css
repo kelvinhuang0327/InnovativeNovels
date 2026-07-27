@@ -569,6 +569,14 @@ button:focus-visible {
 }
 
 @media (max-width: 32rem) {
+  .app-shell {
+    padding: 1rem 0.75rem;
+  }
+
+  .reader-screen-container {
+    padding: 0.75rem 0.5rem;
+  }
+
   .actions button,
   .reader-navigation button {
     width: 100%;
@@ -608,4 +616,76 @@ button:focus-visible {
   .pwa-update button {
     width: 100%;
   }
+
+  .reader-persistent-navigation {
+    padding: 0.5rem;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    gap: 0.4rem;
+  }
+
+  .reader-persistent-navigation button.button-persistent-nav {
+    min-height: 2.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .persistent-position-text {
+    font-size: 0.75rem;
+  }
 }
+
+
+/* Accessibility & Persistent Navigation Bar */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.reader-persistent-navigation {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  border: 1px solid currentColor;
+  border-radius: 1rem;
+  background: inherit;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.reader-persistent-navigation button.button-persistent-nav {
+  flex-shrink: 0;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.reader-persistent-navigation button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.persistent-position-text {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

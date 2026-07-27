@@ -168,6 +168,53 @@ export function ReaderScreen({
         </button>
       </nav>
 
+      <nav
+        className="reader-persistent-navigation"
+        aria-label="章節快捷導覽"
+        data-testid="reader-persistent-navigation"
+      >
+        <button
+          type="button"
+          className="button-secondary button-persistent-nav button-persistent-prev"
+          onClick={onPrevious}
+          disabled={!openedChapter.hasPrevious}
+          aria-disabled={!openedChapter.hasPrevious}
+          aria-label="上一章"
+        >
+          上一章
+        </button>
+
+        {chapterPosition ? (
+          <span className="persistent-position-text">
+            第 {chapterPosition.currentPosition} / {chapterPosition.totalChapters} 章
+          </span>
+        ) : (
+          <span className="persistent-position-text">
+            {openedChapter.chapter.title}
+          </span>
+        )}
+
+        <button
+          type="button"
+          className="button-persistent-nav button-persistent-next"
+          onClick={onNext}
+          disabled={!openedChapter.hasNext}
+          aria-disabled={!openedChapter.hasNext}
+          aria-label="下一章"
+        >
+          下一章
+        </button>
+      </nav>
+
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        已切換至：{openedChapter.chapter.title}
+      </div>
+
       <ChapterBookmarksModal
         isOpen={isBookmarksOpen}
         bookmarks={bookmarks}
@@ -186,3 +233,4 @@ export function ReaderScreen({
     </section>
   )
 }
+
