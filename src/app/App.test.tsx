@@ -113,7 +113,7 @@ describe('Wave 1 core reading journey', () => {
 
     render(<App dependencies={createDependencies()} />)
     openBookDetail()
-    fireEvent.click(screen.getByRole('button', { name: '繼續閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: /^繼續閱讀/ }))
 
     expect(
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
@@ -166,7 +166,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
   }
 
   function backToCatalog() {
-    fireEvent.click(screen.getByRole('button', { name: '返回書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
     fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
   }
 
@@ -213,7 +213,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
 
     render(<App dependencies={createDependencies()} />)
     openBookAt(1)
-    fireEvent.click(screen.getByRole('button', { name: '繼續閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: /^繼續閱讀/ }))
 
     expect(
       screen.getByRole('heading', { name: '第二章：入山門' }),
@@ -352,7 +352,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
 
   function openFirstBookReader() {
     fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
-    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)/ }))
   }
 
   it('persists and restores reader preferences across remounts and resets to default', () => {
@@ -459,7 +459,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
 
     // Back to Catalog -> Book 0 (潮汐之城) -> Chapter 1 (潮聲來信) -> Bookmark
-    fireEvent.click(screen.getByRole('button', { name: '返回書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
     fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
     fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
@@ -489,7 +489,7 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
 
   function openFirstBookReader() {
     fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
-    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)/ }))
   }
 
   function tocButtonFor(title: string) {
@@ -697,6 +697,115 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     // Preferences should remain intact
     expect(section).toHaveAttribute('data-theme', 'sepia')
     expect(section).toHaveAttribute('data-font-scale', 'large')
+  })
+
+  describe('Reader Exit and Resume Continuity Integration', () => {
+    function openBookAt(index: number) {
+      fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[index])
+    }
+
+    it('returns from Reader to matching Book Detail with accessible session-only status without resetting position', () => {
+      render(<App dependencies={createDependencies()} />)
+
+      // Open book 0 (潮汐之城) detail -> Start reading -> Next chapter (Chapter 2)
+      openBookAt(0)
+      fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      const persistentNav = screen.getByTestId('reader-persistent-navigation')
+      fireEvent.click(within(persistentNav).getByRole('button', { name: '下一章' }))
+
+      expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+
+      // Click 返回作品 button in Reader
+      const exitBtn = screen.getByRole('button', { name: '返回作品' })
+      fireEvent.click(exitBtn)
+
+      // Should return to Book Detail for 潮汐之城
+      expect(screen.getByRole('heading', { name: '潮汐之城' })).toBeInTheDocument()
+
+      // Accessible session-only return status alert
+      const statusAlert = screen.getByRole('status')
+      expect(statusAlert).toBeInTheDocument()
+      expect(statusAlert).toHaveTextContent('閱讀位置已保留在 第二章：燈塔守望')
+
+      // Chapter-aware Continue button copy
+      const continueBtn = screen.getByRole('button', {
+        name: '繼續閱讀：第二章：燈塔守望',
+      })
+      expect(continueBtn).toBeInTheDocument()
+
+      // Verify ReadingPosition in localStorage is NOT reset
+      const storedState = JSON.parse(
+        window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '{}',
+      )
+      expect(storedState.positions['book-tide-city'].chapterId).toBe('chapter-lighthouse-watch')
+    })
+
+    it('clears session-only return status after subsequent navigation', () => {
+      render(<App dependencies={createDependencies()} />)
+
+      openBookAt(0)
+      fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+      expect(screen.getByRole('status')).toBeInTheDocument()
+
+      // Navigate back to catalog
+      fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+      expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
+
+      // Re-enter Book Detail
+      openBookAt(0)
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('resumes exact saved chapter through Continue CTA in Book Detail and Continue shelf consistently', () => {
+      render(<App dependencies={createDependencies()} />)
+
+      openBookAt(0)
+      fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      const persistentNav = screen.getByTestId('reader-persistent-navigation')
+      fireEvent.click(within(persistentNav).getByRole('button', { name: '下一章' }))
+      fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+      // Re-open through Book Detail Continue CTA
+      fireEvent.click(screen.getByRole('button', { name: '繼續閱讀：第二章：燈塔守望' }))
+      expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+
+      // Exit back to Book Detail -> Return to Catalog -> Open from Continue Shelf
+      fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+      fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+
+      const shelf = screen.getByRole('region', { name: '繼續閱讀' })
+      expect(within(shelf).getByText('第二章：燈塔守望')).toBeInTheDocument()
+
+      fireEvent.click(within(shelf).getByRole('button', { name: '繼續閱讀' }))
+      expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    })
+
+    it('falls back safely to 開始閱讀 when saved position is stale or invalid', () => {
+      // Save invalid position
+      window.localStorage.setItem(
+        READING_STATE_STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          positions: {
+            'book-tide-city': {
+              bookId: 'book-tide-city',
+              chapterId: 'stale-chapter-999',
+            },
+          },
+        }),
+      )
+
+      render(<App dependencies={createDependencies()} />)
+
+      openBookAt(0)
+      const startBtn = screen.getByRole('button', { name: '開始閱讀' })
+      expect(startBtn).toBeInTheDocument()
+
+      fireEvent.click(startBtn)
+      expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
+    })
   })
 })
 

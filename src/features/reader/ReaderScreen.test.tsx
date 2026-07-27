@@ -551,5 +551,33 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
     expect(liveRegion).toHaveAttribute('aria-live', 'polite')
     expect(liveRegion).toHaveTextContent('已切換至：Chapter 1')
   })
+
+  it('exposes an accessible 返回作品 exit action that triggers onBackToBook', () => {
+    const onBackToBook = vi.fn()
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={onBackToBook}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    const backBtn = screen.getByRole('button', { name: '返回作品' })
+    expect(backBtn).toBeInTheDocument()
+    fireEvent.click(backBtn)
+    expect(onBackToBook).toHaveBeenCalledTimes(1)
+  })
 })
 

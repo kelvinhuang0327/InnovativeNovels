@@ -689,3 +689,14 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.session-return-status {
+  margin-top: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.85rem;
+  border: 1px solid #8d3f2f;
+  background: rgba(141, 63, 47, 0.08);
+  color: #8d3f2f;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+

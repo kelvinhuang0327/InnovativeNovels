@@ -160,11 +160,12 @@ export function ReaderScreen({
           </button>
         )}
         <button
-          className="button-secondary"
+          className="button-secondary button-back-to-book"
           type="button"
           onClick={onBackToBook}
+          aria-label="返回作品"
         >
-          返回書籍
+          返回作品
         </button>
       </nav>
 

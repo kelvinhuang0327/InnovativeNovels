@@ -55,7 +55,11 @@ interface AppProps {
 
 type Screen =
   | { readonly name: 'catalog' }
-  | { readonly name: 'book-detail'; readonly bookId: string }
+  | {
+      readonly name: 'book-detail'
+      readonly bookId: string
+      readonly sessionReturnStatus?: string
+    }
   | { readonly name: 'reader'; readonly openedChapter: OpenedChapter }
 
 const defaultContentRepository = new StaticContentRepository()
@@ -259,10 +263,22 @@ function App({
             screen.bookId,
           )
 
+          let continueChapterTitle: string | undefined = undefined
+          if (destination?.isContinuing) {
+            const chapter = book.chapters.find(
+              (c) => c.id === destination.position.chapterId,
+            )
+            if (chapter) {
+              continueChapterTitle = chapter.title
+            }
+          }
+
           return (
             <BookDetailScreen
               book={book}
               hasSavedPosition={destination?.isContinuing ?? false}
+              continueChapterTitle={continueChapterTitle}
+              sessionReturnStatus={screen.sessionReturnStatus}
               onBack={() => setScreen({ name: 'catalog' })}
               onRead={() => openReader(screen.bookId)}
             />
@@ -307,6 +323,7 @@ function App({
             setScreen({
               name: 'book-detail',
               bookId: screen.openedChapter.book.book.id,
+              sessionReturnStatus: `閱讀位置已保留在 ${screen.openedChapter.chapter.title}`,
             })
           }
           onPrevious={() => navigateReader(-1)}
