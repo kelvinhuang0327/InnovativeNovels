@@ -11,9 +11,11 @@ import type {
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
 import {
   addChapterBookmark,
+  describeChapterPosition,
   isChapterBookmarked,
   listChapterBookmarks,
   listContinueReading,
+  listTableOfContents,
   removeChapterBookmark,
 } from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
@@ -237,5 +239,88 @@ describe('Chapter Bookmarks Use Cases', () => {
 
     const list = listChapterBookmarks(repo, bookmarksRepo)
     expect(list).toEqual([])
+  })
+})
+
+describe('listTableOfContents', () => {
+  // Array order deliberately differs from explicit sequence order, mirroring
+  // the real content fixtures, so tests can prove sequence (not array index)
+  // drives the result.
+  const book = makeBook('book-a', [
+    chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.LOCKED),
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+  ])
+
+  it('lists chapters in explicit sequence order, not array order', () => {
+    const entries = listTableOfContents(book, 'a-1')
+    expect(entries.map((entry) => entry.chapterId)).toEqual([
+      'a-1',
+      'a-2',
+      'a-3',
+    ])
+  })
+
+  it('retains exact ChapterId, title, and sequence for each entry', () => {
+    const entries = listTableOfContents(book, undefined)
+    expect(entries[0]).toEqual({
+      chapterId: 'a-1',
+      title: 'Chapter a-1',
+      sequence: 1,
+      isAccessible: true,
+      isCurrent: false,
+    })
+  })
+
+  it('marks the current chapter and no other', () => {
+    const entries = listTableOfContents(book, 'a-2')
+    expect(entries.map((entry) => entry.isCurrent)).toEqual([
+      false,
+      true,
+      false,
+    ])
+  })
+
+  it('marks locked chapters inaccessible while keeping them visible in the list', () => {
+    const entries = listTableOfContents(book, 'a-1')
+    expect(entries.map((entry) => entry.isAccessible)).toEqual([
+      true,
+      true,
+      false,
+    ])
+    expect(entries).toHaveLength(3)
+  })
+
+  it('fails safely when the current chapter id does not resolve to any entry', () => {
+    const entries = listTableOfContents(book, 'does-not-exist')
+    expect(entries).toHaveLength(3)
+    expect(entries.every((entry) => !entry.isCurrent)).toBe(true)
+  })
+})
+
+describe('describeChapterPosition', () => {
+  const book = makeBook('book-a', [
+    chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.LOCKED),
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+  ])
+
+  it('derives chapter position from explicit sequence order, counting locked chapters in the total', () => {
+    expect(describeChapterPosition(book, 'a-1')).toEqual({
+      currentPosition: 1,
+      totalChapters: 3,
+    })
+    expect(describeChapterPosition(book, 'a-2')).toEqual({
+      currentPosition: 2,
+      totalChapters: 3,
+    })
+    expect(describeChapterPosition(book, 'a-3')).toEqual({
+      currentPosition: 3,
+      totalChapters: 3,
+    })
+  })
+
+  it('returns undefined for an unresolved chapter id instead of fabricating a position', () => {
+    expect(describeChapterPosition(book, 'does-not-exist')).toBeUndefined()
   })
 })

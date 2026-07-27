@@ -8,9 +8,11 @@ import type { ChapterBookmarksRepository } from '../application/reading/chapterB
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
   addChapterBookmark,
+  describeChapterPosition,
   isChapterBookmarked,
   listChapterBookmarks,
   listContinueReading,
+  listTableOfContents,
   navigateToAdjacentChapter,
   openReadingChapter,
   removeChapterBookmark,
@@ -277,6 +279,14 @@ function App({
             screen.openedChapter.chapter.id,
           )}
           bookmarks={bookmarks}
+          tableOfContents={listTableOfContents(
+            screen.openedChapter.book,
+            screen.openedChapter.chapter.id,
+          )}
+          chapterPosition={describeChapterPosition(
+            screen.openedChapter.book,
+            screen.openedChapter.chapter.id,
+          )}
           onChangePreferences={handleUpdatePreferences}
           onResetPreferences={handleResetPreferences}
           onToggleBookmark={() =>
@@ -287,6 +297,12 @@ function App({
           }
           onSelectBookmark={handleJumpBookmark}
           onRemoveBookmark={handleRemoveBookmark}
+          onSelectChapter={(targetChapterId) =>
+            handleJumpBookmark(
+              screen.openedChapter.book.book.id,
+              targetChapterId,
+            )
+          }
           onBackToBook={() =>
             setScreen({
               name: 'book-detail',

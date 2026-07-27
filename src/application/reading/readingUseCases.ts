@@ -5,6 +5,7 @@ import type {
 import { decideChapterAccess } from '../../domain/access/chapterAccessPolicy'
 import type { Chapter } from '../../domain/catalog/chapter'
 import { bookId as toBookId, chapterId as toChapterId } from '../../domain/catalog/identifiers'
+import type { ChapterId } from '../../domain/catalog/identifiers'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
 import type { ReadingStateRepository } from './readingStateRepository'
@@ -225,6 +226,48 @@ export function removeChapterBookmark(
   chapterId: string,
 ): void {
   bookmarksRepository.remove(bookId, chapterId)
+}
+
+export interface TableOfContentsEntry {
+  readonly chapterId: ChapterId
+  readonly title: string
+  readonly sequence: number
+  readonly isAccessible: boolean
+  readonly isCurrent: boolean
+}
+
+export function listTableOfContents(
+  book: ContentBook,
+  currentChapterId: string | undefined,
+): readonly TableOfContentsEntry[] {
+  return chaptersByExplicitOrder(book).map((chapter) => ({
+    chapterId: chapter.id,
+    title: chapter.title,
+    sequence: chapter.sequence,
+    isAccessible: decideChapterAccess(chapter.access).canOpen,
+    isCurrent: chapter.id === currentChapterId,
+  }))
+}
+
+export interface ChapterPositionProgress {
+  readonly currentPosition: number
+  readonly totalChapters: number
+}
+
+export function describeChapterPosition(
+  book: ContentBook,
+  currentChapterId: string,
+): ChapterPositionProgress | undefined {
+  const orderedChapters = chaptersByExplicitOrder(book)
+  const index = orderedChapters.findIndex(
+    (chapter) => chapter.id === currentChapterId,
+  )
+
+  if (index === -1) {
+    return undefined
+  }
+
+  return { currentPosition: index + 1, totalChapters: orderedChapters.length }
 }
 
 export function listChapterBookmarks(

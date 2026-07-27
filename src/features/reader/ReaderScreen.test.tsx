@@ -1,4 +1,10 @@
-import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
@@ -34,6 +40,18 @@ const mockOpenedChapter = {
   hasNext: true,
 }
 
+const mockTableOfContents = [
+  {
+    chapterId: mockBook.chapters[0].id,
+    title: mockBook.chapters[0].title,
+    sequence: mockBook.chapters[0].sequence,
+    isAccessible: true,
+    isCurrent: true,
+  },
+]
+
+const mockChapterPosition = { currentPosition: 1, totalChapters: 1 }
+
 describe('ReaderScreen Comfort & Bookmarks UI', () => {
   afterEach(() => {
     cleanup()
@@ -52,11 +70,14 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
         preferences={preferences}
         isBookmarked={false}
         bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
         onChangePreferences={vi.fn()}
         onResetPreferences={vi.fn()}
         onToggleBookmark={vi.fn()}
         onSelectBookmark={vi.fn()}
         onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
         onBackToBook={vi.fn()}
         onPrevious={vi.fn()}
         onNext={vi.fn()}
@@ -84,11 +105,14 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
         preferences={DEFAULT_READER_PREFERENCES}
         isBookmarked={false}
         bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
         onChangePreferences={onChangePreferences}
         onResetPreferences={onResetPreferences}
         onToggleBookmark={vi.fn()}
         onSelectBookmark={vi.fn()}
         onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
         onBackToBook={vi.fn()}
         onPrevious={vi.fn()}
         onNext={vi.fn()}
@@ -116,11 +140,14 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
         preferences={DEFAULT_READER_PREFERENCES}
         isBookmarked={false}
         bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
         onChangePreferences={vi.fn()}
         onResetPreferences={vi.fn()}
         onToggleBookmark={onToggleBookmark}
         onSelectBookmark={vi.fn()}
         onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
         onBackToBook={vi.fn()}
         onPrevious={vi.fn()}
         onNext={vi.fn()}
@@ -138,5 +165,210 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
 
     expect(screen.getByRole('dialog', { name: '章節書籤' })).toBeInTheDocument()
     expect(screen.getByText('尚無書籤')).toBeInTheDocument()
+  })
+})
+
+describe('Reader Table of Contents & Chapter Position Progress', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const tocBook = {
+    book: {
+      id: bookId('toc-book'),
+      title: 'TOC Book',
+      authorName: 'Author',
+      categoryLabel: 'Fiction',
+    },
+    description: 'Desc',
+    chapters: [
+      {
+        id: chapterId('t1'),
+        bookId: bookId('toc-book'),
+        title: 'Chapter One',
+        sequence: chapterSequence(1),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('t2'),
+        bookId: bookId('toc-book'),
+        title: 'Chapter Two',
+        sequence: chapterSequence(2),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('t3'),
+        bookId: bookId('toc-book'),
+        title: 'Chapter Three',
+        sequence: chapterSequence(3),
+        access: CHAPTER_ACCESS.LOCKED,
+      },
+    ],
+  }
+
+  const tocOpenedChapter = {
+    book: tocBook,
+    chapter: tocBook.chapters[0],
+    prose: ['Paragraph 1'],
+    isLocked: false,
+    hasPrevious: false,
+    hasNext: true,
+  }
+
+  const tocEntries = [
+    {
+      chapterId: chapterId('t1'),
+      title: 'Chapter One',
+      sequence: 1,
+      isAccessible: true,
+      isCurrent: true,
+    },
+    {
+      chapterId: chapterId('t2'),
+      title: 'Chapter Two',
+      sequence: 2,
+      isAccessible: true,
+      isCurrent: false,
+    },
+    {
+      chapterId: chapterId('t3'),
+      title: 'Chapter Three',
+      sequence: 3,
+      isAccessible: false,
+      isCurrent: false,
+    },
+  ]
+
+  function renderReaderWithToc(
+    onSelectChapter = vi.fn(),
+    entries = tocEntries,
+  ) {
+    return render(
+      <ReaderScreen
+        openedChapter={tocOpenedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={entries}
+        chapterPosition={{ currentPosition: 1, totalChapters: 3 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={onSelectChapter}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+  }
+
+  it('displays chapter-position progress as "第 X / Y 章" without claiming paragraph or page completion', () => {
+    renderReaderWithToc()
+
+    const progress = screen.getByRole('progressbar', { name: '目前章節位置' })
+    expect(progress).toHaveTextContent('第 1 / 3 章')
+    expect(progress.textContent).not.toMatch(/%|頁|段落/)
+  })
+
+  it('does not render a progress indicator when the chapter position is unresolved', () => {
+    render(
+      <ReaderScreen
+        openedChapter={tocOpenedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={tocEntries}
+        chapterPosition={undefined}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('opens the TOC listing every chapter in explicit order with the current chapter marked via aria-current', () => {
+    renderReaderWithToc()
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    const items = within(dialog)
+      .getAllByRole('listitem')
+      .map((item) => item.querySelector('button') as HTMLButtonElement)
+
+    expect(items.map((button) => button.textContent)).toEqual([
+      expect.stringContaining('Chapter One'),
+      expect.stringContaining('Chapter Two'),
+      expect.stringContaining('Chapter Three'),
+    ])
+    expect(items[0].getAttribute('aria-current')).toBe('true')
+    expect(items[1].getAttribute('aria-current')).toBeNull()
+    expect(items[2].getAttribute('aria-current')).toBeNull()
+  })
+
+  it('disables the locked chapter item and never invokes navigation for it', () => {
+    const onSelectChapter = vi.fn()
+    renderReaderWithToc(onSelectChapter)
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+
+    const lockedItem = screen.getByText('Chapter Three').closest('button')
+    expect(lockedItem).toBeDisabled()
+
+    fireEvent.click(lockedItem as HTMLButtonElement)
+    expect(onSelectChapter).not.toHaveBeenCalled()
+  })
+
+  it('invokes the normal chapter-open path with the exact ChapterId when an accessible item is selected', () => {
+    const onSelectChapter = vi.fn()
+    renderReaderWithToc(onSelectChapter)
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+
+    fireEvent.click(screen.getByText('Chapter Two').closest('button') as HTMLButtonElement)
+
+    expect(onSelectChapter).toHaveBeenCalledWith('t2')
+    expect(screen.queryByRole('dialog', { name: '章節目錄' })).not.toBeInTheDocument()
+  })
+
+  it('shows a safe empty state instead of fabricating chapters when the list is empty', () => {
+    renderReaderWithToc(vi.fn(), [])
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+
+    expect(screen.getByText('尚無章節資料')).toBeInTheDocument()
+  })
+
+  it('moves focus into the dialog on open and returns focus to the trigger button on Escape', () => {
+    renderReaderWithToc()
+
+    const trigger = screen.getByRole('button', { name: '開啟章節目錄' })
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    expect(document.activeElement).toBe(dialog)
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog', { name: '章節目錄' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('returns focus to the trigger button when closed via the close button', () => {
+    renderReaderWithToc()
+
+    const trigger = screen.getByRole('button', { name: '開啟章節目錄' })
+    fireEvent.click(trigger)
+
+    fireEvent.click(screen.getByRole('button', { name: '關閉章節目錄' }))
+
+    expect(screen.queryByRole('dialog', { name: '章節目錄' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger)
   })
 })

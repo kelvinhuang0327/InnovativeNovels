@@ -477,3 +477,133 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     expect(chapterTitles).toEqual(['第一章：潮聲來信', '第一章：拾劍'])
   })
 })
+
+describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  function openFirstBookReader() {
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)$/ }))
+  }
+
+  function tocButtonFor(title: string) {
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    return within(dialog).getByText(title).closest('button') as HTMLButtonElement
+  }
+
+  it('lists every chapter in explicit sequence order (not source array order) with the current chapter marked', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    const items = within(dialog).getAllByRole('listitem')
+    const titles = items.map((item) => item.querySelector('button')?.textContent)
+
+    // staticContentRepository declares chapter-sealed-gate (sequence 3) first
+    // in its source array, so this also proves ordering by sequence, not
+    // array position.
+    expect(titles).toEqual([
+      expect.stringContaining('第一章：潮聲來信'),
+      expect.stringContaining('第二章：燈塔守望'),
+      expect.stringContaining('第三章：封印之門'),
+    ])
+
+    expect(items[0].querySelector('button')?.getAttribute('aria-current')).toBe(
+      'true',
+    )
+    expect(items[1].querySelector('button')?.getAttribute('aria-current')).toBeNull()
+  })
+
+  it('disables the locked chapter in the TOC and never requests its prose', () => {
+    const contentRepository = new StaticContentRepository()
+    const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
+
+    render(
+      <App
+        dependencies={{
+          contentRepository,
+          readingStateRepository: new LocalStorageReadingStateRepository(
+            window.localStorage,
+          ),
+        }}
+      />,
+    )
+    openFirstBookReader()
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    const lockedButton = tocButtonFor('第三章：封印之門')
+    expect(lockedButton).toBeDisabled()
+
+    fireEvent.click(lockedButton)
+    expect(proseRequest).not.toHaveBeenCalledWith('chapter-sealed-gate')
+  })
+
+  it('jumps to an accessible chapter via the TOC using the normal Reader navigation path', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    fireEvent.click(tocButtonFor('第二章：燈塔守望'))
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '',
+      ),
+    ).toEqual({
+      schemaVersion: 1,
+      positions: {
+        'book-tide-city': {
+          bookId: 'book-tide-city',
+          chapterId: 'chapter-lighthouse-watch',
+        },
+      },
+    })
+  })
+
+  it('displays chapter-position progress as "第 X / Y 章" and keeps it synced across previous/next, TOC jump, and bookmark jump', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstBookReader()
+
+    const progress = () =>
+      screen.getByRole('progressbar', { name: '目前章節位置' })
+
+    expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(progress().textContent).not.toMatch(/%|頁|段落/)
+
+    // Bookmark chapter 1 so it can be reached again via the bookmarks modal.
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    expect(progress()).toHaveTextContent('第 2 / 3 章')
+
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    expect(progress()).toHaveTextContent('第 3 / 3 章')
+
+    fireEvent.click(screen.getByRole('button', { name: '上一章' }))
+    expect(progress()).toHaveTextContent('第 2 / 3 章')
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    fireEvent.click(tocButtonFor('第一章：潮聲來信'))
+    expect(progress()).toHaveTextContent('第 1 / 3 章')
+
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    expect(progress()).toHaveTextContent('第 2 / 3 章')
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    const bookmarksDialog = screen.getByRole('dialog', { name: '章節書籤' })
+    fireEvent.click(
+      within(bookmarksDialog).getByRole('button', { name: '移至章節' }),
+    )
+    expect(progress()).toHaveTextContent('第 1 / 3 章')
+  })
+})

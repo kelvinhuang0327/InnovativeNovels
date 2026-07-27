@@ -7,6 +7,7 @@ import pwaControlsSource from '../features/pwa/PwaControls.tsx?raw'
 import bookmarksModalSource from '../features/reader/ChapterBookmarksModal.tsx?raw'
 import comfortControlsSource from '../features/reader/ReaderComfortControls.tsx?raw'
 import readerSource from '../features/reader/ReaderScreen.tsx?raw'
+import tocModalSource from '../features/reader/TableOfContentsModal.tsx?raw'
 import browserPwaAdapterSource from '../infrastructure/pwa/browserPwaAdapter.ts?raw'
 import serviceWorkerAdapterSource from '../infrastructure/pwa/viteServiceWorkerAdapter.ts?raw'
 
@@ -16,6 +17,7 @@ const featureFiles = [
   ['ReaderScreen.tsx', readerSource],
   ['ReaderComfortControls.tsx', comfortControlsSource],
   ['ChapterBookmarksModal.tsx', bookmarksModalSource],
+  ['TableOfContentsModal.tsx', tocModalSource],
   ['ContinueReadingShelf.tsx', continueReadingShelfSource],
   ['PwaControls.tsx', pwaControlsSource],
 ]

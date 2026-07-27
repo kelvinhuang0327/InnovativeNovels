@@ -1,22 +1,28 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type {
   BookmarkEntry,
+  ChapterPositionProgress,
   OpenedChapter,
+  TableOfContentsEntry,
 } from '../../application/reading/readingUseCases'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
 import { ReaderComfortControls } from './ReaderComfortControls'
+import { TableOfContentsModal } from './TableOfContentsModal'
 
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
   readonly preferences: ReaderPreferences
   readonly isBookmarked: boolean
   readonly bookmarks: readonly BookmarkEntry[]
+  readonly tableOfContents: readonly TableOfContentsEntry[]
+  readonly chapterPosition: ChapterPositionProgress | undefined
   readonly onChangePreferences: (newPreferences: ReaderPreferences) => void
   readonly onResetPreferences: () => void
   readonly onToggleBookmark: () => void
   readonly onSelectBookmark: (bookId: string, chapterId: string) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
+  readonly onSelectChapter: (chapterId: string) => void
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
@@ -27,16 +33,21 @@ export function ReaderScreen({
   preferences,
   isBookmarked,
   bookmarks,
+  tableOfContents,
+  chapterPosition,
   onChangePreferences,
   onResetPreferences,
   onToggleBookmark,
   onSelectBookmark,
   onRemoveBookmark,
+  onSelectChapter,
   onBackToBook,
   onPrevious,
   onNext,
 }: ReaderScreenProps) {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
+  const [isTocOpen, setIsTocOpen] = useState(false)
+  const tocTriggerRef = useRef<HTMLButtonElement>(null)
 
   return (
     <section
@@ -73,10 +84,48 @@ export function ReaderScreen({
           >
             書籤列表 ({bookmarks.length})
           </button>
+
+          <button
+            ref={tocTriggerRef}
+            type="button"
+            className="button-secondary button-open-toc"
+            onClick={() => setIsTocOpen(true)}
+            aria-label="開啟章節目錄"
+          >
+            章節目錄
+          </button>
         </div>
       </header>
 
       <h1 className="screen-heading">{openedChapter.chapter.title}</h1>
+
+      {chapterPosition && (
+        <div
+          className="chapter-position-progress"
+          role="progressbar"
+          aria-label="目前章節位置"
+          aria-valuemin={1}
+          aria-valuemax={chapterPosition.totalChapters}
+          aria-valuenow={chapterPosition.currentPosition}
+          aria-valuetext={`第 ${chapterPosition.currentPosition} / ${chapterPosition.totalChapters} 章`}
+        >
+          <span aria-hidden="true">
+            第 {chapterPosition.currentPosition} / {chapterPosition.totalChapters} 章
+          </span>
+          <span className="chapter-position-track" aria-hidden="true">
+            <span
+              className="chapter-position-fill"
+              style={{
+                width: `${
+                  (chapterPosition.currentPosition /
+                    chapterPosition.totalChapters) *
+                  100
+                }%`,
+              }}
+            />
+          </span>
+        </div>
+      )}
 
       {openedChapter.isLocked ? (
         <div className="locked-notice" role="note">
@@ -125,6 +174,14 @@ export function ReaderScreen({
         onClose={() => setIsBookmarksOpen(false)}
         onSelectBookmark={onSelectBookmark}
         onRemoveBookmark={onRemoveBookmark}
+      />
+
+      <TableOfContentsModal
+        isOpen={isTocOpen}
+        entries={tableOfContents}
+        triggerRef={tocTriggerRef}
+        onClose={() => setIsTocOpen(false)}
+        onSelectChapter={onSelectChapter}
       />
     </section>
   )
