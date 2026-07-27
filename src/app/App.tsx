@@ -15,11 +15,13 @@ import {
   listTableOfContents,
   navigateToAdjacentChapter,
   openReadingChapter,
+  recoverActiveReaderSession,
   removeChapterBookmark,
   resolveStartOrContinue,
   type BookmarkEntry,
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
+import type { ActiveReaderSessionRepository } from '../application/reading/activeReaderSessionRepository'
 import type { ReadingStateRepository } from '../application/reading/readingStateRepository'
 import type { PwaDependencies } from '../application/pwa/pwaPorts'
 import { usePwaController } from '../application/pwa/usePwaController'
@@ -34,6 +36,7 @@ import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
+import { LocalStorageActiveReaderSessionRepository } from '../infrastructure/persistence/localStorageActiveReaderSessionRepository'
 import { LocalStorageChapterBookmarksRepository } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
 import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
@@ -46,6 +49,7 @@ export interface AppDependencies {
   readonly readingStateRepository: ReadingStateRepository
   readonly readerPreferencesRepository?: ReaderPreferencesRepository
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
+  readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
 }
 
 interface AppProps {
@@ -60,7 +64,11 @@ type Screen =
       readonly bookId: string
       readonly sessionReturnStatus?: string
     }
-  | { readonly name: 'reader'; readonly openedChapter: OpenedChapter }
+  | {
+      readonly name: 'reader'
+      readonly openedChapter: OpenedChapter
+      readonly recoveryStatus?: string
+    }
 
 const defaultContentRepository = new StaticContentRepository()
 const defaultPwaDependencies: PwaDependencies = {
@@ -99,6 +107,21 @@ class MemoryBookmarksRepository implements ChapterBookmarksRepository {
   }
 }
 
+class MemoryActiveReaderSessionRepository
+  implements ActiveReaderSessionRepository
+{
+  private activeBookId: string | undefined = undefined
+  load(): string | undefined {
+    return this.activeBookId
+  }
+  save(bookId: string): void {
+    this.activeBookId = bookId
+  }
+  clear(): void {
+    this.activeBookId = undefined
+  }
+}
+
 function createDefaultDependencies(): AppDependencies {
   return {
     contentRepository: defaultContentRepository,
@@ -109,6 +132,9 @@ function createDefaultDependencies(): AppDependencies {
       window.localStorage,
     ),
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
+      window.localStorage,
+    ),
+    activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
       window.localStorage,
     ),
   }
@@ -123,8 +149,34 @@ function App({
     new MemoryPreferencesRepository()
   const bookmarkRepo =
     dependencies.chapterBookmarksRepository ?? new MemoryBookmarksRepository()
+  const activeSessionRepo =
+    dependencies.activeReaderSessionRepository ??
+    new MemoryActiveReaderSessionRepository()
 
-  const [screen, setScreen] = useState<Screen>({ name: 'catalog' })
+  const [screen, setScreen] = useState<Screen>(() => {
+    const activeBookId = activeSessionRepo.load()
+
+    if (!activeBookId) {
+      return { name: 'catalog' }
+    }
+
+    const openedChapter = recoverActiveReaderSession(
+      dependencies.contentRepository,
+      dependencies.readingStateRepository,
+      activeBookId,
+    )
+
+    if (!openedChapter) {
+      activeSessionRepo.clear()
+      return { name: 'catalog' }
+    }
+
+    return {
+      name: 'reader',
+      openedChapter,
+      recoveryStatus: `已恢復上次閱讀：${openedChapter.chapter.title}`,
+    }
+  })
   const [preferences, setPreferences] = useState<ReaderPreferences>(() =>
     prefRepo.load(),
   )
@@ -182,6 +234,7 @@ function App({
     )
 
     if (openedChapter) {
+      activeSessionRepo.save(openedChapter.book.book.id)
       setScreen({ name: 'reader', openedChapter })
     }
   }
@@ -208,6 +261,7 @@ function App({
     )
 
     if (openedChapter) {
+      activeSessionRepo.save(openedChapter.book.book.id)
       setScreen({ name: 'reader', openedChapter })
     }
   }
@@ -288,6 +342,7 @@ function App({
       {screen.name === 'reader' && (
         <ReaderScreen
           openedChapter={screen.openedChapter}
+          recoveryStatus={screen.recoveryStatus}
           preferences={preferences}
           isBookmarked={isChapterBookmarked(
             bookmarkRepo,
@@ -319,13 +374,14 @@ function App({
               targetChapterId,
             )
           }
-          onBackToBook={() =>
+          onBackToBook={() => {
+            activeSessionRepo.clear()
             setScreen({
               name: 'book-detail',
               bookId: screen.openedChapter.book.book.id,
               sessionReturnStatus: `閱讀位置已保留在 ${screen.openedChapter.chapter.title}`,
             })
-          }
+          }}
           onPrevious={() => navigateReader(-1)}
           onNext={() => navigateReader(1)}
         />

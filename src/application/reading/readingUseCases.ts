@@ -270,6 +270,28 @@ export function describeChapterPosition(
   return { currentPosition: index + 1, totalChapters: orderedChapters.length }
 }
 
+export function recoverActiveReaderSession(
+  contentRepository: ContentRepository,
+  readingStateRepository: ReadingStateRepository,
+  activeBookId: string,
+): OpenedChapter | undefined {
+  const destination = resolveStartOrContinue(
+    contentRepository,
+    readingStateRepository,
+    activeBookId,
+  )
+
+  if (!destination) {
+    return undefined
+  }
+
+  return openReadingChapter(
+    contentRepository,
+    readingStateRepository,
+    destination.position,
+  )
+}
+
 export function listChapterBookmarks(
   contentRepository: ContentRepository,
   bookmarksRepository: ChapterBookmarksRepository,

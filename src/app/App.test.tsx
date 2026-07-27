@@ -8,6 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
 import {
+  ACTIVE_READER_SESSION_STORAGE_KEY,
+  LocalStorageActiveReaderSessionRepository,
+} from '../infrastructure/persistence/localStorageActiveReaderSessionRepository'
+import {
   LocalStorageChapterBookmarksRepository,
   CHAPTER_BOOKMARKS_STORAGE_KEY,
 } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
@@ -31,6 +35,9 @@ function createDependencies(): AppDependencies {
       window.localStorage,
     ),
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
+      window.localStorage,
+    ),
+    activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
       window.localStorage,
     ),
   }
@@ -109,6 +116,12 @@ describe('Wave 1 core reading journey', () => {
     expect(
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
+
+    // Exit explicitly first so this test keeps exercising the Book Detail
+    // Continue CTA path; the active reader session marker (Wave 4) recovering
+    // Reader directly on an un-exited remount is covered in the "mobile
+    // reader session recovery" describe block below.
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
     firstMount.unmount()
 
     render(<App dependencies={createDependencies()} />)
@@ -209,6 +222,8 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     expect(
       screen.getByRole('heading', { name: '第二章：入山門' }),
     ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
     firstMount.unmount()
 
     render(<App dependencies={createDependencies()} />)
@@ -375,8 +390,10 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
 
     firstMount.unmount()
 
+    // The active reader session marker (Wave 4) means an un-exited remount
+    // recovers straight back into Reader; no need to navigate through Book
+    // Detail again to reach it.
     render(<App dependencies={createDependencies()} />)
-    openFirstBookReader()
 
     const section = screen.getByLabelText('閱讀器')
     expect(section.getAttribute('data-theme')).toBe('sepia')
@@ -806,6 +823,231 @@ describe('Persistent reader chapter navigation integrated journey', () => {
       fireEvent.click(startBtn)
       expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
     })
+  })
+})
+
+describe('Wave 4 mobile reader session recovery', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  function rawMarker(): unknown {
+    const raw = window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  }
+
+  function openBookAt(index: number) {
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[index])
+  }
+
+  it('records the active BookId when entering Reader', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    expect(rawMarker()).toEqual({
+      schemaVersion: 1,
+      activeBookId: 'book-tide-city',
+    })
+  })
+
+  it('restores Reader at the exact saved chapter after a hard reload, with an accessible recovery status', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    firstMount.unmount()
+
+    render(<App dependencies={createDependencies()} />)
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    const status = screen.getByText('已恢復上次閱讀：第二章：燈塔守望')
+    expect(status).toHaveAttribute('role', 'status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+  })
+
+  it('does not persist the recovery status itself alongside the marker', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    firstMount.unmount()
+
+    expect(rawMarker()).toEqual({
+      schemaVersion: 1,
+      activeBookId: 'book-tide-city',
+    })
+  })
+
+  it('clears the marker on explicit 返回作品, and does not reopen Reader after a subsequent reload', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+    expect(rawMarker()).toBeNull()
+    firstMount.unmount()
+
+    render(<App dependencies={createDependencies()} />)
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.queryByLabelText('閱讀器')).not.toBeInTheDocument()
+  })
+
+  it('clearing the marker on exit does not modify the saved ReadingPosition', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    const savedBeforeExit = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(
+      savedBeforeExit,
+    )
+    firstMount.unmount()
+  })
+
+  it('chapter navigation does not add duplicate chapter state to the active-session marker', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+
+    expect(rawMarker()).toEqual({
+      schemaVersion: 1,
+      activeBookId: 'book-tide-city',
+    })
+    firstMount.unmount()
+  })
+
+  it('recovers a jump-to-bookmark entry into a different book on the next reload', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    // Bookmark book-tide-city's second chapter first.
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+
+    // Enter Reader in a different book (index 1), then jump to the bookmark.
+    openBookAt(1)
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    expect(rawMarker()).toEqual({
+      schemaVersion: 1,
+      activeBookId: 'book-frost-immortal',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    fireEvent.click(screen.getByRole('button', { name: '移至章節' }))
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    expect(rawMarker()).toEqual({
+      schemaVersion: 1,
+      activeBookId: 'book-tide-city',
+    })
+    firstMount.unmount()
+  })
+
+  it('falls back to safe Catalog startup and clears a malformed marker', () => {
+    window.localStorage.setItem(ACTIVE_READER_SESSION_STORAGE_KEY, '{broken json')
+
+    render(<App dependencies={createDependencies()} />)
+
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(rawMarker()).toBeNull()
+  })
+
+  it('falls back to safe Catalog startup and clears a marker naming an unknown BookId', () => {
+    window.localStorage.setItem(
+      ACTIVE_READER_SESSION_STORAGE_KEY,
+      JSON.stringify({ schemaVersion: 1, activeBookId: 'book-does-not-exist' }),
+    )
+
+    render(<App dependencies={createDependencies()} />)
+
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(rawMarker()).toBeNull()
+  })
+
+  it('recovers to the first accessible chapter, requesting no locked prose, when the saved ReadingPosition is stale', () => {
+    window.localStorage.setItem(
+      READING_STATE_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        positions: {
+          'book-tide-city': {
+            bookId: 'book-tide-city',
+            chapterId: 'stale-chapter-999',
+          },
+        },
+      }),
+    )
+    window.localStorage.setItem(
+      ACTIVE_READER_SESSION_STORAGE_KEY,
+      JSON.stringify({ schemaVersion: 1, activeBookId: 'book-tide-city' }),
+    )
+
+    const contentRepository = new StaticContentRepository()
+    const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
+
+    render(
+      <App
+        dependencies={{
+          contentRepository,
+          readingStateRepository: new LocalStorageReadingStateRepository(
+            window.localStorage,
+          ),
+          activeReaderSessionRepository:
+            new LocalStorageActiveReaderSessionRepository(window.localStorage),
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+    ).toBeInTheDocument()
+    expect(proseRequest).not.toHaveBeenCalledWith('chapter-sealed-gate')
+  })
+
+  it('does not automatically reopen Reader after explicit exit, even offline-style with no further interaction', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    firstMount.unmount()
+
+    render(<App dependencies={createDependencies()} />)
+    render(<App dependencies={createDependencies()} />)
+
+    expect(screen.queryAllByLabelText('閱讀器')).toHaveLength(0)
+  })
+
+  it('has no direct localStorage access from the Reader feature UI module', async () => {
+    const path = await import('node:path')
+    const fs = await import('node:fs/promises')
+    const source = await fs.readFile(
+      path.join(process.cwd(), 'src/features/reader/ReaderScreen.tsx'),
+      'utf-8',
+    )
+
+    expect(source).not.toMatch(/localStorage/)
   })
 })
 

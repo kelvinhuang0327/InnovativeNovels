@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence, type Chapter } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
@@ -16,6 +16,7 @@ import {
   listChapterBookmarks,
   listContinueReading,
   listTableOfContents,
+  recoverActiveReaderSession,
   removeChapterBookmark,
 } from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
@@ -76,6 +77,29 @@ class FakeReadingStateRepository implements ReadingStateRepository {
 
   save(): void {
     throw new Error('not needed for this test double')
+  }
+
+  listSavedPositions(): readonly ReadingPosition[] {
+    return this.positions
+  }
+}
+
+class MutableReadingStateRepository implements ReadingStateRepository {
+  private positions: ReadingPosition[]
+
+  constructor(initial: readonly ReadingPosition[] = []) {
+    this.positions = [...initial]
+  }
+
+  load(requestedBookId: string): ReadingPosition | undefined {
+    return this.positions.find((p) => p.bookId === requestedBookId)
+  }
+
+  save(position: ReadingPosition): void {
+    this.positions = [
+      ...this.positions.filter((p) => p.bookId !== position.bookId),
+      position,
+    ]
   }
 
   listSavedPositions(): readonly ReadingPosition[] {
@@ -322,5 +346,106 @@ describe('describeChapterPosition', () => {
 
   it('returns undefined for an unresolved chapter id instead of fabricating a position', () => {
     expect(describeChapterPosition(book, 'does-not-exist')).toBeUndefined()
+  })
+})
+
+describe('recoverActiveReaderSession', () => {
+  const bookA = makeBook('book-a', [
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.LOCKED),
+  ])
+  const lockedOnlyBook = makeBook('book-locked', [
+    chapter('book-locked', 'locked-1', 1, CHAPTER_ACCESS.LOCKED),
+  ])
+  const catalog = [bookA, lockedOnlyBook]
+
+  it('reopens the exact saved chapter for a valid active BookId', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const readingStateRepository = new MutableReadingStateRepository([
+      position('book-a', 'a-2'),
+    ])
+
+    const opened = recoverActiveReaderSession(
+      contentRepository,
+      readingStateRepository,
+      'book-a',
+    )
+
+    expect(opened?.chapter.id).toBe('a-2')
+    expect(opened?.book.book.id).toBe('book-a')
+  })
+
+  it('returns undefined for an unknown active BookId', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const readingStateRepository = new MutableReadingStateRepository()
+
+    expect(
+      recoverActiveReaderSession(
+        contentRepository,
+        readingStateRepository,
+        'book-unknown',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('falls back to the first readable chapter when no ReadingPosition is saved yet', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const readingStateRepository = new MutableReadingStateRepository()
+
+    const opened = recoverActiveReaderSession(
+      contentRepository,
+      readingStateRepository,
+      'book-a',
+    )
+
+    expect(opened?.chapter.id).toBe('a-1')
+  })
+
+  it('falls back to the first readable chapter when the saved chapter id is stale', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const readingStateRepository = new MutableReadingStateRepository([
+      position('book-a', 'a-removed'),
+    ])
+
+    const opened = recoverActiveReaderSession(
+      contentRepository,
+      readingStateRepository,
+      'book-a',
+    )
+
+    expect(opened?.chapter.id).toBe('a-1')
+  })
+
+  it('falls back to the first readable chapter when the saved chapter is now locked, and never requests locked prose', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
+    const readingStateRepository = new MutableReadingStateRepository([
+      position('book-a', 'a-3'),
+    ])
+
+    const opened = recoverActiveReaderSession(
+      contentRepository,
+      readingStateRepository,
+      'book-a',
+    )
+
+    expect(opened?.chapter.id).toBe('a-1')
+    expect(proseRequest).not.toHaveBeenCalledWith('a-3')
+  })
+
+  it('returns undefined when the active book has no accessible chapter, and requests no prose', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
+    const readingStateRepository = new MutableReadingStateRepository()
+
+    expect(
+      recoverActiveReaderSession(
+        contentRepository,
+        readingStateRepository,
+        'book-locked',
+      ),
+    ).toBeUndefined()
+    expect(proseRequest).not.toHaveBeenCalled()
   })
 })

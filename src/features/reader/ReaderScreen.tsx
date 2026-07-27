@@ -12,6 +12,7 @@ import { TableOfContentsModal } from './TableOfContentsModal'
 
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
+  readonly recoveryStatus?: string
   readonly preferences: ReaderPreferences
   readonly isBookmarked: boolean
   readonly bookmarks: readonly BookmarkEntry[]
@@ -30,6 +31,7 @@ interface ReaderScreenProps {
 
 export function ReaderScreen({
   openedChapter,
+  recoveryStatus,
   preferences,
   isBookmarked,
   bookmarks,
@@ -98,6 +100,17 @@ export function ReaderScreen({
       </header>
 
       <h1 className="screen-heading">{openedChapter.chapter.title}</h1>
+
+      {recoveryStatus && (
+        <div
+          className="session-recovery-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {recoveryStatus}
+        </div>
+      )}
 
       {chapterPosition && (
         <div
