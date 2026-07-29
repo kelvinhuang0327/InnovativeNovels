@@ -1,27 +1,46 @@
 import type { ContentBook } from '../../application/catalog/contentRepository'
+import {
+  CHAPTER_ACCESS,
+  type ChapterAccess,
+} from '../../domain/access/chapterAccess'
+import { decideChapterAccess } from '../../domain/access/chapterAccessPolicy'
 
 interface BookDetailScreenProps {
   readonly book: ContentBook
   readonly hasSavedPosition: boolean
+  readonly continueChapterId?: string
   readonly continueChapterTitle?: string
   readonly sessionReturnStatus?: string
   readonly onBack: () => void
   readonly onRead: () => void
+  readonly onReadChapter: (chapterId: string) => void
+}
+
+const chapterAccessLabels: Record<ChapterAccess, string> = {
+  [CHAPTER_ACCESS.READABLE]: '可閱讀',
+  [CHAPTER_ACCESS.PREVIEW]: '試閱',
+  [CHAPTER_ACCESS.LOCKED]: '已鎖定',
+  [CHAPTER_ACCESS.UNAVAILABLE]: '暫不可用',
 }
 
 export function BookDetailScreen({
   book,
   hasSavedPosition,
+  continueChapterId,
   continueChapterTitle,
   sessionReturnStatus,
   onBack,
   onRead,
+  onReadChapter,
 }: BookDetailScreenProps) {
   const readButtonText = hasSavedPosition
     ? continueChapterTitle
       ? `繼續閱讀：${continueChapterTitle}`
       : '繼續閱讀'
     : '開始閱讀'
+  const orderedChapters = [...book.chapters].sort(
+    (left, right) => left.sequence - right.sequence,
+  )
 
   return (
     <section aria-labelledby="book-heading">
@@ -43,6 +62,58 @@ export function BookDetailScreen({
       </p>
       <p className="book-description">{book.description}</p>
       <p>共 {book.chapters.length} 章</p>
+
+      <section
+        className="book-chapter-preview"
+        aria-labelledby="chapter-preview-heading"
+      >
+        <h2 className="section-heading" id="chapter-preview-heading">
+          章節預覽
+        </h2>
+        <ol className="book-chapter-list" aria-label="章節預覽列表">
+          {orderedChapters.map((chapter) => {
+            const access = decideChapterAccess(chapter.access)
+            const accessLabel = chapterAccessLabels[access.access]
+            const isContinueChapter =
+              hasSavedPosition && chapter.id === continueChapterId
+            const actionLabel =
+              access.access === CHAPTER_ACCESS.PREVIEW
+                ? '開始試閱'
+                : '閱讀本章'
+
+            return (
+              <li
+                key={chapter.id}
+                className={`book-chapter-item ${isContinueChapter ? 'is-continue' : ''}`}
+                aria-current={isContinueChapter ? 'true' : undefined}
+              >
+                <div className="book-chapter-copy">
+                  <span className="book-chapter-sequence">
+                    第 {chapter.sequence} 章
+                  </span>
+                  <span className="book-chapter-title">{chapter.title}</span>
+                  <span className="book-chapter-access">{accessLabel}</span>
+                  {isContinueChapter && (
+                    <span className="book-chapter-continue">
+                      目前閱讀進度
+                    </span>
+                  )}
+                </div>
+                {access.canOpen && (
+                  <button
+                    type="button"
+                    className="book-chapter-action"
+                    aria-label={`${actionLabel}：${chapter.title}（${accessLabel}）`}
+                    onClick={() => onReadChapter(chapter.id)}
+                  >
+                    {actionLabel}
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      </section>
 
       <div className="actions">
         <button type="button" onClick={onRead} aria-label={readButtonText}>

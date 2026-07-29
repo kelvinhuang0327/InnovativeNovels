@@ -7,6 +7,13 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type {
+  ContentBook,
+  ContentRepository,
+} from '../application/catalog/contentRepository'
+import { CHAPTER_ACCESS } from '../domain/access/chapterAccess'
+import { chapterSequence } from '../domain/catalog/chapter'
+import { bookId, chapterId } from '../domain/catalog/identifiers'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
 import {
   ACTIVE_READER_SESSION_STORAGE_KEY,
@@ -49,6 +56,64 @@ function openBookDetail() {
   fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
 }
 
+function createAccessStatusRepository() {
+  const accessStatusBookId = bookId('book-access-status')
+  const book: ContentBook = {
+    book: {
+      id: accessStatusBookId,
+      title: '權限測試之書',
+      authorName: '測試作者',
+      categoryLabel: '測試',
+    },
+    description: '驗證章節狀態與安全閱讀路徑。',
+    chapters: [
+      {
+        id: chapterId('chapter-unavailable'),
+        bookId: accessStatusBookId,
+        title: '第四章：尚未提供',
+        sequence: chapterSequence(4),
+        access: CHAPTER_ACCESS.UNAVAILABLE,
+      },
+      {
+        id: chapterId('chapter-preview'),
+        bookId: accessStatusBookId,
+        title: '第二章：安全試閱',
+        sequence: chapterSequence(2),
+        access: CHAPTER_ACCESS.PREVIEW,
+      },
+      {
+        id: chapterId('chapter-locked'),
+        bookId: accessStatusBookId,
+        title: '第三章：鎖定內容',
+        sequence: chapterSequence(3),
+        access: CHAPTER_ACCESS.LOCKED,
+      },
+      {
+        id: chapterId('chapter-readable'),
+        bookId: accessStatusBookId,
+        title: '第一章：完整閱讀',
+        sequence: chapterSequence(1),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+    ],
+  }
+  const proseByChapter = new Map<string, readonly string[]>([
+    ['chapter-readable', ['完整章節內容。']],
+    ['chapter-preview', ['既有試閱安全內容。']],
+  ])
+  const getChapterProse = vi.fn((requestedChapterId: string) =>
+    proseByChapter.get(requestedChapterId),
+  )
+  const repository: ContentRepository = {
+    listBooks: () => [book],
+    getBook: (requestedBookId) =>
+      requestedBookId === accessStatusBookId ? book : undefined,
+    getChapterProse,
+  }
+
+  return { repository, getChapterProse }
+}
+
 describe('Wave 1 core reading journey', () => {
   afterEach(() => {
     cleanup()
@@ -77,6 +142,77 @@ describe('Wave 1 core reading journey', () => {
       screen.getByRole('heading', { name: '潮汐之城' }),
     ).toBeInTheDocument()
     expect(screen.getByText('共 3 章')).toBeInTheDocument()
+  })
+
+  it('renders every access status without prose requests and opens exact allowed chapters', () => {
+    const { repository, getChapterProse } = createAccessStatusRepository()
+
+    render(
+      <App
+        dependencies={{
+          contentRepository: repository,
+          readingStateRepository: new LocalStorageReadingStateRepository(
+            window.localStorage,
+          ),
+        }}
+      />,
+    )
+    openBookDetail()
+
+    const chapterList = screen.getByRole('list', { name: '章節預覽列表' })
+    const chapterItems = within(chapterList).getAllByRole('listitem')
+    expect(
+      chapterItems.map(
+        (item) => item.querySelector('.book-chapter-title')?.textContent,
+      ),
+    ).toEqual([
+      '第一章：完整閱讀',
+      '第二章：安全試閱',
+      '第三章：鎖定內容',
+      '第四章：尚未提供',
+    ])
+    expect(getChapterProse).not.toHaveBeenCalled()
+
+    const lockedItem = screen.getByText('第三章：鎖定內容').closest('li')
+    const unavailableItem = screen.getByText('第四章：尚未提供').closest('li')
+    expect(within(lockedItem as HTMLElement).getByText('已鎖定')).toBeInTheDocument()
+    expect(within(lockedItem as HTMLElement).queryByRole('button')).not.toBeInTheDocument()
+    expect(
+      within(unavailableItem as HTMLElement).getByText('暫不可用'),
+    ).toBeInTheDocument()
+    expect(
+      within(unavailableItem as HTMLElement).queryByRole('button'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '權限測試之書' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '開始試閱：第二章：安全試閱（試閱）',
+      }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：安全試閱' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('既有試閱安全內容。')).toBeInTheDocument()
+    expect(getChapterProse).toHaveBeenCalledTimes(1)
+    expect(getChapterProse).toHaveBeenLastCalledWith('chapter-preview')
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '閱讀本章：第一章：完整閱讀（可閱讀）',
+      }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: '第一章：完整閱讀' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('完整章節內容。')).toBeInTheDocument()
+    expect(getChapterProse).toHaveBeenCalledTimes(2)
+    expect(getChapterProse).toHaveBeenLastCalledWith('chapter-readable')
   })
 
   it('starts at the first explicit-order chapter and persists its position', () => {
@@ -1242,4 +1378,3 @@ describe('Wave 4 mobile reader session recovery', () => {
     expect(source).not.toMatch(/localStorage/)
   })
 })
-

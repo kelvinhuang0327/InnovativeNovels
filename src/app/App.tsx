@@ -222,7 +222,10 @@ function App({
     refreshBookmarks()
   }
 
-  const handleJumpBookmark = (targetBookId: string, targetChapterId: string) => {
+  const openReaderChapter = (
+    targetBookId: string,
+    targetChapterId: string,
+  ) => {
     const openedChapter = openReadingChapter(
       dependencies.contentRepository,
       dependencies.readingStateRepository,
@@ -238,6 +241,10 @@ function App({
       activeSessionRepo.save(openedChapter.book.book.id)
       setScreen({ name: 'reader', openedChapter })
     }
+  }
+
+  const handleJumpBookmark = (targetBookId: string, targetChapterId: string) => {
+    openReaderChapter(targetBookId, targetChapterId)
   }
 
   const openBookDetail = (bookId: string) => {
@@ -331,12 +338,14 @@ function App({
             screen.bookId,
           )
 
+          let continueChapterId: string | undefined = undefined
           let continueChapterTitle: string | undefined = undefined
           if (destination?.isContinuing) {
             const chapter = book.chapters.find(
               (c) => c.id === destination.position.chapterId,
             )
             if (chapter) {
+              continueChapterId = chapter.id
               continueChapterTitle = chapter.title
             }
           }
@@ -345,10 +354,14 @@ function App({
             <BookDetailScreen
               book={book}
               hasSavedPosition={destination?.isContinuing ?? false}
+              continueChapterId={continueChapterId}
               continueChapterTitle={continueChapterTitle}
               sessionReturnStatus={screen.sessionReturnStatus}
               onBack={() => setScreen({ name: 'catalog' })}
               onRead={() => openReader(screen.bookId)}
+              onReadChapter={(chapterId) =>
+                openReaderChapter(screen.bookId, chapterId)
+              }
             />
           )
         })()}
