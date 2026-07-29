@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   BookmarkEntry,
   ChapterPositionProgress,
   OpenedChapter,
   TableOfContentsEntry,
 } from '../../application/reading/readingUseCases'
+import { calculateReadingProgress } from '../../domain/reading/readingProgressPolicy'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
 import { ReaderComfortControls } from './ReaderComfortControls'
@@ -49,10 +50,127 @@ export function ReaderScreen({
 }: ReaderScreenProps) {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
   const [isTocOpen, setIsTocOpen] = useState(false)
+  const [liveProgress, setLiveProgress] = useState({
+    chapterId: openedChapter.chapter.id,
+    percent: 0,
+  })
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
+  const readerRef = useRef<HTMLElement>(null)
+  const liveProgressPercent =
+    liveProgress.chapterId === openedChapter.chapter.id
+      ? liveProgress.percent
+      : 0
+
+  useEffect(() => {
+    const reader = readerRef.current
+
+    if (openedChapter.isLocked || !reader) {
+      return
+    }
+
+    let framePending = false
+    let frameId: number | undefined
+
+    const updateProgress = () => {
+      const viewportHeight = window.innerHeight
+      const readerBounds = reader.getBoundingClientRect()
+      const readerTop = window.scrollY + readerBounds.top
+      const readerBottom =
+        readerTop + Math.max(reader.scrollHeight, readerBounds.height)
+      const documentScrollEnd = Math.max(
+        document.documentElement.scrollHeight - viewportHeight,
+        0,
+      )
+      const progressStart = Math.min(
+        Math.max(readerTop, 0),
+        documentScrollEnd,
+      )
+      const progressEnd = Math.min(
+        Math.max(readerBottom - viewportHeight, progressStart),
+        documentScrollEnd,
+      )
+      const progressDistance = progressEnd - progressStart
+
+      let chapterProgress = 0
+
+      if (window.scrollY > progressStart) {
+        chapterProgress =
+          window.scrollY >= progressEnd || progressDistance <= 0
+            ? 1
+            : Math.min(
+                Math.max(
+                  (window.scrollY - progressStart) / progressDistance,
+                  0,
+                ),
+                1,
+              )
+      }
+
+      const progress = calculateReadingProgress({
+        position: {
+          bookId: openedChapter.book.book.id,
+          chapterId: openedChapter.chapter.id,
+          paragraphIndex: 0,
+          chapterProgress,
+        },
+        chapterSequence: 1,
+        totalChapters: 1,
+      })
+      const percent = progress.valid ? Math.round(progress.percent) : 0
+
+      setLiveProgress((current) =>
+        current.chapterId === openedChapter.chapter.id &&
+        current.percent === percent
+          ? current
+          : { chapterId: openedChapter.chapter.id, percent },
+      )
+    }
+
+    const scheduleProgressUpdate = () => {
+      if (framePending) {
+        return
+      }
+
+      framePending = true
+
+      if (typeof window.requestAnimationFrame !== 'function') {
+        framePending = false
+        updateProgress()
+        return
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        framePending = false
+        updateProgress()
+      })
+    }
+
+    scheduleProgressUpdate()
+    window.addEventListener('scroll', scheduleProgressUpdate, { passive: true })
+    window.addEventListener('resize', scheduleProgressUpdate)
+
+    return () => {
+      window.removeEventListener('scroll', scheduleProgressUpdate)
+      window.removeEventListener('resize', scheduleProgressUpdate)
+
+      if (
+        frameId !== undefined &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [
+    openedChapter.book.book.id,
+    openedChapter.chapter.id,
+    openedChapter.isLocked,
+    preferences.fontScale,
+    preferences.lineSpacing,
+  ])
 
   return (
     <section
+      ref={readerRef}
       className="reader-screen-container"
       data-theme={preferences.theme}
       data-font-scale={preferences.fontScale}
@@ -198,15 +316,46 @@ export function ReaderScreen({
           上一章
         </button>
 
-        {chapterPosition ? (
-          <span className="persistent-position-text">
-            第 {chapterPosition.currentPosition} / {chapterPosition.totalChapters} 章
-          </span>
-        ) : (
-          <span className="persistent-position-text">
-            {openedChapter.chapter.title}
-          </span>
-        )}
+        <div className="persistent-reader-context">
+          {chapterPosition ? (
+            <span className="persistent-position-text">
+              第 {chapterPosition.currentPosition} /{' '}
+              {chapterPosition.totalChapters} 章
+            </span>
+          ) : (
+            <span className="persistent-position-text">
+              {openedChapter.chapter.title}
+            </span>
+          )}
+
+          {!openedChapter.isLocked && (
+            <div
+              className="chapter-reading-progress"
+              role="progressbar"
+              aria-label="本章閱讀進度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={liveProgressPercent}
+              aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
+            >
+              <span
+                className="chapter-reading-progress-label"
+                aria-hidden="true"
+              >
+                本章閱讀進度 {liveProgressPercent}%
+              </span>
+              <span
+                className="chapter-reading-progress-track"
+                aria-hidden="true"
+              >
+                <span
+                  className="chapter-reading-progress-fill"
+                  style={{ width: `${liveProgressPercent}%` }}
+                />
+              </span>
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
@@ -247,4 +396,3 @@ export function ReaderScreen({
     </section>
   )
 }
-

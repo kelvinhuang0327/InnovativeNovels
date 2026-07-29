@@ -273,18 +273,24 @@ button:focus-visible {
 }
 
 .reader-screen-container[data-theme='light'] {
+  --chapter-reading-progress-track: #eadbd7;
+  --chapter-reading-progress-fill: #8d3f2f;
   background: #ffffff;
   color: #111827;
   border: 1px solid #e5e7eb;
 }
 
 .reader-screen-container[data-theme='sepia'] {
+  --chapter-reading-progress-track: #e6d5b8;
+  --chapter-reading-progress-fill: #713125;
   background: #fbf0d9;
   color: #3b2d1d;
   border: 1px solid #e6d5b8;
 }
 
 .reader-screen-container[data-theme='dark'] {
+  --chapter-reading-progress-track: #4b5563;
+  --chapter-reading-progress-fill: #f0b8a3;
   background: #121826;
   color: #e5e7eb;
   border: 1px solid #374151;
@@ -617,21 +623,6 @@ button:focus-visible {
     width: 100%;
   }
 
-  .reader-persistent-navigation {
-    padding: 0.5rem;
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-    gap: 0.4rem;
-  }
-
-  .reader-persistent-navigation button.button-persistent-nav {
-    min-height: 2.25rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-  }
-
-  .persistent-position-text {
-    font-size: 0.75rem;
-  }
 }
 
 
@@ -680,6 +671,14 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
+.persistent-reader-context {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .persistent-position-text {
   font-size: 0.9rem;
   font-weight: 700;
@@ -687,6 +686,39 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chapter-reading-progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chapter-reading-progress-label {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-reading-progress-track {
+  display: block;
+  width: min(100%, 12rem);
+  height: 0.3rem;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--chapter-reading-progress-track);
+}
+
+.chapter-reading-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--chapter-reading-progress-fill);
+  transition: width 0.1s linear;
 }
 
 .session-return-status {
@@ -700,3 +732,24 @@ button:focus-visible {
   font-weight: 700;
 }
 
+@media (max-width: 32rem) {
+  .reader-persistent-navigation {
+    gap: 0.4rem;
+    padding: 0.5rem;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .reader-persistent-navigation button.button-persistent-nav {
+    min-height: 2.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .persistent-position-text {
+    font-size: 0.75rem;
+  }
+
+  .chapter-reading-progress-label {
+    font-size: 0.68rem;
+  }
+}

@@ -587,31 +587,40 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     })
   })
 
-  it('displays chapter-position progress as "第 X / Y 章" and keeps it synced across previous/next, TOC jump, and bookmark jump', () => {
+  it('keeps chapter-position and live chapter progress synced across previous/next, TOC jump, and bookmark jump', () => {
     render(<App dependencies={createDependencies()} />)
     openFirstBookReader()
 
     const progress = () =>
       screen.getByRole('progressbar', { name: '目前章節位置' })
+    const liveProgress = () =>
+      screen.getByRole('progressbar', { name: '本章閱讀進度' })
 
     expect(progress()).toHaveTextContent('第 1 / 3 章')
     expect(progress().textContent).not.toMatch(/%|頁|段落/)
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     // Bookmark chapter 1 so it can be reached again via the bookmarks modal.
     fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 3 / 3 章')
+    expect(
+      screen.queryByRole('progressbar', { name: '本章閱讀進度' }),
+    ).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
     fireEvent.click(tocButtonFor('第一章：潮聲來信'))
     expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     expect(progress()).toHaveTextContent('第 2 / 3 章')
@@ -622,6 +631,7 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
       within(bookmarksDialog).getByRole('button', { name: '移至章節' }),
     )
     expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
   })
 })
 
@@ -1050,5 +1060,4 @@ describe('Wave 4 mobile reader session recovery', () => {
     expect(source).not.toMatch(/localStorage/)
   })
 })
-
 

@@ -1,11 +1,12 @@
 import {
+  act,
   cleanup,
   render,
   screen,
   fireEvent,
   within,
 } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
@@ -293,7 +294,9 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
       />,
     )
 
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('progressbar', { name: '目前章節位置' }),
+    ).not.toBeInTheDocument()
   })
 
   it('opens the TOC listing every chapter in explicit order with the current chapter marked via aria-current', () => {
@@ -370,6 +373,165 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
 
     expect(screen.queryByRole('dialog', { name: '章節目錄' })).not.toBeInTheDocument()
     expect(document.activeElement).toBe(trigger)
+  })
+})
+
+describe('ReaderScreen Live Chapter Progress', () => {
+  let animationFrames: FrameRequestCallback[]
+
+  beforeEach(() => {
+    animationFrames = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback)
+        return animationFrames.length
+      }),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    vi.stubGlobal('innerHeight', 400)
+    vi.stubGlobal('scrollY', 0)
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight')
+  })
+
+  function flushAnimationFrame() {
+    const callbacks = animationFrames.splice(0)
+
+    act(() => {
+      callbacks.forEach((callback) => callback(0))
+    })
+  }
+
+  function renderReader(openedChapter = mockOpenedChapter) {
+    return render(
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+  }
+
+  it('reports bounded chapter progress from actual Reader geometry and recomputes on chapter change', () => {
+    let readerTop = 0
+    const readerHeight = 1000
+    const { rerender } = renderReader()
+    const reader = screen.getByLabelText('閱讀器')
+
+    Object.defineProperty(reader, 'scrollHeight', {
+      configurable: true,
+      value: readerHeight,
+    })
+    vi.spyOn(reader, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: readerTop + readerHeight,
+      height: readerHeight,
+      left: 0,
+      right: 640,
+      top: readerTop,
+      width: 640,
+      x: 0,
+      y: readerTop,
+      toJSON: () => ({}),
+    }))
+
+    flushAnimationFrame()
+
+    const progress = () =>
+      screen.getByRole('progressbar', { name: '本章閱讀進度' })
+
+    expect(progress()).toHaveAttribute('aria-valuenow', '0')
+    expect(progress()).toHaveAttribute(
+      'aria-valuetext',
+      '本章閱讀進度 0%',
+    )
+    expect(progress()).toHaveTextContent('本章閱讀進度 0%')
+
+    readerTop = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    expect(progress()).toHaveAttribute('aria-valuenow', '50')
+    expect(progress()).toHaveTextContent('本章閱讀進度 50%')
+
+    readerTop = -600
+    vi.stubGlobal('scrollY', 600)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    expect(progress()).toHaveAttribute('aria-valuenow', '100')
+    expect(progress()).toHaveTextContent('本章閱讀進度 100%')
+
+    const nextChapter = {
+      ...mockOpenedChapter,
+      chapter: {
+        ...mockOpenedChapter.chapter,
+        id: chapterId('c2'),
+        title: 'Chapter 2',
+        sequence: chapterSequence(2),
+      },
+      prose: ['Paragraph 2'],
+    }
+
+    readerTop = 0
+    vi.stubGlobal('scrollY', 0)
+    rerender(
+      <ReaderScreen
+        openedChapter={nextChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    expect(progress()).toHaveAttribute('aria-valuenow', '0')
+    flushAnimationFrame()
+    expect(progress()).toHaveAttribute('aria-valuenow', '0')
+  })
+
+  it('does not expose live progress for locked prose', () => {
+    renderReader({
+      ...mockOpenedChapter,
+      prose: [],
+      isLocked: true,
+    })
+
+    expect(
+      screen.queryByRole('progressbar', { name: '本章閱讀進度' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryAllByTestId('chapter-prose')).toHaveLength(0)
   })
 })
 
@@ -580,4 +742,3 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
     expect(onBackToBook).toHaveBeenCalledTimes(1)
   })
 })
-
