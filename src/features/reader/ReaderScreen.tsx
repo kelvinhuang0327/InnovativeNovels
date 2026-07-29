@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import type {
   BookmarkEntry,
   ChapterPositionProgress,
@@ -10,6 +15,21 @@ import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
 import { ReaderComfortControls } from './ReaderComfortControls'
 import { TableOfContentsModal } from './TableOfContentsModal'
+
+const CHAPTER_SWIPE_MIN_DISTANCE_PX = 72
+const CHAPTER_SWIPE_HORIZONTAL_DOMINANCE_RATIO = 1.5
+const SWIPE_EXCLUDED_TARGETS =
+  'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
+
+interface ChapterSwipeGesture {
+  readonly pointerId: number
+  readonly startX: number
+  readonly startY: number
+}
+
+function isSwipeExcludedTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(SWIPE_EXCLUDED_TARGETS) !== null
+}
 
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
@@ -58,6 +78,7 @@ export function ReaderScreen({
   })
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
+  const chapterSwipeGestureRef = useRef<ChapterSwipeGesture | null>(null)
   const onProgressChangeRef = useRef(onProgressChange)
   const latestChapterProgressRef = useRef(openedChapter.initialChapterProgress)
   const flushProgressRef = useRef<() => void>(() => {})
@@ -69,6 +90,74 @@ export function ReaderScreen({
   useEffect(() => {
     onProgressChangeRef.current = onProgressChange
   }, [onProgressChange])
+
+  useEffect(() => {
+    chapterSwipeGestureRef.current = null
+
+    return () => {
+      chapterSwipeGestureRef.current = null
+    }
+  }, [openedChapter.chapter.id])
+
+  const cancelChapterSwipe = () => {
+    chapterSwipeGestureRef.current = null
+  }
+
+  const handleProsePointerDown = (
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    const isTouchLikePointer =
+      event.pointerType === 'touch' || event.pointerType === 'pen'
+
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      !isTouchLikePointer ||
+      isSwipeExcludedTarget(event.target)
+    ) {
+      cancelChapterSwipe()
+      return
+    }
+
+    chapterSwipeGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
+  }
+
+  const handleProsePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const gesture = chapterSwipeGestureRef.current
+    cancelChapterSwipe()
+
+    if (
+      !gesture ||
+      event.pointerId !== gesture.pointerId ||
+      isSwipeExcludedTarget(event.target)
+    ) {
+      return
+    }
+
+    const horizontalDistance = event.clientX - gesture.startX
+    const verticalDistance = event.clientY - gesture.startY
+    const absoluteHorizontalDistance = Math.abs(horizontalDistance)
+    const absoluteVerticalDistance = Math.abs(verticalDistance)
+
+    if (
+      absoluteHorizontalDistance < CHAPTER_SWIPE_MIN_DISTANCE_PX ||
+      absoluteHorizontalDistance <
+        absoluteVerticalDistance *
+          CHAPTER_SWIPE_HORIZONTAL_DOMINANCE_RATIO
+    ) {
+      return
+    }
+
+    if (horizontalDistance < 0 && openedChapter.hasNext) {
+      onNext()
+    } else if (horizontalDistance > 0 && openedChapter.hasPrevious) {
+      onPrevious()
+    }
+  }
 
   useEffect(() => {
     flushProgressRef.current = () => {}
@@ -320,6 +409,10 @@ export function ReaderScreen({
         <article
           className={`reader-prose theme-${preferences.theme} font-scale-${preferences.fontScale} line-spacing-${preferences.lineSpacing}`}
           aria-label="章節內文"
+          onPointerDown={handleProsePointerDown}
+          onPointerUp={handleProsePointerUp}
+          onPointerCancel={cancelChapterSwipe}
+          onPointerLeave={cancelChapterSwipe}
         >
           {openedChapter.prose.map((paragraph) => (
             <p data-testid="chapter-prose" key={paragraph}>

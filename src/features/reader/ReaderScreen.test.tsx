@@ -686,6 +686,283 @@ describe('ReaderScreen Live Chapter Progress', () => {
   })
 })
 
+describe('ReaderScreen prose swipe navigation', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  function renderSwipeReader(
+    openedChapter = mockOpenedChapter,
+    callbacks: {
+      readonly onPrevious?: () => void
+      readonly onNext?: () => void
+    } = {},
+  ) {
+    const onPrevious = callbacks.onPrevious ?? vi.fn()
+    const onNext = callbacks.onNext ?? vi.fn()
+    const result = render(
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />,
+    )
+
+    return {
+      ...result,
+      onPrevious,
+      onNext,
+      prose: screen.getByLabelText('章節內文'),
+    }
+  }
+
+  function swipe(
+    target: HTMLElement,
+    {
+      startX,
+      startY,
+      endX,
+      endY,
+      pointerId = 1,
+    }: {
+      readonly startX: number
+      readonly startY: number
+      readonly endX: number
+      readonly endY: number
+      readonly pointerId?: number
+    },
+  ) {
+    fireEvent.pointerDown(target, {
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+    })
+    fireEvent.pointerUp(target, {
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: endX,
+      clientY: endY,
+    })
+  }
+
+  it('invokes next exactly once for one deliberate left swipe', () => {
+    const { onNext, prose } = renderSwipeReader()
+
+    swipe(prose, { startX: 180, startY: 100, endX: 80, endY: 104 })
+    fireEvent.pointerUp(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 20,
+      clientY: 104,
+    })
+
+    expect(onNext).toHaveBeenCalledTimes(1)
+  })
+
+  it('invokes previous exactly once for one deliberate right swipe', () => {
+    const onPrevious = vi.fn()
+    const { prose } = renderSwipeReader(
+      { ...mockOpenedChapter, hasPrevious: true },
+      { onPrevious },
+    )
+
+    swipe(prose, { startX: 60, startY: 100, endX: 160, endY: 96 })
+
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores horizontal movement below the deliberate swipe threshold', () => {
+    const { onNext, prose } = renderSwipeReader()
+
+    swipe(prose, { startX: 140, startY: 100, endX: 80, endY: 100 })
+
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('ignores primarily vertical movement so native scrolling remains navigation-free', () => {
+    const { onPrevious, onNext, prose } = renderSwipeReader({
+      ...mockOpenedChapter,
+      hasPrevious: true,
+    })
+
+    swipe(prose, { startX: 100, startY: 40, endX: 112, endY: 150 })
+
+    expect(onPrevious).not.toHaveBeenCalled()
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('ignores a diagonal gesture below the horizontal-dominance ratio', () => {
+    const { onPrevious, onNext, prose } = renderSwipeReader({
+      ...mockOpenedChapter,
+      hasPrevious: true,
+    })
+
+    swipe(prose, { startX: 180, startY: 50, endX: 90, endY: 120 })
+
+    expect(onPrevious).not.toHaveBeenCalled()
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('ignores gestures on controls and gestures that leave the prose surface', () => {
+    const { onPrevious, onNext, prose } = renderSwipeReader({
+      ...mockOpenedChapter,
+      hasPrevious: true,
+    })
+    const tocButton = screen.getByRole('button', { name: '開啟章節目錄' })
+
+    swipe(tocButton, {
+      startX: 180,
+      startY: 100,
+      endX: 80,
+      endY: 100,
+    })
+
+    fireEvent.pointerDown(prose, {
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 180,
+      clientY: 100,
+    })
+    fireEvent.pointerLeave(prose, {
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 70,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(prose, {
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 70,
+      clientY: 100,
+    })
+
+    expect(onPrevious).not.toHaveBeenCalled()
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('respects first and last chapter boundaries', () => {
+    const first = renderSwipeReader()
+    swipe(first.prose, {
+      startX: 60,
+      startY: 100,
+      endX: 160,
+      endY: 100,
+    })
+    expect(first.onPrevious).not.toHaveBeenCalled()
+    first.unmount()
+
+    const last = renderSwipeReader({
+      ...mockOpenedChapter,
+      hasPrevious: true,
+      hasNext: false,
+    })
+    swipe(last.prose, {
+      startX: 180,
+      startY: 100,
+      endX: 80,
+      endY: 100,
+    })
+    expect(last.onNext).not.toHaveBeenCalled()
+  })
+
+  it('clears an unfinished gesture on pointer cancellation and chapter change', () => {
+    const onNext = vi.fn()
+    const { prose, rerender } = renderSwipeReader(mockOpenedChapter, { onNext })
+
+    fireEvent.pointerDown(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 180,
+      clientY: 100,
+    })
+    fireEvent.pointerCancel(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+    })
+    fireEvent.pointerUp(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 80,
+      clientY: 100,
+    })
+
+    fireEvent.pointerDown(prose, {
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 180,
+      clientY: 100,
+    })
+    rerender(
+      <ReaderScreen
+        openedChapter={{
+          ...mockOpenedChapter,
+          chapter: {
+            ...mockOpenedChapter.chapter,
+            id: chapterId('c2'),
+            title: 'Chapter 2',
+            sequence: chapterSequence(2),
+          },
+        }}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+      />,
+    )
+    fireEvent.pointerUp(screen.getByLabelText('章節內文'), {
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 80,
+      clientY: 100,
+    })
+
+    expect(onNext).not.toHaveBeenCalled()
+  })
+})
+
 describe('ReaderScreen Persistent Chapter Navigation', () => {
   afterEach(() => {
     cleanup()

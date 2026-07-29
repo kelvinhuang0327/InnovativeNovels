@@ -783,8 +783,8 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     window.localStorage.clear()
   })
 
-  function openFirstBookReader() {
-    render(<App dependencies={createDependencies()} />)
+  function openFirstBookReader(dependencies = createDependencies()) {
+    render(<App dependencies={dependencies} />)
     fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[0])
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
   }
@@ -843,7 +843,52 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     expect(persistentPrev).not.toBeDisabled()
   })
 
+  it('routes prose swipes through adjacent navigation without requesting locked prose', () => {
+    const dependencies = createDependencies()
+    const proseRequest = vi.spyOn(
+      dependencies.contentRepository,
+      'getChapterProse',
+    )
+    openFirstBookReader(dependencies)
 
+    const swipeLeft = () => {
+      const prose = screen.getByLabelText('章節內文')
+      fireEvent.pointerDown(prose, {
+        pointerId: 1,
+        pointerType: 'touch',
+        isPrimary: true,
+        button: 0,
+        clientX: 180,
+        clientY: 100,
+      })
+      fireEvent.pointerUp(prose, {
+        pointerId: 1,
+        pointerType: 'touch',
+        isPrimary: true,
+        button: 0,
+        clientX: 80,
+        clientY: 100,
+      })
+    }
+
+    swipeLeft()
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '目前章節位置' }),
+    ).toHaveTextContent('第 2 / 3 章')
+
+    swipeLeft()
+    expect(
+      screen.getByRole('heading', { name: '第三章：封印之門' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('本章尚未開放，沒有載入任何內文。'),
+    ).toBeInTheDocument()
+    expect(screen.queryAllByTestId('chapter-prose')).toHaveLength(0)
+    expect(proseRequest).not.toHaveBeenCalledWith('chapter-sealed-gate')
+  })
 
   it('preserves reader preferences across persistent navigation', () => {
     openFirstBookReader()
@@ -1151,6 +1196,66 @@ describe('Wave 5 chapter-progress persistence and restore', () => {
     expect(
       screen.getByRole('progressbar', { name: '本章閱讀進度' }),
     ).toHaveAttribute('aria-valuenow', '0')
+  })
+
+  it('keeps adjacent-chapter progress semantics unchanged when navigation begins with a prose swipe', () => {
+    render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+
+    const prose = screen.getByLabelText('章節內文')
+    fireEvent.pointerDown(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 180,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(prose, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 80,
+      clientY: 100,
+    })
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+
+    readerTopRef.current = 0
+    vi.stubGlobal('scrollY', 0)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '0')
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '{}',
+      ).positions['book-tide-city'],
+    ).toEqual(
+      expect.objectContaining({
+        chapterId: 'chapter-lighthouse-watch',
+        chapterProgress: 0,
+      }),
+    )
   })
 })
 

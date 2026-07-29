@@ -202,6 +202,7 @@ button:focus-visible {
 
 .reader-prose {
   margin-top: 2rem;
+  touch-action: pan-y;
 }
 
 .locked-notice {
