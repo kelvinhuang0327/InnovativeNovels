@@ -16,8 +16,11 @@ import {
   listChapterBookmarks,
   listContinueReading,
   listTableOfContents,
+  navigateToAdjacentChapter,
+  openReadingChapter,
   recoverActiveReaderSession,
   removeChapterBookmark,
+  updateReadingProgress,
 } from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
 
@@ -447,5 +450,92 @@ describe('recoverActiveReaderSession', () => {
       ),
     ).toBeUndefined()
     expect(proseRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('openReadingChapter chapter-progress restore', () => {
+  const bookA = makeBook('book-a', [
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.LOCKED),
+  ])
+  const contentRepository = new FakeContentRepository([bookA])
+
+  it('carries the saved chapterProgress through to initialChapterProgress and preserves it in the writer', () => {
+    const readingStateRepository = new MutableReadingStateRepository()
+
+    const opened = openReadingChapter(contentRepository, readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-2'),
+      paragraphIndex: 0,
+      chapterProgress: 0.42,
+    })
+
+    expect(opened?.initialChapterProgress).toBe(0.42)
+    expect(readingStateRepository.load('book-a')).toEqual({
+      bookId: 'book-a',
+      chapterId: 'a-2',
+      paragraphIndex: 0,
+      chapterProgress: 0.42,
+    })
+  })
+
+  it('does not restore progress or request prose for a locked chapter', () => {
+    const readingStateRepository = new MutableReadingStateRepository()
+    const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
+
+    const opened = openReadingChapter(contentRepository, readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-3'),
+      paragraphIndex: 0,
+      chapterProgress: 0.9,
+    })
+
+    expect(opened?.isLocked).toBe(true)
+    expect(opened?.initialChapterProgress).toBe(0)
+    expect(proseRequest).not.toHaveBeenCalled()
+    expect(readingStateRepository.load('book-a')).toBeUndefined()
+  })
+
+  it('starts a freshly navigated adjacent chapter at its own default progress, never inheriting the current chapter', () => {
+    const readingStateRepository = new MutableReadingStateRepository([
+      position('book-a', 'a-1'),
+    ])
+    const current = openReadingChapter(contentRepository, readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-1'),
+      paragraphIndex: 0,
+      chapterProgress: 0.8,
+    })
+
+    const next = navigateToAdjacentChapter(
+      contentRepository,
+      readingStateRepository,
+      current as NonNullable<typeof current>,
+      1,
+    )
+
+    expect(next?.chapter.id).toBe('a-2')
+    expect(next?.initialChapterProgress).toBe(0)
+  })
+})
+
+describe('updateReadingProgress', () => {
+  it('forwards the position to the ReadingStateRepository writer', () => {
+    const readingStateRepository = new MutableReadingStateRepository()
+
+    updateReadingProgress(readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-1'),
+      paragraphIndex: 0,
+      chapterProgress: 0.66,
+    })
+
+    expect(readingStateRepository.load('book-a')).toEqual({
+      bookId: 'book-a',
+      chapterId: 'a-1',
+      paragraphIndex: 0,
+      chapterProgress: 0.66,
+    })
   })
 })

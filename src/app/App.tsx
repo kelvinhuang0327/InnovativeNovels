@@ -18,6 +18,7 @@ import {
   recoverActiveReaderSession,
   removeChapterBookmark,
   resolveStartOrContinue,
+  updateReadingProgress,
   type BookmarkEntry,
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
@@ -266,6 +267,19 @@ function App({
     }
   }
 
+  const handleProgressChange = (chapterProgress: number) => {
+    if (screen.name !== 'reader') {
+      return
+    }
+
+    updateReadingProgress(dependencies.readingStateRepository, {
+      bookId: screen.openedChapter.book.book.id,
+      chapterId: screen.openedChapter.chapter.id,
+      paragraphIndex: 0,
+      chapterProgress,
+    })
+  }
+
   const navigateReader = (direction: -1 | 1) => {
     if (screen.name !== 'reader') {
       return
@@ -384,6 +398,7 @@ function App({
           }}
           onPrevious={() => navigateReader(-1)}
           onNext={() => navigateReader(1)}
+          onProgressChange={handleProgressChange}
         />
       )}
     </main>

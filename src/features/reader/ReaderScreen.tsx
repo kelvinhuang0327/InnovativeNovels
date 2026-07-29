@@ -28,6 +28,7 @@ interface ReaderScreenProps {
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
+  readonly onProgressChange?: (chapterProgress: number) => void
 }
 
 export function ReaderScreen({
@@ -47,6 +48,7 @@ export function ReaderScreen({
   onBackToBook,
   onPrevious,
   onNext,
+  onProgressChange,
 }: ReaderScreenProps) {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
   const [isTocOpen, setIsTocOpen] = useState(false)
@@ -56,22 +58,33 @@ export function ReaderScreen({
   })
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
+  const onProgressChangeRef = useRef(onProgressChange)
+  const latestChapterProgressRef = useRef(openedChapter.initialChapterProgress)
+  const flushProgressRef = useRef<() => void>(() => {})
   const liveProgressPercent =
     liveProgress.chapterId === openedChapter.chapter.id
       ? liveProgress.percent
       : 0
 
   useEffect(() => {
+    onProgressChangeRef.current = onProgressChange
+  }, [onProgressChange])
+
+  useEffect(() => {
+    flushProgressRef.current = () => {}
     const reader = readerRef.current
 
     if (openedChapter.isLocked || !reader) {
       return
     }
 
+    latestChapterProgressRef.current = openedChapter.initialChapterProgress
+
     let framePending = false
     let frameId: number | undefined
+    let lastReportedPercent: number | undefined
 
-    const updateProgress = () => {
+    const measureGeometry = () => {
       const viewportHeight = window.innerHeight
       const readerBounds = reader.getBoundingClientRect()
       const readerTop = window.scrollY + readerBounds.top
@@ -89,7 +102,17 @@ export function ReaderScreen({
         Math.max(readerBottom - viewportHeight, progressStart),
         documentScrollEnd,
       )
-      const progressDistance = progressEnd - progressStart
+
+      return {
+        progressStart,
+        progressEnd,
+        progressDistance: progressEnd - progressStart,
+      }
+    }
+
+    const updateProgress = () => {
+      const { progressStart, progressEnd, progressDistance } =
+        measureGeometry()
 
       let chapterProgress = 0
 
@@ -105,6 +128,8 @@ export function ReaderScreen({
                 1,
               )
       }
+
+      latestChapterProgressRef.current = chapterProgress
 
       const progress = calculateReadingProgress({
         position: {
@@ -124,6 +149,11 @@ export function ReaderScreen({
           ? current
           : { chapterId: openedChapter.chapter.id, percent },
       )
+
+      if (lastReportedPercent !== percent) {
+        lastReportedPercent = percent
+        onProgressChangeRef.current?.(chapterProgress)
+      }
     }
 
     const scheduleProgressUpdate = () => {
@@ -145,13 +175,36 @@ export function ReaderScreen({
       })
     }
 
-    scheduleProgressUpdate()
+    const restoreTarget = openedChapter.initialChapterProgress
+
+    if (restoreTarget > 0 && typeof window.requestAnimationFrame === 'function') {
+      frameId = window.requestAnimationFrame(() => {
+        const { progressStart, progressDistance } = measureGeometry()
+        const targetScrollY =
+          progressDistance > 0
+            ? progressStart + restoreTarget * progressDistance
+            : progressStart
+
+        window.scrollTo(0, targetScrollY)
+        updateProgress()
+      })
+    } else {
+      scheduleProgressUpdate()
+    }
+
     window.addEventListener('scroll', scheduleProgressUpdate, { passive: true })
     window.addEventListener('resize', scheduleProgressUpdate)
+
+    const flushProgress = () => {
+      onProgressChangeRef.current?.(latestChapterProgressRef.current)
+    }
+    flushProgressRef.current = flushProgress
+    window.addEventListener('pagehide', flushProgress)
 
     return () => {
       window.removeEventListener('scroll', scheduleProgressUpdate)
       window.removeEventListener('resize', scheduleProgressUpdate)
+      window.removeEventListener('pagehide', flushProgress)
 
       if (
         frameId !== undefined &&
@@ -164,6 +217,7 @@ export function ReaderScreen({
     openedChapter.book.book.id,
     openedChapter.chapter.id,
     openedChapter.isLocked,
+    openedChapter.initialChapterProgress,
     preferences.fontScale,
     preferences.lineSpacing,
   ])
@@ -293,7 +347,10 @@ export function ReaderScreen({
         <button
           className="button-secondary button-back-to-book"
           type="button"
-          onClick={onBackToBook}
+          onClick={() => {
+            flushProgressRef.current()
+            onBackToBook()
+          }}
           aria-label="返回作品"
         >
           返回作品

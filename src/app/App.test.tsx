@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -97,11 +98,12 @@ describe('Wave 1 core reading journey', () => {
         window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '',
       ),
     ).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       positions: {
         'book-tide-city': {
           bookId: 'book-tide-city',
           chapterId: 'chapter-tide-letter',
+          chapterProgress: 0,
         },
       },
     })
@@ -577,11 +579,12 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
         window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '',
       ),
     ).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       positions: {
         'book-tide-city': {
           bookId: 'book-tide-city',
           chapterId: 'chapter-lighthouse-watch',
+          chapterProgress: 0,
         },
       },
     })
@@ -833,6 +836,185 @@ describe('Persistent reader chapter navigation integrated journey', () => {
       fireEvent.click(startBtn)
       expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
     })
+  })
+})
+
+describe('Wave 5 chapter-progress persistence and restore', () => {
+  let animationFrames: FrameRequestCallback[]
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    animationFrames = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback)
+        return animationFrames.length
+      }),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    vi.stubGlobal('innerHeight', 400)
+    vi.stubGlobal('scrollY', 0)
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight')
+  })
+
+  function flushAnimationFrame() {
+    const callbacks = animationFrames.splice(0)
+
+    act(() => {
+      callbacks.forEach((callback) => callback(0))
+    })
+  }
+
+  function mockReaderGeometry(readerTopRef: { current: number }) {
+    const reader = screen.getByLabelText('閱讀器')
+    const readerHeight = 1000
+
+    Object.defineProperty(reader, 'scrollHeight', {
+      configurable: true,
+      value: readerHeight,
+    })
+    vi.spyOn(reader, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: readerTopRef.current + readerHeight,
+      height: readerHeight,
+      left: 0,
+      right: 640,
+      top: readerTopRef.current,
+      width: 640,
+      x: 0,
+      y: readerTopRef.current,
+      toJSON: () => ({}),
+    }))
+
+    return reader
+  }
+
+  function mockRealisticScrollTo(readerTopRef: { current: number }) {
+    return vi
+      .spyOn(window, 'scrollTo')
+      .mockImplementation((_x?: unknown, y?: unknown) => {
+        const targetY = typeof y === 'number' ? y : 0
+        vi.stubGlobal('scrollY', targetY)
+        readerTopRef.current = -targetY
+      })
+  }
+
+  it('persists live scroll progress and restores it within tolerance through 返回作品 -> Continue', () => {
+    render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    readerTopRef.current = -420
+    vi.stubGlobal('scrollY', 420)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    const savedState = JSON.parse(
+      window.localStorage.getItem(READING_STATE_STORAGE_KEY) ?? '{}',
+    )
+    expect(
+      savedState.positions['book-tide-city'].chapterProgress,
+    ).toBeCloseTo(0.7, 5)
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: /^繼續閱讀/ }))
+
+    expect(
+      screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+    ).toBeInTheDocument()
+
+    const scrollToSpy = mockRealisticScrollTo(readerTopRef)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 420)
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '70')
+  })
+
+  it('persists live scroll progress and restores it within tolerance through an active-session hard reload', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    readerTopRef.current = -180
+    vi.stubGlobal('scrollY', 180)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    // Hard reload: unmount without an explicit exit, so the active-session
+    // marker survives and the next mount recovers straight back into Reader.
+    firstMount.unmount()
+
+    render(<App dependencies={createDependencies()} />)
+
+    expect(
+      screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+    ).toBeInTheDocument()
+
+    const scrollToSpy = mockRealisticScrollTo(readerTopRef)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 180)
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '30')
+  })
+
+  it('does not leak chapter-progress into a freshly navigated adjacent chapter', () => {
+    render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+
+    const scrollToSpy = vi.spyOn(window, 'scrollTo')
+    vi.stubGlobal('scrollY', 0)
+    readerTopRef.current = 0
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    expect(scrollToSpy).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '0')
   })
 })
 

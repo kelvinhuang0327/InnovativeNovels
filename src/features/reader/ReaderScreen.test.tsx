@@ -39,6 +39,7 @@ const mockOpenedChapter = {
   isLocked: false,
   hasPrevious: false,
   hasNext: true,
+  initialChapterProgress: 0,
 }
 
 const mockTableOfContents = [
@@ -214,6 +215,7 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
     isLocked: false,
     hasPrevious: false,
     hasNext: true,
+    initialChapterProgress: 0,
   }
 
   const tocEntries = [
@@ -411,7 +413,13 @@ describe('ReaderScreen Live Chapter Progress', () => {
     })
   }
 
-  function renderReader(openedChapter = mockOpenedChapter) {
+  function renderReader(
+    openedChapter = mockOpenedChapter,
+    extraProps: {
+      onProgressChange?: (chapterProgress: number) => void
+      onBackToBook?: () => void
+    } = {},
+  ) {
     return render(
       <ReaderScreen
         openedChapter={openedChapter}
@@ -426,11 +434,32 @@ describe('ReaderScreen Live Chapter Progress', () => {
         onSelectBookmark={vi.fn()}
         onRemoveBookmark={vi.fn()}
         onSelectChapter={vi.fn()}
-        onBackToBook={vi.fn()}
+        onBackToBook={extraProps.onBackToBook ?? vi.fn()}
         onPrevious={vi.fn()}
         onNext={vi.fn()}
+        onProgressChange={extraProps.onProgressChange}
       />,
     )
+  }
+
+  function mockReaderGeometry(reader: HTMLElement, readerTopRef: { current: number }) {
+    const readerHeight = 1000
+
+    Object.defineProperty(reader, 'scrollHeight', {
+      configurable: true,
+      value: readerHeight,
+    })
+    vi.spyOn(reader, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: readerTopRef.current + readerHeight,
+      height: readerHeight,
+      left: 0,
+      right: 640,
+      top: readerTopRef.current,
+      width: 640,
+      x: 0,
+      y: readerTopRef.current,
+      toJSON: () => ({}),
+    }))
   }
 
   it('reports bounded chapter progress from actual Reader geometry and recomputes on chapter change', () => {
@@ -533,6 +562,128 @@ describe('ReaderScreen Live Chapter Progress', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryAllByTestId('chapter-prose')).toHaveLength(0)
   })
+
+  it('reports chapterProgress to onProgressChange only when the displayed percent changes (bounded scheduling)', () => {
+    const onProgressChange = vi.fn()
+    const readerTopRef = { current: 0 }
+    renderReader(mockOpenedChapter, { onProgressChange })
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+
+    flushAnimationFrame()
+    expect(onProgressChange).toHaveBeenNthCalledWith(1, 0)
+
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+    expect(onProgressChange).toHaveBeenNthCalledWith(2, 0.5)
+
+    // Re-flushing at the same scroll position must not add another write.
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+    expect(onProgressChange).toHaveBeenCalledTimes(2)
+
+    readerTopRef.current = -600
+    vi.stubGlobal('scrollY', 600)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+    expect(onProgressChange).toHaveBeenNthCalledWith(3, 1)
+    expect(onProgressChange).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not attempt a scroll restoration when initialChapterProgress is 0', () => {
+    const scrollToSpy = vi.spyOn(window, 'scrollTo')
+    const readerTopRef = { current: 0 }
+    renderReader(mockOpenedChapter)
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+
+    flushAnimationFrame()
+
+    expect(scrollToSpy).not.toHaveBeenCalled()
+  })
+
+  it('restores scroll position from initialChapterProgress after layout and keeps the live indicator synchronized', () => {
+    const readerTopRef = { current: 0 }
+    const scrollToSpy = vi
+      .spyOn(window, 'scrollTo')
+      .mockImplementation((_x?: unknown, y?: unknown) => {
+        const targetY = typeof y === 'number' ? y : 0
+        vi.stubGlobal('scrollY', targetY)
+        readerTopRef.current = -targetY
+      })
+
+    renderReader({ ...mockOpenedChapter, initialChapterProgress: 0.5 })
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+
+    flushAnimationFrame()
+
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 300)
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+  })
+
+  it('flushes the latest chapter progress via onProgressChange before invoking onBackToBook on explicit exit', () => {
+    const onProgressChange = vi.fn()
+    const onBackToBook = vi.fn()
+    const readerTopRef = { current: 0 }
+    renderReader(mockOpenedChapter, { onProgressChange, onBackToBook })
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+
+    flushAnimationFrame()
+
+    readerTopRef.current = -450
+    vi.stubGlobal('scrollY', 450)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    const callOrder: string[] = []
+    onProgressChange.mockImplementation(() => callOrder.push('progress'))
+    onBackToBook.mockImplementation(() => callOrder.push('back'))
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+    expect(onProgressChange).toHaveBeenLastCalledWith(0.75)
+    expect(callOrder).toEqual(['progress', 'back'])
+  })
+
+  it('does not flush progress on exit for a locked chapter', () => {
+    const onProgressChange = vi.fn()
+    const onBackToBook = vi.fn()
+    renderReader(
+      { ...mockOpenedChapter, isLocked: true },
+      { onProgressChange, onBackToBook },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+
+    expect(onProgressChange).not.toHaveBeenCalled()
+    expect(onBackToBook).toHaveBeenCalledTimes(1)
+  })
+
+  it('flushes the latest chapter progress on a pagehide reload lifecycle event', () => {
+    const onProgressChange = vi.fn()
+    const readerTopRef = { current: 0 }
+    renderReader(mockOpenedChapter, { onProgressChange })
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+
+    flushAnimationFrame()
+
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+    onProgressChange.mockClear()
+
+    fireEvent(window, new Event('pagehide'))
+
+    expect(onProgressChange).toHaveBeenCalledWith(0.5)
+  })
 })
 
 describe('ReaderScreen Persistent Chapter Navigation', () => {
@@ -573,6 +724,7 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
     isLocked: false,
     hasPrevious: false,
     hasNext: true,
+    initialChapterProgress: 0,
   }
 
   const lastChapter = {
@@ -582,6 +734,7 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
     isLocked: false,
     hasPrevious: true,
     hasNext: false,
+    initialChapterProgress: 0,
   }
 
   it('renders persistent navigation controls in ReaderScreen with aria-label', () => {

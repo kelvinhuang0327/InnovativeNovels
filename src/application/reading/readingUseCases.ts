@@ -22,6 +22,7 @@ export interface OpenedChapter {
   readonly isLocked: boolean
   readonly hasPrevious: boolean
   readonly hasNext: boolean
+  readonly initialChapterProgress: number
 }
 
 export interface BookmarkEntry {
@@ -113,7 +114,7 @@ export function openReadingChapter(
 
   if (access.canLoadProse) {
     prose = contentRepository.getChapterProse(chapter.id) ?? []
-    readingStateRepository.save(chapterPosition(chapter))
+    readingStateRepository.save(position)
   }
 
   return {
@@ -123,7 +124,15 @@ export function openReadingChapter(
     isLocked: !access.canOpen,
     hasPrevious: chapterIndex > 0,
     hasNext: chapterIndex < orderedChapters.length - 1,
+    initialChapterProgress: access.canLoadProse ? position.chapterProgress : 0,
   }
+}
+
+export function updateReadingProgress(
+  readingStateRepository: ReadingStateRepository,
+  position: ReadingPosition,
+): void {
+  readingStateRepository.save(position)
 }
 
 export function navigateToAdjacentChapter(

@@ -5,18 +5,30 @@ import type { ReadingPosition } from '../../domain/reading/readingPosition'
 export const READING_STATE_STORAGE_KEY =
   'innovative-novels:reading-state:v1'
 
+const CURRENT_SCHEMA_VERSION = 2
+
 interface StoredPosition {
   readonly bookId: string
   readonly chapterId: string
+  readonly chapterProgress: number
 }
 
 interface ReadingStateEnvelope {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 1 | 2
   readonly positions: Record<string, StoredPosition>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isValidChapterProgress(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  )
 }
 
 function parseEnvelope(serialized: string | null): ReadingStateEnvelope | undefined {
@@ -29,12 +41,13 @@ function parseEnvelope(serialized: string | null): ReadingStateEnvelope | undefi
 
     if (
       !isRecord(candidate) ||
-      candidate.schemaVersion !== 1 ||
+      (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2) ||
       !isRecord(candidate.positions)
     ) {
       return undefined
     }
 
+    const schemaVersion = candidate.schemaVersion
     const positions: Record<string, StoredPosition> = {}
 
     for (const [positionBookId, value] of Object.entries(candidate.positions)) {
@@ -50,10 +63,14 @@ function parseEnvelope(serialized: string | null): ReadingStateEnvelope | undefi
       positions[positionBookId] = {
         bookId: positionBookId,
         chapterId: value.chapterId,
+        chapterProgress:
+          schemaVersion === 2 && isValidChapterProgress(value.chapterProgress)
+            ? value.chapterProgress
+            : 0,
       }
     }
 
-    return { schemaVersion: 1, positions }
+    return { schemaVersion, positions }
   } catch {
     return undefined
   }
@@ -80,7 +97,7 @@ export class LocalStorageReadingStateRepository
             bookId: bookId(position.bookId),
             chapterId: chapterId(position.chapterId),
             paragraphIndex: 0,
-            chapterProgress: 0,
+            chapterProgress: position.chapterProgress,
           }
         : undefined
     } catch {
@@ -92,19 +109,24 @@ export class LocalStorageReadingStateRepository
     try {
       const current =
         parseEnvelope(this.storage.getItem(READING_STATE_STORAGE_KEY)) ?? {
-          schemaVersion: 1,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
           positions: {},
         }
+
+      const chapterProgress = isValidChapterProgress(position.chapterProgress)
+        ? position.chapterProgress
+        : 0
 
       this.storage.setItem(
         READING_STATE_STORAGE_KEY,
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
           positions: {
             ...current.positions,
             [position.bookId]: {
               bookId: position.bookId,
               chapterId: position.chapterId,
+              chapterProgress,
             },
           },
         } satisfies ReadingStateEnvelope),
@@ -128,7 +150,7 @@ export class LocalStorageReadingStateRepository
         bookId: bookId(position.bookId),
         chapterId: chapterId(position.chapterId),
         paragraphIndex: 0,
-        chapterProgress: 0,
+        chapterProgress: position.chapterProgress,
       }))
     } catch {
       return []
