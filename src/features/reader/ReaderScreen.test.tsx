@@ -1004,11 +1004,15 @@ describe('ReaderScreen paged mode navigation', () => {
     onPrevious = vi.fn(),
     onNext = vi.fn(),
     onProgressChange = vi.fn(),
+    canNavigateNextChapter = true,
+    initialScrollWidth = 900,
   }: {
     readonly openedChapter?: typeof mockOpenedChapter
     readonly onPrevious?: () => void
     readonly onNext?: () => void
     readonly onProgressChange?: (chapterProgress: number) => void
+    readonly canNavigateNextChapter?: boolean
+    readonly initialScrollWidth?: number
   } = {}) {
     const result = render(
       <ReaderScreen
@@ -1030,19 +1034,21 @@ describe('ReaderScreen paged mode navigation', () => {
         onBackToBook={vi.fn()}
         onPrevious={onPrevious}
         onNext={onNext}
+        canNavigateNextChapter={canNavigateNextChapter}
         onProgressChange={onProgressChange}
       />,
     )
 
     const viewport = screen.getByLabelText('分頁閱讀區')
     const prose = screen.getByLabelText('章節內文')
+    let scrollWidth = initialScrollWidth
     Object.defineProperty(viewport, 'clientWidth', {
       configurable: true,
       value: 300,
     })
     Object.defineProperty(prose, 'scrollWidth', {
       configurable: true,
-      value: 900,
+      get: () => scrollWidth,
     })
     flushAnimationFrame()
 
@@ -1053,6 +1059,11 @@ describe('ReaderScreen paged mode navigation', () => {
       onPrevious,
       onNext,
       onProgressChange,
+      reflowToWidth(nextScrollWidth: number) {
+        scrollWidth = nextScrollWidth
+        fireEvent(window, new Event('resize'))
+        flushAnimationFrame()
+      },
     }
   }
 
@@ -1164,6 +1175,104 @@ describe('ReaderScreen paged mode navigation', () => {
     expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
       '第 2 / 3 頁',
     )
+  })
+
+  it('disables the final-page control when the adjacent chapter is inaccessible', () => {
+    const { onNext } = renderPagedReader({
+      canNavigateNextChapter: false,
+    })
+    const nextPage = screen.getByRole('button', { name: '下一頁' })
+
+    expect(nextPage).not.toBeDisabled()
+    fireEvent.click(nextPage)
+    fireEvent.click(nextPage)
+
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    expect(nextPage).toBeDisabled()
+
+    fireEvent.click(nextPage)
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('preserves live normalized progress through deterministic three-to-one-to-three page reflows', () => {
+    const onProgressChange = vi.fn()
+    const { reflowToWidth } = renderPagedReader({ onProgressChange })
+    const nextPage = screen.getByRole('button', { name: '下一頁' })
+    const progress = screen.getByRole('progressbar', {
+      name: '本章閱讀進度',
+    })
+
+    fireEvent.click(nextPage)
+    expect(progress).toHaveAttribute('aria-valuenow', '50')
+    onProgressChange.mockClear()
+
+    reflowToWidth(300)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 1 / 1 頁',
+    )
+    expect(progress).toHaveAttribute('aria-valuenow', '50')
+    expect(onProgressChange).not.toHaveBeenCalled()
+
+    reflowToWidth(900)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+    expect(progress).toHaveAttribute('aria-valuenow', '50')
+    expect(onProgressChange).not.toHaveBeenCalled()
+
+    fireEvent.click(nextPage)
+    expect(progress).toHaveAttribute('aria-valuenow', '100')
+    onProgressChange.mockClear()
+
+    reflowToWidth(300)
+    expect(progress).toHaveAttribute('aria-valuenow', '100')
+    expect(onProgressChange).not.toHaveBeenCalled()
+
+    reflowToWidth(900)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    expect(progress).toHaveAttribute('aria-valuenow', '100')
+    expect(onProgressChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps fresh one-page chapter progress at zero without persisting a synthetic update', () => {
+    const { onProgressChange } = renderPagedReader({
+      initialScrollWidth: 300,
+    })
+
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 1 / 1 頁',
+    )
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '0')
+    expect(onProgressChange).not.toHaveBeenCalled()
+  })
+
+  it('retains saved nonzero progress on one page and restores its nearest multi-page position', () => {
+    const { onProgressChange, reflowToWidth } = renderPagedReader({
+      openedChapter: {
+        ...mockOpenedChapter,
+        initialChapterProgress: 0.5,
+      },
+      initialScrollWidth: 300,
+    })
+    const progress = screen.getByRole('progressbar', {
+      name: '本章閱讀進度',
+    })
+
+    expect(progress).toHaveAttribute('aria-valuenow', '50')
+    expect(onProgressChange).not.toHaveBeenCalled()
+
+    reflowToWidth(900)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+    expect(progress).toHaveAttribute('aria-valuenow', '50')
+    expect(onProgressChange).not.toHaveBeenCalled()
   })
 })
 

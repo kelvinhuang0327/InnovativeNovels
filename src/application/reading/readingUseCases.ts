@@ -135,6 +135,26 @@ export function updateReadingProgress(
   readingStateRepository.save(position)
 }
 
+export function canNavigateToAdjacentChapter(
+  current: OpenedChapter,
+  direction: -1 | 1,
+): boolean {
+  const orderedChapters = chaptersByExplicitOrder(current.book)
+  const currentIndex = orderedChapters.findIndex(
+    (chapter) => chapter.id === current.chapter.id,
+  )
+
+  if (currentIndex < 0) {
+    return false
+  }
+
+  const destination = orderedChapters[currentIndex + direction]
+
+  return destination
+    ? decideChapterAccess(destination.access).canOpen
+    : false
+}
+
 export function navigateToAdjacentChapter(
   contentRepository: ContentRepository,
   readingStateRepository: ReadingStateRepository,

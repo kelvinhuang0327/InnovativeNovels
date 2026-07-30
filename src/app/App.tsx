@@ -8,6 +8,7 @@ import type { ChapterBookmarksRepository } from '../application/reading/chapterB
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
   addChapterBookmark,
+  canNavigateToAdjacentChapter,
   describeChapterPosition,
   isChapterBookmarked,
   listChapterBookmarks,
@@ -411,6 +412,10 @@ function App({
           }}
           onPrevious={() => navigateReader(-1)}
           onNext={() => navigateReader(1)}
+          canNavigateNextChapter={canNavigateToAdjacentChapter(
+            screen.openedChapter,
+            1,
+          )}
           onProgressChange={handleProgressChange}
         />
       )}

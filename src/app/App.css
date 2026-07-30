@@ -888,6 +888,11 @@ button:focus-visible {
 }
 
 @media (max-width: 32rem) {
+  .reader-screen-container[data-reading-mode='paged']
+    .reader-persistent-navigation {
+    position: static;
+  }
+
   .reader-persistent-navigation {
     gap: 0.4rem;
     padding: 0.5rem;

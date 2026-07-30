@@ -49,6 +49,12 @@ function normalizedPageProgress(pageIndex: number, pageCount: number): number {
   return pageCount > 1 ? pageIndex / (pageCount - 1) : 0
 }
 
+function clampChapterProgress(chapterProgress: number): number {
+  return Number.isFinite(chapterProgress)
+    ? Math.min(Math.max(chapterProgress, 0), 1)
+    : 0
+}
+
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
   readonly recoveryStatus?: string
@@ -66,6 +72,7 @@ interface ReaderScreenProps {
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
+  readonly canNavigateNextChapter?: boolean
   readonly onProgressChange?: (chapterProgress: number) => void
 }
 
@@ -86,6 +93,7 @@ export function ReaderScreen({
   onBackToBook,
   onPrevious,
   onNext,
+  canNavigateNextChapter = false,
   onProgressChange,
 }: ReaderScreenProps) {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
@@ -177,10 +185,10 @@ export function ReaderScreen({
         Math.max(pageCount - 1, 0),
       )
       const previousProgress = latestChapterProgressRef.current
-      const chapterProgress = normalizedPageProgress(
-        boundedPageIndex,
-        pageCount,
-      )
+      const chapterProgress =
+        pageCount > 1
+          ? normalizedPageProgress(boundedPageIndex, pageCount)
+          : clampChapterProgress(previousProgress)
 
       pagedPageIndexRef.current = boundedPageIndex
       setPagedReaderState({
@@ -214,7 +222,11 @@ export function ReaderScreen({
         return
       }
 
-      if (direction === 1 && openedChapter.hasNext) {
+      if (
+        direction === 1 &&
+        openedChapter.hasNext &&
+        canNavigateNextChapter
+      ) {
         onNext()
       } else if (direction === -1 && openedChapter.hasPrevious) {
         onPrevious()
@@ -224,6 +236,7 @@ export function ReaderScreen({
       applyPagedPage,
       onNext,
       onPrevious,
+      canNavigateNextChapter,
       openedChapter.hasNext,
       openedChapter.hasPrevious,
     ],
@@ -724,7 +737,7 @@ export function ReaderScreen({
               disabled={
                 currentPagedState.pageIndex ===
                   currentPagedState.pageCount - 1 &&
-                !openedChapter.hasNext
+                !canNavigateNextChapter
               }
             >
               下一頁

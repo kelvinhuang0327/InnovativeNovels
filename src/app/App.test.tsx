@@ -915,6 +915,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     expect(
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一頁' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
     expect(

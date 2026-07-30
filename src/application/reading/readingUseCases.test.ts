@@ -11,6 +11,7 @@ import type {
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
 import {
   addChapterBookmark,
+  canNavigateToAdjacentChapter,
   describeChapterPosition,
   isChapterBookmarked,
   listChapterBookmarks,
@@ -517,6 +518,41 @@ describe('openReadingChapter chapter-progress restore', () => {
 
     expect(next?.chapter.id).toBe('a-2')
     expect(next?.initialChapterProgress).toBe(0)
+  })
+
+  it('reports adjacent navigation as available only when chapter access permits opening it', () => {
+    const readingStateRepository = new MutableReadingStateRepository()
+    const first = openReadingChapter(contentRepository, readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-1'),
+      paragraphIndex: 0,
+      chapterProgress: 0,
+    })
+    const second = openReadingChapter(contentRepository, readingStateRepository, {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-2'),
+      paragraphIndex: 0,
+      chapterProgress: 0,
+    })
+
+    expect(
+      canNavigateToAdjacentChapter(
+        first as NonNullable<typeof first>,
+        1,
+      ),
+    ).toBe(true)
+    expect(
+      canNavigateToAdjacentChapter(
+        second as NonNullable<typeof second>,
+        1,
+      ),
+    ).toBe(false)
+    expect(
+      canNavigateToAdjacentChapter(
+        first as NonNullable<typeof first>,
+        -1,
+      ),
+    ).toBe(false)
   })
 })
 
