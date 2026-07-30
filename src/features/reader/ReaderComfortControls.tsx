@@ -1,8 +1,10 @@
-import type {
-  FontScale,
-  LineSpacing,
-  ReaderPreferences,
-  ReaderTheme,
+import {
+  READER_FONT_FAMILIES,
+  type FontScale,
+  type LineSpacing,
+  type ReaderFontFamily,
+  type ReaderPreferences,
+  type ReaderTheme,
 } from '../../domain/reading/readerPreferences'
 
 interface ReaderComfortControlsProps {
@@ -16,6 +18,11 @@ const FONT_SCALE_LABELS: Record<FontScale, string> = {
   medium: '中',
   large: '大',
   'extra-large': '特大',
+}
+
+const FONT_FAMILY_LABELS: Record<ReaderFontFamily, string> = {
+  serif: '襯線',
+  'sans-serif': '無襯線',
 }
 
 const LINE_SPACING_LABELS: Record<LineSpacing, string> = {
@@ -37,6 +44,10 @@ export function ReaderComfortControls({
 }: ReaderComfortControlsProps) {
   const setFontScale = (fontScale: FontScale) => {
     onChangePreferences({ ...preferences, fontScale })
+  }
+
+  const setFontFamily = (fontFamily: ReaderFontFamily) => {
+    onChangePreferences({ ...preferences, fontFamily })
   }
 
   const setLineSpacing = (lineSpacing: LineSpacing) => {
@@ -63,6 +74,30 @@ export function ReaderComfortControls({
             onClick={() => setFontScale(scale)}
           >
             {FONT_SCALE_LABELS[scale]}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-group" role="radiogroup" aria-label="內文字型">
+        <span className="control-label">字型：</span>
+        {READER_FONT_FAMILIES.map((fontFamily) => (
+          <button
+            key={fontFamily}
+            type="button"
+            className={`comfort-option ${
+              preferences.fontFamily === fontFamily ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.fontFamily === fontFamily}
+            onClick={() => setFontFamily(fontFamily)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setFontFamily(fontFamily)
+              }
+            }}
+          >
+            {FONT_FAMILY_LABELS[fontFamily]}
           </button>
         ))}
       </div>

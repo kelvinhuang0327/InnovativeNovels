@@ -48,12 +48,32 @@ describe('LocalStorageReaderPreferencesRepository', () => {
 
   it('persists and restores valid preferences', () => {
     const preferences = {
+      fontFamily: 'serif' as const,
       fontScale: 'large' as const,
       lineSpacing: 'spacious' as const,
       theme: 'sepia' as const,
     }
     repository.save(preferences)
     expect(repository.load()).toEqual(preferences)
+  })
+
+  it('loads version-1 preferences without fontFamily using the current Reader default', () => {
+    storage.setItem(
+      READER_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        fontScale: 'large',
+        lineSpacing: 'spacious',
+        theme: 'sepia',
+      }),
+    )
+
+    expect(repository.load()).toEqual({
+      fontFamily: 'sans-serif',
+      fontScale: 'large',
+      lineSpacing: 'spacious',
+      theme: 'sepia',
+    })
   })
 
   it('falls back safely when schema is malformed or invalid JSON', () => {
@@ -72,14 +92,35 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       READER_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
         schemaVersion: 1,
+        fontFamily: 'comic',
         fontScale: 'gigantic',
         lineSpacing: 'comfortable',
         theme: 'dark',
       }),
     )
     expect(repository.load()).toEqual({
+      fontFamily: 'sans-serif',
       fontScale: 'medium',
       lineSpacing: 'comfortable',
+      theme: 'dark',
+    })
+  })
+
+  it('preserves unrelated preference fields when saving a font-family change', () => {
+    repository.save({
+      fontFamily: 'serif',
+      fontScale: 'extra-large',
+      lineSpacing: 'compact',
+      theme: 'dark',
+    })
+
+    expect(
+      JSON.parse(storage.getItem(READER_PREFERENCES_STORAGE_KEY) ?? ''),
+    ).toEqual({
+      schemaVersion: 1,
+      fontFamily: 'serif',
+      fontScale: 'extra-large',
+      lineSpacing: 'compact',
       theme: 'dark',
     })
   })

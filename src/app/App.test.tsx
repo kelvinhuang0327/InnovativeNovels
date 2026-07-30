@@ -513,6 +513,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     openFirstBookReader()
 
     fireEvent.click(screen.getByRole('radio', { name: '大' }))
+    fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
     fireEvent.click(screen.getByRole('radio', { name: '寬鬆' }))
     fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
 
@@ -521,6 +522,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     )
     expect(savedPrefs).toEqual({
       schemaVersion: 1,
+      fontFamily: 'serif',
       fontScale: 'large',
       lineSpacing: 'spacious',
       theme: 'sepia',
@@ -535,11 +537,13 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
 
     const section = screen.getByLabelText('閱讀器')
     expect(section.getAttribute('data-theme')).toBe('sepia')
+    expect(section.getAttribute('data-font-family')).toBe('serif')
     expect(section.getAttribute('data-font-scale')).toBe('large')
     expect(section.getAttribute('data-line-spacing')).toBe('spacious')
 
     fireEvent.click(screen.getByRole('button', { name: '重設預設值' }))
     expect(section.getAttribute('data-theme')).toBe('light')
+    expect(section.getAttribute('data-font-family')).toBe('sans-serif')
     expect(section.getAttribute('data-font-scale')).toBe('medium')
     expect(section.getAttribute('data-line-spacing')).toBe('comfortable')
   })
@@ -895,10 +899,12 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
     // Change theme to sepia (護眼) and font scale to large (大)
     fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
+    fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
     fireEvent.click(screen.getByRole('radio', { name: '大' }))
 
     const section = screen.getByRole('region', { name: '閱讀器' })
     expect(section).toHaveAttribute('data-theme', 'sepia')
+    expect(section).toHaveAttribute('data-font-family', 'serif')
     expect(section).toHaveAttribute('data-font-scale', 'large')
 
     // Navigate to next chapter via persistent nav
@@ -907,6 +913,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
     // Preferences should remain intact
     expect(section).toHaveAttribute('data-theme', 'sepia')
+    expect(section).toHaveAttribute('data-font-family', 'serif')
     expect(section).toHaveAttribute('data-font-scale', 'large')
   })
 
@@ -974,6 +981,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
       openBookAt(0)
       fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
       const persistentNav = screen.getByTestId('reader-persistent-navigation')
       fireEvent.click(within(persistentNav).getByRole('button', { name: '下一章' }))
       fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
@@ -981,6 +989,10 @@ describe('Persistent reader chapter navigation integrated journey', () => {
       // Re-open through Book Detail Continue CTA
       fireEvent.click(screen.getByRole('button', { name: '繼續閱讀：第二章：燈塔守望' }))
       expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+      expect(screen.getByLabelText('閱讀器')).toHaveAttribute(
+        'data-font-family',
+        'serif',
+      )
 
       // Exit back to Book Detail -> Return to Catalog -> Open from Continue Shelf
       fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
@@ -991,6 +1003,10 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
       fireEvent.click(within(shelf).getByRole('button', { name: '繼續閱讀' }))
       expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+      expect(screen.getByLabelText('閱讀器')).toHaveAttribute(
+        'data-font-family',
+        'serif',
+      )
     })
 
     it('falls back safely to 開始閱讀 when saved position is stale or invalid', () => {

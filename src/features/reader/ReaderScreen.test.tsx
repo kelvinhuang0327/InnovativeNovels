@@ -61,6 +61,7 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
 
   it('applies preference state tokens to container and prose', () => {
     const preferences = {
+      fontFamily: 'serif' as const,
       fontScale: 'large' as const,
       lineSpacing: 'spacious' as const,
       theme: 'sepia' as const,
@@ -88,11 +89,13 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
 
     const section = container.querySelector('section')
     expect(section?.getAttribute('data-theme')).toBe('sepia')
+    expect(section?.getAttribute('data-font-family')).toBe('serif')
     expect(section?.getAttribute('data-font-scale')).toBe('large')
     expect(section?.getAttribute('data-line-spacing')).toBe('spacious')
 
     const prose = container.querySelector('.reader-prose')
     expect(prose?.className).toContain('theme-sepia')
+    expect(prose?.className).toContain('font-family-serif')
     expect(prose?.className).toContain('font-scale-large')
     expect(prose?.className).toContain('line-spacing-spacious')
   })
