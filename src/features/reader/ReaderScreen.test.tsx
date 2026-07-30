@@ -65,6 +65,7 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
       fontScale: 'large' as const,
       letterSpacing: 'relaxed' as const,
       lineSpacing: 'spacious' as const,
+      readingMode: 'continuous' as const,
       theme: 'sepia' as const,
     }
 
@@ -94,6 +95,7 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
     expect(section?.getAttribute('data-font-scale')).toBe('large')
     expect(section?.getAttribute('data-letter-spacing')).toBe('relaxed')
     expect(section?.getAttribute('data-line-spacing')).toBe('spacious')
+    expect(section?.getAttribute('data-reading-mode')).toBe('continuous')
 
     const prose = container.querySelector('.reader-prose')
     expect(prose?.className).toContain('theme-sepia')
@@ -966,6 +968,202 @@ describe('ReaderScreen prose swipe navigation', () => {
     })
 
     expect(onNext).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReaderScreen paged mode navigation', () => {
+  let animationFrames: FrameRequestCallback[]
+
+  beforeEach(() => {
+    animationFrames = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback)
+        return animationFrames.length
+      }),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  function flushAnimationFrame() {
+    const callbacks = animationFrames.splice(0)
+
+    act(() => {
+      callbacks.forEach((callback) => callback(0))
+    })
+  }
+
+  function renderPagedReader({
+    openedChapter = mockOpenedChapter,
+    onPrevious = vi.fn(),
+    onNext = vi.fn(),
+    onProgressChange = vi.fn(),
+  }: {
+    readonly openedChapter?: typeof mockOpenedChapter
+    readonly onPrevious?: () => void
+    readonly onNext?: () => void
+    readonly onProgressChange?: (chapterProgress: number) => void
+  } = {}) {
+    const result = render(
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={{
+          ...DEFAULT_READER_PREFERENCES,
+          readingMode: 'paged',
+        }}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        onProgressChange={onProgressChange}
+      />,
+    )
+
+    const viewport = screen.getByLabelText('分頁閱讀區')
+    const prose = screen.getByLabelText('章節內文')
+    Object.defineProperty(viewport, 'clientWidth', {
+      configurable: true,
+      value: 300,
+    })
+    Object.defineProperty(prose, 'scrollWidth', {
+      configurable: true,
+      value: 900,
+    })
+    flushAnimationFrame()
+
+    return {
+      ...result,
+      viewport,
+      prose,
+      onPrevious,
+      onNext,
+      onProgressChange,
+    }
+  }
+
+  function swipe(
+    target: HTMLElement,
+    startX: number,
+    endX: number,
+    pointerId = 1,
+  ) {
+    fireEvent.pointerDown(target, {
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: startX,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(target, {
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: endX,
+      clientY: 100,
+    })
+  }
+
+  it('uses a focusable CSS-column viewport and visible page controls', () => {
+    const { viewport, prose } = renderPagedReader()
+
+    expect(viewport).toHaveAttribute('tabindex', '0')
+    expect(prose).toHaveClass('reader-prose-paged')
+    expect(prose.style.columnWidth).toBe('300px')
+    expect(screen.getByRole('navigation', { name: '分頁導覽' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一頁' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下一頁' })).not.toBeDisabled()
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 1 / 3 頁',
+    )
+  })
+
+  it('turns exactly one page per swipe and crosses to the next chapter only at the final page', () => {
+    const { viewport, onNext, onProgressChange } = renderPagedReader()
+
+    swipe(viewport, 180, 80)
+    fireEvent.pointerUp(viewport, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: 20,
+      clientY: 100,
+    })
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+    expect(onNext).not.toHaveBeenCalled()
+
+    swipe(viewport, 180, 80, 2)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    expect(onNext).not.toHaveBeenCalled()
+
+    swipe(viewport, 180, 80, 3)
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onProgressChange).toHaveBeenCalledWith(0.5)
+    expect(onProgressChange).toHaveBeenCalledWith(1)
+  })
+
+  it('mirrors page-boundary behavior in buttons and focused keyboard commands', () => {
+    const onPrevious = vi.fn()
+    const { viewport, onNext } = renderPagedReader({
+      openedChapter: {
+        ...mockOpenedChapter,
+        hasPrevious: true,
+      },
+      onPrevious,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+
+    viewport.focus()
+    fireEvent.keyDown(viewport, { key: 'ArrowRight' })
+    fireEvent.keyDown(viewport, { key: 'PageDown' })
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(viewport, { key: 'ArrowRight' })
+    expect(onNext).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(viewport, { key: 'PageUp' })
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+  })
+
+  it('restores normalized progress to the nearest CSS-column page', () => {
+    renderPagedReader({
+      openedChapter: {
+        ...mockOpenedChapter,
+        initialChapterProgress: 0.5,
+      },
+    })
+
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
   })
 })
 

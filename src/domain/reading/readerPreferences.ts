@@ -9,12 +9,15 @@ export const READER_LETTER_SPACINGS = [
   'relaxed',
 ] as const
 export type ReaderLetterSpacing = (typeof READER_LETTER_SPACINGS)[number]
+export const READER_READING_MODES = ['continuous', 'paged'] as const
+export type ReadingMode = (typeof READER_READING_MODES)[number]
 
 export interface ReaderPreferences {
   readonly fontFamily: ReaderFontFamily
   readonly fontScale: FontScale
   readonly letterSpacing: ReaderLetterSpacing
   readonly lineSpacing: LineSpacing
+  readonly readingMode: ReadingMode
   readonly theme: ReaderTheme
 }
 
@@ -23,5 +26,6 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   fontScale: 'medium',
   letterSpacing: 'normal',
   lineSpacing: 'comfortable',
+  readingMode: 'continuous',
   theme: 'light',
 }

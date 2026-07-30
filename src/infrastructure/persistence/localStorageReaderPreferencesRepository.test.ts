@@ -54,6 +54,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
         fontScale: 'large' as const,
         letterSpacing,
         lineSpacing: 'spacious' as const,
+        readingMode: 'paged' as const,
         theme: 'sepia' as const,
       }
       repository.save(preferences)
@@ -77,6 +78,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       fontScale: 'large',
       letterSpacing: 'normal',
       lineSpacing: 'spacious',
+      readingMode: 'continuous',
       theme: 'sepia',
     })
   })
@@ -101,6 +103,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
         fontScale: 'gigantic',
         letterSpacing: 'ultra-wide',
         lineSpacing: 'comfortable',
+        readingMode: 'sideways',
         theme: 'dark',
       }),
     )
@@ -109,6 +112,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       fontScale: 'medium',
       letterSpacing: 'normal',
       lineSpacing: 'comfortable',
+      readingMode: 'continuous',
       theme: 'dark',
     })
   })
@@ -119,6 +123,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       fontScale: 'extra-large',
       letterSpacing: 'compact',
       lineSpacing: 'compact',
+      readingMode: 'paged',
       theme: 'dark',
     })
 
@@ -130,7 +135,28 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       fontScale: 'extra-large',
       letterSpacing: 'compact',
       lineSpacing: 'compact',
+      readingMode: 'paged',
       theme: 'dark',
     })
+  })
+
+  it('persists paged mode and defaults an absent or invalid readingMode to continuous', () => {
+    repository.save({
+      ...DEFAULT_READER_PREFERENCES,
+      readingMode: 'paged',
+    })
+    expect(repository.load().readingMode).toBe('paged')
+
+    storage.setItem(
+      READER_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        fontScale: 'medium',
+        lineSpacing: 'comfortable',
+        readingMode: 'book',
+        theme: 'light',
+      }),
+    )
+    expect(repository.load().readingMode).toBe('continuous')
   })
 })

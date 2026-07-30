@@ -299,7 +299,7 @@ function App({
       direction,
     )
 
-    if (openedChapter) {
+    if (openedChapter && !openedChapter.isLocked) {
       setScreen({ name: 'reader', openedChapter })
     }
   }

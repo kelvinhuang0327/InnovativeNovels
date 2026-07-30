@@ -3,8 +3,10 @@ import {
   DEFAULT_READER_PREFERENCES,
   READER_FONT_FAMILIES,
   READER_LETTER_SPACINGS,
+  READER_READING_MODES,
   type FontScale,
   type LineSpacing,
+  type ReadingMode,
   type ReaderFontFamily,
   type ReaderLetterSpacing,
   type ReaderPreferences,
@@ -20,6 +22,7 @@ interface StoredPreferencesEnvelope {
   readonly fontScale: string
   readonly letterSpacing: string
   readonly lineSpacing: string
+  readonly readingMode?: string
   readonly theme: string
 }
 
@@ -27,6 +30,7 @@ const VALID_FONT_FAMILIES = new Set<ReaderFontFamily>(READER_FONT_FAMILIES)
 const VALID_LETTER_SPACINGS = new Set<ReaderLetterSpacing>(
   READER_LETTER_SPACINGS,
 )
+const VALID_READING_MODES = new Set<ReadingMode>(READER_READING_MODES)
 
 const VALID_FONT_SCALES = new Set<FontScale>([
   'small',
@@ -89,6 +93,12 @@ function parsePreferences(serialized: string | null): ReaderPreferences {
       ? (candidate.lineSpacing as LineSpacing)
       : DEFAULT_READER_PREFERENCES.lineSpacing
 
+    const readingMode: ReadingMode = VALID_READING_MODES.has(
+      candidate.readingMode as ReadingMode,
+    )
+      ? (candidate.readingMode as ReadingMode)
+      : DEFAULT_READER_PREFERENCES.readingMode
+
     const theme: ReaderTheme = VALID_THEMES.has(
       candidate.theme as ReaderTheme,
     )
@@ -100,6 +110,7 @@ function parsePreferences(serialized: string | null): ReaderPreferences {
       fontScale,
       letterSpacing,
       lineSpacing,
+      readingMode,
       theme,
     }
   } catch {
@@ -134,6 +145,7 @@ export class LocalStorageReaderPreferencesRepository
         fontScale: preferences.fontScale,
         letterSpacing: preferences.letterSpacing,
         lineSpacing: preferences.lineSpacing,
+        readingMode: preferences.readingMode,
         theme: preferences.theme,
       }
       this.storage.setItem(

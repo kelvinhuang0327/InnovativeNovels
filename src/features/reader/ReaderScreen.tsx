@@ -1,7 +1,10 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
@@ -21,14 +24,29 @@ const CHAPTER_SWIPE_HORIZONTAL_DOMINANCE_RATIO = 1.5
 const SWIPE_EXCLUDED_TARGETS =
   'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
 
-interface ChapterSwipeGesture {
+interface ReaderSwipeGesture {
   readonly pointerId: number
   readonly startX: number
   readonly startY: number
 }
 
+interface PagedReaderState {
+  readonly chapterId: string
+  readonly pageIndex: number
+  readonly pageCount: number
+}
+
+interface PagedReaderMetrics {
+  readonly pageCount: number
+  readonly pageStep: number
+}
+
 function isSwipeExcludedTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(SWIPE_EXCLUDED_TARGETS) !== null
+}
+
+function normalizedPageProgress(pageIndex: number, pageCount: number): number {
+  return pageCount > 1 ? pageIndex / (pageCount - 1) : 0
 }
 
 interface ReaderScreenProps {
@@ -76,9 +94,22 @@ export function ReaderScreen({
     chapterId: openedChapter.chapter.id,
     percent: 0,
   })
+  const [pagedReaderState, setPagedReaderState] = useState<PagedReaderState>({
+    chapterId: openedChapter.chapter.id,
+    pageIndex: 0,
+    pageCount: 1,
+  })
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
-  const chapterSwipeGestureRef = useRef<ChapterSwipeGesture | null>(null)
+  const proseRef = useRef<HTMLElement>(null)
+  const pagedViewportRef = useRef<HTMLDivElement>(null)
+  const readerSwipeGestureRef = useRef<ReaderSwipeGesture | null>(null)
+  const pagedReaderMetricsRef = useRef<PagedReaderMetrics>({
+    pageCount: 1,
+    pageStep: 0,
+  })
+  const pagedPageIndexRef = useRef(0)
+  const progressChapterIdRef = useRef(openedChapter.chapter.id)
   const onProgressChangeRef = useRef(onProgressChange)
   const latestChapterProgressRef = useRef(openedChapter.initialChapterProgress)
   const flushProgressRef = useRef<() => void>(() => {})
@@ -86,21 +117,120 @@ export function ReaderScreen({
     liveProgress.chapterId === openedChapter.chapter.id
       ? liveProgress.percent
       : 0
+  const currentPagedState =
+    pagedReaderState.chapterId === openedChapter.chapter.id
+      ? pagedReaderState
+      : {
+          chapterId: openedChapter.chapter.id,
+          pageIndex: 0,
+          pageCount: 1,
+        }
 
   useEffect(() => {
     onProgressChangeRef.current = onProgressChange
   }, [onProgressChange])
 
   useEffect(() => {
-    chapterSwipeGestureRef.current = null
+    readerSwipeGestureRef.current = null
 
     return () => {
-      chapterSwipeGestureRef.current = null
+      readerSwipeGestureRef.current = null
     }
-  }, [openedChapter.chapter.id])
+  }, [openedChapter.chapter.id, preferences.readingMode])
 
-  const cancelChapterSwipe = () => {
-    chapterSwipeGestureRef.current = null
+  const updateLiveProgress = useCallback(
+    (chapterProgress: number) => {
+      latestChapterProgressRef.current = chapterProgress
+
+      const progress = calculateReadingProgress({
+        position: {
+          bookId: openedChapter.book.book.id,
+          chapterId: openedChapter.chapter.id,
+          paragraphIndex: 0,
+          chapterProgress,
+        },
+        chapterSequence: 1,
+        totalChapters: 1,
+      })
+      const percent = progress.valid ? Math.round(progress.percent) : 0
+
+      setLiveProgress((current) =>
+        current.chapterId === openedChapter.chapter.id &&
+        current.percent === percent
+          ? current
+          : { chapterId: openedChapter.chapter.id, percent },
+      )
+
+      return percent
+    },
+    [openedChapter.book.book.id, openedChapter.chapter.id],
+  )
+
+  const applyPagedPage = useCallback(
+    (
+      pageIndex: number,
+      pageCount: number,
+      shouldPersistProgress: boolean,
+    ) => {
+      const boundedPageIndex = Math.min(
+        Math.max(pageIndex, 0),
+        Math.max(pageCount - 1, 0),
+      )
+      const previousProgress = latestChapterProgressRef.current
+      const chapterProgress = normalizedPageProgress(
+        boundedPageIndex,
+        pageCount,
+      )
+
+      pagedPageIndexRef.current = boundedPageIndex
+      setPagedReaderState({
+        chapterId: openedChapter.chapter.id,
+        pageIndex: boundedPageIndex,
+        pageCount,
+      })
+
+      const viewport = pagedViewportRef.current
+      if (viewport) {
+        viewport.scrollLeft =
+          boundedPageIndex * pagedReaderMetricsRef.current.pageStep
+      }
+
+      updateLiveProgress(chapterProgress)
+
+      if (shouldPersistProgress && chapterProgress !== previousProgress) {
+        onProgressChangeRef.current?.(chapterProgress)
+      }
+    },
+    [openedChapter.chapter.id, updateLiveProgress],
+  )
+
+  const turnPagedPage = useCallback(
+    (direction: -1 | 1) => {
+      const { pageCount } = pagedReaderMetricsRef.current
+      const destinationPage = pagedPageIndexRef.current + direction
+
+      if (destinationPage >= 0 && destinationPage < pageCount) {
+        applyPagedPage(destinationPage, pageCount, true)
+        return
+      }
+
+      if (direction === 1 && openedChapter.hasNext) {
+        onNext()
+      } else if (direction === -1 && openedChapter.hasPrevious) {
+        onPrevious()
+      }
+    },
+    [
+      applyPagedPage,
+      onNext,
+      onPrevious,
+      openedChapter.hasNext,
+      openedChapter.hasPrevious,
+    ],
+  )
+
+  const cancelReaderSwipe = () => {
+    readerSwipeGestureRef.current = null
   }
 
   const handleProsePointerDown = (
@@ -115,11 +245,11 @@ export function ReaderScreen({
       !isTouchLikePointer ||
       isSwipeExcludedTarget(event.target)
     ) {
-      cancelChapterSwipe()
+      cancelReaderSwipe()
       return
     }
 
-    chapterSwipeGestureRef.current = {
+    readerSwipeGestureRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -127,8 +257,8 @@ export function ReaderScreen({
   }
 
   const handleProsePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
-    const gesture = chapterSwipeGestureRef.current
-    cancelChapterSwipe()
+    const gesture = readerSwipeGestureRef.current
+    cancelReaderSwipe()
 
     if (
       !gesture ||
@@ -152,10 +282,36 @@ export function ReaderScreen({
       return
     }
 
-    if (horizontalDistance < 0 && openedChapter.hasNext) {
+    const direction = horizontalDistance < 0 ? 1 : -1
+
+    if (preferences.readingMode === 'paged') {
+      turnPagedPage(direction)
+    } else if (direction === 1 && openedChapter.hasNext) {
       onNext()
-    } else if (horizontalDistance > 0 && openedChapter.hasPrevious) {
+    } else if (direction === -1 && openedChapter.hasPrevious) {
       onPrevious()
+    }
+  }
+
+  const handlePagedViewportKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+      event.preventDefault()
+      turnPagedPage(1)
+    } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault()
+      turnPagedPage(-1)
     }
   }
 
@@ -163,11 +319,20 @@ export function ReaderScreen({
     flushProgressRef.current = () => {}
     const reader = readerRef.current
 
-    if (openedChapter.isLocked || !reader) {
+    if (
+      preferences.readingMode !== 'continuous' ||
+      openedChapter.isLocked ||
+      !reader
+    ) {
       return
     }
 
-    latestChapterProgressRef.current = openedChapter.initialChapterProgress
+    const restoreTarget =
+      progressChapterIdRef.current === openedChapter.chapter.id
+        ? latestChapterProgressRef.current
+        : openedChapter.initialChapterProgress
+    progressChapterIdRef.current = openedChapter.chapter.id
+    latestChapterProgressRef.current = restoreTarget
 
     let framePending = false
     let frameId: number | undefined
@@ -218,26 +383,7 @@ export function ReaderScreen({
               )
       }
 
-      latestChapterProgressRef.current = chapterProgress
-
-      const progress = calculateReadingProgress({
-        position: {
-          bookId: openedChapter.book.book.id,
-          chapterId: openedChapter.chapter.id,
-          paragraphIndex: 0,
-          chapterProgress,
-        },
-        chapterSequence: 1,
-        totalChapters: 1,
-      })
-      const percent = progress.valid ? Math.round(progress.percent) : 0
-
-      setLiveProgress((current) =>
-        current.chapterId === openedChapter.chapter.id &&
-        current.percent === percent
-          ? current
-          : { chapterId: openedChapter.chapter.id, percent },
-      )
+      const percent = updateLiveProgress(chapterProgress)
 
       if (lastReportedPercent !== percent) {
         lastReportedPercent = percent
@@ -263,8 +409,6 @@ export function ReaderScreen({
         updateProgress()
       })
     }
-
-    const restoreTarget = openedChapter.initialChapterProgress
 
     if (restoreTarget > 0 && typeof window.requestAnimationFrame === 'function') {
       frameId = window.requestAnimationFrame(() => {
@@ -311,6 +455,123 @@ export function ReaderScreen({
     preferences.fontScale,
     preferences.letterSpacing,
     preferences.lineSpacing,
+    preferences.readingMode,
+    updateLiveProgress,
+  ])
+
+  useLayoutEffect(() => {
+    flushProgressRef.current = () => {}
+    const viewport = pagedViewportRef.current
+    const prose = proseRef.current
+
+    if (
+      preferences.readingMode !== 'paged' ||
+      openedChapter.isLocked ||
+      !viewport ||
+      !prose
+    ) {
+      return
+    }
+
+    const startsNewChapter =
+      progressChapterIdRef.current !== openedChapter.chapter.id
+    let restoreTarget = startsNewChapter
+      ? openedChapter.initialChapterProgress
+      : latestChapterProgressRef.current
+    progressChapterIdRef.current = openedChapter.chapter.id
+    latestChapterProgressRef.current = restoreTarget
+
+    let animationFrameId: number | undefined
+    let framePending = false
+    let isActive = true
+
+    const measurePages = () => {
+      framePending = false
+      const viewportWidth = viewport.clientWidth
+
+      if (viewportWidth <= 0) {
+        return
+      }
+
+      prose.style.columnWidth = `${viewportWidth}px`
+      const computedColumnGap = Number.parseFloat(
+        window.getComputedStyle(prose).columnGap,
+      )
+      const columnGap = Number.isFinite(computedColumnGap)
+        ? computedColumnGap
+        : 0
+      const pageStep = viewportWidth + columnGap
+      const pageCount = Math.max(
+        1,
+        Math.ceil((prose.scrollWidth + columnGap - 1) / pageStep),
+      )
+      const pageIndex =
+        pageCount > 1
+          ? Math.round(restoreTarget * (pageCount - 1))
+          : 0
+
+      pagedReaderMetricsRef.current = { pageCount, pageStep }
+      applyPagedPage(pageIndex, pageCount, true)
+      restoreTarget = latestChapterProgressRef.current
+    }
+
+    const scheduleMeasurement = () => {
+      if (framePending) {
+        return
+      }
+
+      framePending = true
+      if (typeof window.requestAnimationFrame === 'function') {
+        animationFrameId = window.requestAnimationFrame(measurePages)
+      } else {
+        measurePages()
+      }
+    }
+
+    const resizeObserver =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(scheduleMeasurement)
+        : undefined
+    resizeObserver?.observe(viewport)
+    window.addEventListener('resize', scheduleMeasurement)
+
+    const flushProgress = () => {
+      onProgressChangeRef.current?.(latestChapterProgressRef.current)
+    }
+    flushProgressRef.current = flushProgress
+    window.addEventListener('pagehide', flushProgress)
+
+    scheduleMeasurement()
+    void document.fonts?.ready.then(() => {
+      if (isActive) {
+        scheduleMeasurement()
+      }
+    })
+
+    return () => {
+      isActive = false
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', scheduleMeasurement)
+      window.removeEventListener('pagehide', flushProgress)
+      prose.style.removeProperty('column-width')
+
+      if (
+        animationFrameId !== undefined &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(animationFrameId)
+      }
+    }
+  }, [
+    applyPagedPage,
+    openedChapter.chapter.id,
+    openedChapter.initialChapterProgress,
+    openedChapter.isLocked,
+    preferences.fontFamily,
+    preferences.fontScale,
+    preferences.letterSpacing,
+    preferences.lineSpacing,
+    preferences.readingMode,
   ])
 
   return (
@@ -322,6 +583,7 @@ export function ReaderScreen({
       data-font-scale={preferences.fontScale}
       data-letter-spacing={preferences.letterSpacing}
       data-line-spacing={preferences.lineSpacing}
+      data-reading-mode={preferences.readingMode}
       aria-label="閱讀器"
     >
       <header className="reader-toolbar">
@@ -409,14 +671,75 @@ export function ReaderScreen({
         <div className="locked-notice" role="note">
           本章尚未開放，沒有載入任何內文。
         </div>
+      ) : preferences.readingMode === 'paged' ? (
+        <div className="reader-paged-shell">
+          <div
+            ref={pagedViewportRef}
+            className="reader-paged-viewport"
+            tabIndex={0}
+            aria-label="分頁閱讀區"
+            onKeyDown={handlePagedViewportKeyDown}
+            onPointerDown={handleProsePointerDown}
+            onPointerUp={handleProsePointerUp}
+            onPointerCancel={cancelReaderSwipe}
+            onPointerLeave={cancelReaderSwipe}
+          >
+            <article
+              ref={proseRef}
+              className={`reader-prose reader-prose-paged theme-${preferences.theme} font-family-${preferences.fontFamily} font-scale-${preferences.fontScale} letter-spacing-${preferences.letterSpacing} line-spacing-${preferences.lineSpacing}`}
+              aria-label="章節內文"
+            >
+              {openedChapter.prose.map((paragraph) => (
+                <p data-testid="chapter-prose" key={paragraph}>
+                  {paragraph}
+                </p>
+              ))}
+            </article>
+          </div>
+
+          <nav className="reader-page-navigation" aria-label="分頁導覽">
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => turnPagedPage(-1)}
+              disabled={
+                currentPagedState.pageIndex === 0 &&
+                !openedChapter.hasPrevious
+              }
+            >
+              上一頁
+            </button>
+            <span
+              className="reader-page-status"
+              role="status"
+              aria-live="polite"
+              aria-label="分頁位置"
+            >
+              第 {currentPagedState.pageIndex + 1} /{' '}
+              {currentPagedState.pageCount} 頁
+            </span>
+            <button
+              type="button"
+              onClick={() => turnPagedPage(1)}
+              disabled={
+                currentPagedState.pageIndex ===
+                  currentPagedState.pageCount - 1 &&
+                !openedChapter.hasNext
+              }
+            >
+              下一頁
+            </button>
+          </nav>
+        </div>
       ) : (
         <article
+          ref={proseRef}
           className={`reader-prose theme-${preferences.theme} font-family-${preferences.fontFamily} font-scale-${preferences.fontScale} letter-spacing-${preferences.letterSpacing} line-spacing-${preferences.lineSpacing}`}
           aria-label="章節內文"
           onPointerDown={handleProsePointerDown}
           onPointerUp={handleProsePointerUp}
-          onPointerCancel={cancelChapterSwipe}
-          onPointerLeave={cancelChapterSwipe}
+          onPointerCancel={cancelReaderSwipe}
+          onPointerLeave={cancelReaderSwipe}
         >
           {openedChapter.prose.map((paragraph) => (
             <p data-testid="chapter-prose" key={paragraph}>

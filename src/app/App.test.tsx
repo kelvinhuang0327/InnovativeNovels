@@ -292,12 +292,12 @@ describe('Wave 1 core reading journey', () => {
 
     const reader = screen.getByLabelText('閱讀器')
     expect(
-      within(reader).getByRole('heading', { name: '第三章：封印之門' }),
+      within(reader).getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
     expect(
-      within(reader).getByText('本章尚未開放，沒有載入任何內文。'),
-    ).toBeInTheDocument()
-    expect(within(reader).queryAllByTestId('chapter-prose')).toHaveLength(0)
+      within(reader).queryByText('本章尚未開放，沒有載入任何內文。'),
+    ).not.toBeInTheDocument()
+    expect(within(reader).queryAllByTestId('chapter-prose')).toHaveLength(2)
     expect(proseRequest).toHaveBeenCalledTimes(2)
     expect(proseRequest).not.toHaveBeenCalledWith('chapter-sealed-gate')
   })
@@ -457,13 +457,13 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
   })
 
   it.each([
-    { bookIndex: 0, lockedHeading: '第三章：封印之門', lockedChapterId: 'chapter-sealed-gate' },
-    { bookIndex: 1, lockedHeading: '第三章：仙途劫', lockedChapterId: 'chapter-immortal-tribulation' },
-    { bookIndex: 2, lockedHeading: '第三章：茶水間的真相', lockedChapterId: 'chapter-break-room-truth' },
-    { bookIndex: 3, lockedHeading: '第三章：重逢之後', lockedChapterId: 'chapter-after-reunion' },
+    { bookIndex: 0, lockedChapterId: 'chapter-sealed-gate' },
+    { bookIndex: 1, lockedChapterId: 'chapter-immortal-tribulation' },
+    { bookIndex: 2, lockedChapterId: 'chapter-break-room-truth' },
+    { bookIndex: 3, lockedChapterId: 'chapter-after-reunion' },
   ])(
-    'renders zero prose and never requests content for the locked chapter of book index $bookIndex',
-    ({ bookIndex, lockedHeading, lockedChapterId }) => {
+    'leaves the current chapter unchanged and never requests locked content for book index $bookIndex',
+    ({ bookIndex, lockedChapterId }) => {
       const contentRepository = new StaticContentRepository()
       const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')
 
@@ -485,9 +485,9 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
 
       const reader = screen.getByLabelText('閱讀器')
       expect(
-        within(reader).getByRole('heading', { name: lockedHeading }),
-      ).toBeInTheDocument()
-      expect(within(reader).queryAllByTestId('chapter-prose')).toHaveLength(0)
+        within(reader).queryByText('本章尚未開放，沒有載入任何內文。'),
+      ).not.toBeInTheDocument()
+      expect(within(reader).queryAllByTestId('chapter-prose').length).toBeGreaterThan(0)
       expect(proseRequest).toHaveBeenCalledTimes(2)
       expect(proseRequest).not.toHaveBeenCalledWith(lockedChapterId)
     },
@@ -517,6 +517,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     fireEvent.click(screen.getByRole('radio', { name: '寬鬆' }))
     fireEvent.click(screen.getByRole('radio', { name: '寬鬆字距' }))
     fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
+    fireEvent.click(screen.getByRole('radio', { name: '分頁閱讀' }))
 
     const savedPrefs = JSON.parse(
       window.localStorage.getItem(READER_PREFERENCES_STORAGE_KEY) ?? '',
@@ -527,6 +528,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
       fontScale: 'large',
       letterSpacing: 'relaxed',
       lineSpacing: 'spacious',
+      readingMode: 'paged',
       theme: 'sepia',
     })
 
@@ -543,6 +545,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     expect(section.getAttribute('data-font-scale')).toBe('large')
     expect(section.getAttribute('data-letter-spacing')).toBe('relaxed')
     expect(section.getAttribute('data-line-spacing')).toBe('spacious')
+    expect(section.getAttribute('data-reading-mode')).toBe('paged')
 
     fireEvent.click(screen.getByRole('button', { name: '重設預設值' }))
     expect(section.getAttribute('data-theme')).toBe('light')
@@ -550,6 +553,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     expect(section.getAttribute('data-font-scale')).toBe('medium')
     expect(section.getAttribute('data-letter-spacing')).toBe('normal')
     expect(section.getAttribute('data-line-spacing')).toBe('comfortable')
+    expect(section.getAttribute('data-reading-mode')).toBe('continuous')
   })
 
   it('handles preference changes without altering ReadingPosition', () => {
@@ -597,20 +601,25 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     ).toBeInTheDocument()
   })
 
-  it('prevents bookmarking locked chapters and does not render bookmark button on locked chapters', () => {
+  it('keeps locked chapters unreachable through adjacent navigation and bookmark actions', () => {
     render(<App dependencies={createDependencies()} />)
     openFirstBookReader()
 
-    // Chapter 1 -> Chapter 2 -> Chapter 3 (Locked)
+    // Chapter 1 -> Chapter 2 -> locked Chapter 3 attempt.
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
     expect(
-      screen.getByRole('heading', { name: '第三章：封印之門' }),
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: '加入章節書籤' }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('button', { name: '加入章節書籤' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    expect(
+      screen.getByText('第三章：封印之門').closest('button'),
+    ).toBeDisabled()
   })
 
   it('retains independent bookmarks across multiple books and preserves stable order', () => {
@@ -755,13 +764,11 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 3 / 3 章')
-    expect(
-      screen.queryByRole('progressbar', { name: '本章閱讀進度' }),
-    ).not.toBeInTheDocument()
+    expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(progress()).toHaveTextContent('第 1 / 3 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
@@ -837,18 +844,20 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     expect(ch2Button).toHaveAttribute('aria-current', 'true')
     fireEvent.keyDown(tocDialog, { key: 'Escape' })
 
-    // Click persistent Next button to go to Chapter 3 (第三章：封印之門, which is locked)
+    // Locked Chapter 3 remains unavailable through adjacent navigation.
     fireEvent.click(persistentNext)
-    expect(screen.getByRole('heading', { name: '第三章：封印之門' })).toBeInTheDocument()
-    expect(screen.getByText('本章尚未開放，沒有載入任何內文。')).toBeInTheDocument()
-    expect(persistentNext).toBeDisabled()
-    expect(persistentPrev).not.toBeDisabled()
-
-    // Click persistent Previous button to return to Chapter 2
-    fireEvent.click(persistentPrev)
     expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    expect(
+      screen.queryByText('本章尚未開放，沒有載入任何內文。'),
+    ).not.toBeInTheDocument()
     expect(persistentNext).not.toBeDisabled()
     expect(persistentPrev).not.toBeDisabled()
+
+    // Previous remains chapter-level navigation from the unchanged chapter.
+    fireEvent.click(persistentPrev)
+    expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
+    expect(persistentNext).not.toBeDisabled()
+    expect(persistentPrev).toBeDisabled()
   })
 
   it('routes prose swipes through adjacent navigation without requesting locked prose', () => {
@@ -889,13 +898,45 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
     swipeLeft()
     expect(
-      screen.getByRole('heading', { name: '第三章：封印之門' }),
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('本章尚未開放，沒有載入任何內文。'),
-    ).toBeInTheDocument()
-    expect(screen.queryAllByTestId('chapter-prose')).toHaveLength(0)
+      screen.queryByText('本章尚未開放，沒有載入任何內文。'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryAllByTestId('chapter-prose').length).toBeGreaterThan(0)
     expect(proseRequest).not.toHaveBeenCalledWith('chapter-sealed-gate')
+  })
+
+  it('crosses accessible chapters through paged controls and stays put at a locked boundary', () => {
+    openFirstBookReader()
+    fireEvent.click(screen.getByRole('radio', { name: '分頁閱讀' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
+    expect(
+      screen.getByRole('heading', { name: '第二章：燈塔守望' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('本章尚未開放，沒有載入任何內文。'),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
+    expect(
+      screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+    ).toBeInTheDocument()
+
+    const explicitChapterNavigation = screen.getByRole('navigation', {
+      name: '章節導覽',
+    })
+    expect(
+      within(explicitChapterNavigation).getByRole('button', {
+        name: '下一章',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('preserves reader preferences across persistent navigation', () => {

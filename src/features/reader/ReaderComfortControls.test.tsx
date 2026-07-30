@@ -87,4 +87,31 @@ describe('ReaderComfortControls preferences', () => {
       letterSpacing: 'relaxed',
     })
   })
+
+  it('offers exactly continuous and paged modes and selects paged mode', () => {
+    const onChangePreferences = vi.fn()
+    render(
+      <ReaderComfortControls
+        preferences={DEFAULT_READER_PREFERENCES}
+        onChangePreferences={onChangePreferences}
+        onResetPreferences={vi.fn()}
+      />,
+    )
+
+    const group = screen.getByRole('radiogroup', { name: '閱讀模式' })
+    const options = within(group).getAllByRole('radio')
+    expect(options).toHaveLength(2)
+    expect(
+      within(group).getByRole('radio', { name: '連續捲動' }),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(
+      within(group).getByRole('radio', { name: '分頁閱讀' }),
+    ).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(within(group).getByRole('radio', { name: '分頁閱讀' }))
+    expect(onChangePreferences).toHaveBeenCalledWith({
+      ...DEFAULT_READER_PREFERENCES,
+      readingMode: 'paged',
+    })
+  })
 })

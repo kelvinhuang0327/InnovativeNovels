@@ -1,8 +1,10 @@
 import {
   READER_FONT_FAMILIES,
   READER_LETTER_SPACINGS,
+  READER_READING_MODES,
   type FontScale,
   type LineSpacing,
+  type ReadingMode,
   type ReaderFontFamily,
   type ReaderLetterSpacing,
   type ReaderPreferences,
@@ -45,6 +47,11 @@ const THEME_LABELS: Record<ReaderTheme, string> = {
   dark: '暗黑',
 }
 
+const READING_MODE_LABELS: Record<ReadingMode, string> = {
+  continuous: '連續捲動',
+  paged: '分頁閱讀',
+}
+
 export function ReaderComfortControls({
   preferences,
   onChangePreferences,
@@ -68,6 +75,10 @@ export function ReaderComfortControls({
 
   const setTheme = (theme: ReaderTheme) => {
     onChangePreferences({ ...preferences, theme })
+  }
+
+  const setReadingMode = (readingMode: ReadingMode) => {
+    onChangePreferences({ ...preferences, readingMode })
   }
 
   return (
@@ -164,6 +175,24 @@ export function ReaderComfortControls({
             onClick={() => setTheme(t)}
           >
             {THEME_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-group" role="radiogroup" aria-label="閱讀模式">
+        <span className="control-label">模式：</span>
+        {READER_READING_MODES.map((readingMode) => (
+          <button
+            key={readingMode}
+            type="button"
+            className={`comfort-option ${
+              preferences.readingMode === readingMode ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.readingMode === readingMode}
+            onClick={() => setReadingMode(readingMode)}
+          >
+            {READING_MODE_LABELS[readingMode]}
           </button>
         ))}
       </div>
