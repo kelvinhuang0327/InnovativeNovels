@@ -309,6 +309,7 @@ export function ReaderScreen({
     openedChapter.initialChapterProgress,
     preferences.fontFamily,
     preferences.fontScale,
+    preferences.letterSpacing,
     preferences.lineSpacing,
   ])
 
@@ -319,6 +320,7 @@ export function ReaderScreen({
       data-theme={preferences.theme}
       data-font-family={preferences.fontFamily}
       data-font-scale={preferences.fontScale}
+      data-letter-spacing={preferences.letterSpacing}
       data-line-spacing={preferences.lineSpacing}
       aria-label="閱讀器"
     >
@@ -409,7 +411,7 @@ export function ReaderScreen({
         </div>
       ) : (
         <article
-          className={`reader-prose theme-${preferences.theme} font-family-${preferences.fontFamily} font-scale-${preferences.fontScale} line-spacing-${preferences.lineSpacing}`}
+          className={`reader-prose theme-${preferences.theme} font-family-${preferences.fontFamily} font-scale-${preferences.fontScale} letter-spacing-${preferences.letterSpacing} line-spacing-${preferences.lineSpacing}`}
           aria-label="章節內文"
           onPointerDown={handleProsePointerDown}
           onPointerUp={handleProsePointerUp}

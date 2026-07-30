@@ -46,18 +46,22 @@ describe('LocalStorageReaderPreferencesRepository', () => {
     expect(repository.load()).toEqual(DEFAULT_READER_PREFERENCES)
   })
 
-  it('persists and restores valid preferences', () => {
-    const preferences = {
-      fontFamily: 'serif' as const,
-      fontScale: 'large' as const,
-      lineSpacing: 'spacious' as const,
-      theme: 'sepia' as const,
-    }
-    repository.save(preferences)
-    expect(repository.load()).toEqual(preferences)
-  })
+  it.each(['compact', 'normal', 'relaxed'] as const)(
+    'persists and restores the %s letter-spacing preference',
+    (letterSpacing) => {
+      const preferences = {
+        fontFamily: 'serif' as const,
+        fontScale: 'large' as const,
+        letterSpacing,
+        lineSpacing: 'spacious' as const,
+        theme: 'sepia' as const,
+      }
+      repository.save(preferences)
+      expect(repository.load()).toEqual(preferences)
+    },
+  )
 
-  it('loads version-1 preferences without fontFamily using the current Reader default', () => {
+  it('loads legacy version-1 preferences with current Reader defaults for absent fields', () => {
     storage.setItem(
       READER_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
@@ -71,6 +75,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
     expect(repository.load()).toEqual({
       fontFamily: 'sans-serif',
       fontScale: 'large',
+      letterSpacing: 'normal',
       lineSpacing: 'spacious',
       theme: 'sepia',
     })
@@ -94,6 +99,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
         schemaVersion: 1,
         fontFamily: 'comic',
         fontScale: 'gigantic',
+        letterSpacing: 'ultra-wide',
         lineSpacing: 'comfortable',
         theme: 'dark',
       }),
@@ -101,15 +107,17 @@ describe('LocalStorageReaderPreferencesRepository', () => {
     expect(repository.load()).toEqual({
       fontFamily: 'sans-serif',
       fontScale: 'medium',
+      letterSpacing: 'normal',
       lineSpacing: 'comfortable',
       theme: 'dark',
     })
   })
 
-  it('preserves unrelated preference fields when saving a font-family change', () => {
+  it('preserves unrelated preference fields when saving a letter-spacing change', () => {
     repository.save({
       fontFamily: 'serif',
       fontScale: 'extra-large',
+      letterSpacing: 'compact',
       lineSpacing: 'compact',
       theme: 'dark',
     })
@@ -120,6 +128,7 @@ describe('LocalStorageReaderPreferencesRepository', () => {
       schemaVersion: 1,
       fontFamily: 'serif',
       fontScale: 'extra-large',
+      letterSpacing: 'compact',
       lineSpacing: 'compact',
       theme: 'dark',
     })

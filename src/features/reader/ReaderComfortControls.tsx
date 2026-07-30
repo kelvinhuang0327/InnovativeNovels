@@ -1,8 +1,10 @@
 import {
   READER_FONT_FAMILIES,
+  READER_LETTER_SPACINGS,
   type FontScale,
   type LineSpacing,
   type ReaderFontFamily,
+  type ReaderLetterSpacing,
   type ReaderPreferences,
   type ReaderTheme,
 } from '../../domain/reading/readerPreferences'
@@ -31,6 +33,12 @@ const LINE_SPACING_LABELS: Record<LineSpacing, string> = {
   spacious: '寬鬆',
 }
 
+const LETTER_SPACING_LABELS: Record<ReaderLetterSpacing, string> = {
+  compact: '緊密字距',
+  normal: '標準字距',
+  relaxed: '寬鬆字距',
+}
+
 const THEME_LABELS: Record<ReaderTheme, string> = {
   light: '明亮',
   sepia: '護眼',
@@ -52,6 +60,10 @@ export function ReaderComfortControls({
 
   const setLineSpacing = (lineSpacing: LineSpacing) => {
     onChangePreferences({ ...preferences, lineSpacing })
+  }
+
+  const setLetterSpacing = (letterSpacing: ReaderLetterSpacing) => {
+    onChangePreferences({ ...preferences, letterSpacing })
   }
 
   const setTheme = (theme: ReaderTheme) => {
@@ -116,6 +128,24 @@ export function ReaderComfortControls({
             onClick={() => setLineSpacing(spacing)}
           >
             {LINE_SPACING_LABELS[spacing]}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-group" role="radiogroup" aria-label="字距">
+        <span className="control-label">字距：</span>
+        {READER_LETTER_SPACINGS.map((letterSpacing) => (
+          <button
+            key={letterSpacing}
+            type="button"
+            className={`comfort-option ${
+              preferences.letterSpacing === letterSpacing ? 'active' : ''
+            }`}
+            role="radio"
+            aria-checked={preferences.letterSpacing === letterSpacing}
+            onClick={() => setLetterSpacing(letterSpacing)}
+          >
+            {LETTER_SPACING_LABELS[letterSpacing]}
           </button>
         ))}
       </div>

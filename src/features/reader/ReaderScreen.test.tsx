@@ -63,6 +63,7 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
     const preferences = {
       fontFamily: 'serif' as const,
       fontScale: 'large' as const,
+      letterSpacing: 'relaxed' as const,
       lineSpacing: 'spacious' as const,
       theme: 'sepia' as const,
     }
@@ -91,12 +92,14 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
     expect(section?.getAttribute('data-theme')).toBe('sepia')
     expect(section?.getAttribute('data-font-family')).toBe('serif')
     expect(section?.getAttribute('data-font-scale')).toBe('large')
+    expect(section?.getAttribute('data-letter-spacing')).toBe('relaxed')
     expect(section?.getAttribute('data-line-spacing')).toBe('spacious')
 
     const prose = container.querySelector('.reader-prose')
     expect(prose?.className).toContain('theme-sepia')
     expect(prose?.className).toContain('font-family-serif')
     expect(prose?.className).toContain('font-scale-large')
+    expect(prose?.className).toContain('letter-spacing-relaxed')
     expect(prose?.className).toContain('line-spacing-spacious')
   })
 

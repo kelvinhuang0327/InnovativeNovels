@@ -515,6 +515,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     fireEvent.click(screen.getByRole('radio', { name: '大' }))
     fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
     fireEvent.click(screen.getByRole('radio', { name: '寬鬆' }))
+    fireEvent.click(screen.getByRole('radio', { name: '寬鬆字距' }))
     fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
 
     const savedPrefs = JSON.parse(
@@ -524,6 +525,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
       schemaVersion: 1,
       fontFamily: 'serif',
       fontScale: 'large',
+      letterSpacing: 'relaxed',
       lineSpacing: 'spacious',
       theme: 'sepia',
     })
@@ -539,12 +541,14 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     expect(section.getAttribute('data-theme')).toBe('sepia')
     expect(section.getAttribute('data-font-family')).toBe('serif')
     expect(section.getAttribute('data-font-scale')).toBe('large')
+    expect(section.getAttribute('data-letter-spacing')).toBe('relaxed')
     expect(section.getAttribute('data-line-spacing')).toBe('spacious')
 
     fireEvent.click(screen.getByRole('button', { name: '重設預設值' }))
     expect(section.getAttribute('data-theme')).toBe('light')
     expect(section.getAttribute('data-font-family')).toBe('sans-serif')
     expect(section.getAttribute('data-font-scale')).toBe('medium')
+    expect(section.getAttribute('data-letter-spacing')).toBe('normal')
     expect(section.getAttribute('data-line-spacing')).toBe('comfortable')
   })
 

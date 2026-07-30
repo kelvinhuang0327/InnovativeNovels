@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_READER_PREFERENCES } from '../../domain/reading/readerPreferences'
 import { ReaderComfortControls } from './ReaderComfortControls'
 
-describe('ReaderComfortControls font-family preference', () => {
+describe('ReaderComfortControls preferences', () => {
   afterEach(() => {
     cleanup()
   })
@@ -55,6 +55,36 @@ describe('ReaderComfortControls font-family preference', () => {
     expect(onChangePreferences).toHaveBeenLastCalledWith({
       ...DEFAULT_READER_PREFERENCES,
       fontFamily: 'sans-serif',
+    })
+  })
+
+  it('offers exactly three letter-spacing modes and reports the selected mode', () => {
+    const onChangePreferences = vi.fn()
+    render(
+      <ReaderComfortControls
+        preferences={DEFAULT_READER_PREFERENCES}
+        onChangePreferences={onChangePreferences}
+        onResetPreferences={vi.fn()}
+      />,
+    )
+
+    const group = screen.getByRole('radiogroup', { name: '字距' })
+    const options = within(group).getAllByRole('radio')
+    expect(options).toHaveLength(3)
+    expect(
+      within(group).getByRole('radio', { name: '緊密字距' }),
+    ).toHaveAttribute('aria-checked', 'false')
+    expect(
+      within(group).getByRole('radio', { name: '標準字距' }),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(
+      within(group).getByRole('radio', { name: '寬鬆字距' }),
+    ).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(within(group).getByRole('radio', { name: '寬鬆字距' }))
+    expect(onChangePreferences).toHaveBeenCalledWith({
+      ...DEFAULT_READER_PREFERENCES,
+      letterSpacing: 'relaxed',
     })
   })
 })

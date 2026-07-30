@@ -393,6 +393,17 @@ button:focus-visible {
   line-height: 2.2;
 }
 
+/* Letter Spacings */
+.reader-prose.letter-spacing-compact p {
+  letter-spacing: -0.02em;
+}
+.reader-prose.letter-spacing-normal p {
+  letter-spacing: normal;
+}
+.reader-prose.letter-spacing-relaxed p {
+  letter-spacing: 0.08em;
+}
+
 /* Reader Toolbar & Comfort Controls */
 .reader-toolbar {
   display: flex;
