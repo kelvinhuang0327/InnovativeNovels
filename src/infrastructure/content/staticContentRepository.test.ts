@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { StaticContentRepository } from './staticContentRepository'
+import emberCrownFixture from './books/book-ember-crown.json'
+import orbitLastLightFixture from './books/book-orbit-last-light.json'
 
 const EXPECTED_CATALOG_ORDER = [
   'book-tide-city',
   'book-frost-immortal',
   'book-midnight-office',
   'book-plum-rain-letter',
+  'book-ember-crown',
+  'book-orbit-last-light',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -33,6 +37,16 @@ const EXPECTED_BOOK_METADATA: Record<
     authorName: '蘇晚',
     categoryLabel: '言情',
   },
+  'book-ember-crown': {
+    title: '餘燼王冠',
+    authorName: '葉岑',
+    categoryLabel: '奇幻',
+  },
+  'book-orbit-last-light': {
+    title: '軌道盡頭的微光',
+    authorName: '岑海',
+    categoryLabel: '科幻',
+  },
 }
 
 const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
@@ -55,6 +69,20 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-decade-late-letter',
     'chapter-rainy-day-umbrella',
     'chapter-after-reunion',
+  ],
+  'book-ember-crown': [
+    'chapter-ember-city-of-dusk',
+    'chapter-ember-the-old-crown',
+    'chapter-ember-dawns-shadow',
+    'chapter-ember-the-cold-hour',
+    'chapter-ember-crown-relit',
+  ],
+  'book-orbit-last-light': [
+    'chapter-orbit-final-shift',
+    'chapter-orbit-echo-signal',
+    'chapter-orbit-fracture-line',
+    'chapter-orbit-last-brace',
+    'chapter-orbit-safe-passage',
   ],
 }
 
@@ -89,6 +117,31 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-after-reunion': { sequence: 3, access: CHAPTER_ACCESS.LOCKED },
+  'chapter-ember-city-of-dusk': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
+  'chapter-ember-the-old-crown': {
+    sequence: 2,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-ember-dawns-shadow': {
+    sequence: 3,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-ember-the-cold-hour': {
+    sequence: 4,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-ember-crown-relit': { sequence: 5, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-final-shift': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-echo-signal': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-fracture-line': {
+    sequence: 3,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-orbit-last-brace': { sequence: 4, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-safe-passage': {
+    sequence: 5,
+    access: CHAPTER_ACCESS.READABLE,
+  },
 }
 
 const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
@@ -134,12 +187,21 @@ const LOCKED_CHAPTER_IDS = [
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the four books in the expected catalog order', () => {
+  it('lists exactly the six books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(4)
+    expect(books).toHaveLength(6)
+  })
+
+  it('represents all six target genres in the catalog', () => {
+    const repository = new StaticContentRepository()
+    const genres = repository.listBooks().map((entry) => entry.book.categoryLabel)
+
+    expect(new Set(genres)).toEqual(
+      new Set(['懸疑', '仙俠', '都市', '言情', '奇幻', '科幻']),
+    )
   })
 
   it('preserves exact book metadata for every book', () => {
@@ -239,4 +301,25 @@ describe('StaticContentRepository parity', () => {
 
     expect(repository.getBook('book-does-not-exist')).toBeUndefined()
   })
+
+  it.each([
+    ['book-ember-crown', emberCrownFixture],
+    ['book-orbit-last-light', orbitLastLightFixture],
+  ])(
+    '%s has exactly five READABLE chapters with non-empty fixture-matching prose',
+    (bookId, fixture) => {
+      const repository = new StaticContentRepository()
+      const entry = repository.getBook(bookId)
+
+      expect(entry?.chapters).toHaveLength(5)
+      expect(entry?.chapters.every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
+
+      for (const fixtureChapter of fixture.chapters) {
+        const prose = repository.getChapterProse(fixtureChapter.chapterId)
+
+        expect(prose, fixtureChapter.chapterId).toEqual(fixtureChapter.prose)
+        expect(prose?.length).toBeGreaterThan(0)
+      }
+    },
+  )
 })

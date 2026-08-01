@@ -321,10 +321,10 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
   }
 
-  it('renders exactly four books in the catalog', () => {
+  it('renders exactly six books in the catalog', () => {
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('article')).toHaveLength(6)
   })
 
   it('preserves stable Book IDs through Book Detail navigation for every catalog position', () => {
@@ -432,7 +432,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     expect(
       screen.queryByRole('heading', { name: '繼續閱讀' }),
     ).not.toBeInTheDocument()
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('article')).toHaveLength(6)
   })
 
   it('ignores a saved position pointing at an unknown Chapter ID', () => {
@@ -1395,7 +1395,7 @@ describe('Wave 4 mobile reader session recovery', () => {
     firstMount.unmount()
 
     render(<App dependencies={createDependencies()} />)
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('article')).toHaveLength(6)
     expect(screen.queryByLabelText('閱讀器')).not.toBeInTheDocument()
   })
 
@@ -1464,7 +1464,7 @@ describe('Wave 4 mobile reader session recovery', () => {
 
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('article')).toHaveLength(6)
     expect(rawMarker()).toBeNull()
   })
 
@@ -1476,7 +1476,7 @@ describe('Wave 4 mobile reader session recovery', () => {
 
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(screen.getAllByRole('article')).toHaveLength(6)
     expect(rawMarker()).toBeNull()
   })
 
