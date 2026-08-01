@@ -1,0 +1,37 @@
+{
+  "schema": "innovative-novels/content-book/v1",
+  "bookId": "book-frost-immortal",
+  "catalogSequence": 2,
+  "title": "霜劍仙途",
+  "authorName": "沈墨白",
+  "categoryLabel": "仙俠",
+  "description": "一介凡人劍徒偶得殘缺仙訣，卻發現修仙之路布滿比妖魔更難纏的人心。",
+  "chapters": [
+    {
+      "chapterId": "chapter-picking-up-the-sword",
+      "sequence": 1,
+      "title": "第一章：拾劍",
+      "access": "READABLE",
+      "prose": [
+        "沈知拾起斷劍時，劍身還殘留著一絲極淡的靈氣，像是誰在很久以前，把一句沒說完的話封進了鐵裡。",
+        "村口的老獵戶說，那是三十年前墜落山谷的仙人所遺，撿到它的人，要嘛飛升，要嘛連骨頭都找不回來。"
+      ]
+    },
+    {
+      "chapterId": "chapter-mountain-gate",
+      "sequence": 2,
+      "title": "第二章：入山門",
+      "access": "READABLE",
+      "prose": [
+        "青雲山門的石階有九百九十九級，沈知數到第五百階時，才明白山門考較的從來不是腳力。",
+        "守門的老修士只問了他一句話：「劍是你的，還是你是劍的？」他答不出來，山門卻在此時緩緩開啟。"
+      ]
+    },
+    {
+      "chapterId": "chapter-immortal-tribulation",
+      "sequence": 3,
+      "title": "第三章：仙途劫",
+      "access": "LOCKED"
+    }
+  ]
+}

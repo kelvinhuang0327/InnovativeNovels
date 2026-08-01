@@ -1,0 +1,37 @@
+{
+  "schema": "innovative-novels/content-book/v1",
+  "bookId": "book-tide-city",
+  "catalogSequence": 1,
+  "title": "潮汐之城",
+  "authorName": "林澄",
+  "categoryLabel": "懸疑",
+  "description": "當海潮開始傳遞記憶，一名守燈人必須決定哪些故事值得留下。",
+  "chapters": [
+    {
+      "chapterId": "chapter-sealed-gate",
+      "sequence": 3,
+      "title": "第三章：封印之門",
+      "access": "LOCKED"
+    },
+    {
+      "chapterId": "chapter-tide-letter",
+      "sequence": 1,
+      "title": "第一章：潮聲來信",
+      "access": "READABLE",
+      "prose": [
+        "清晨的第一道潮聲穿過港口時，澄夏在門縫下發現一封帶著鹽晶的信。",
+        "信上沒有署名，只有一行像浪痕般彎曲的字：今晚，請替城市記住燈火。"
+      ]
+    },
+    {
+      "chapterId": "chapter-lighthouse-watch",
+      "sequence": 2,
+      "title": "第二章：燈塔守望",
+      "access": "READABLE",
+      "prose": [
+        "入夜後，舊燈塔的銅門比記憶裡更沉，門軸發出低低的嘆息。",
+        "澄夏登上頂層，看見遠海有三道不屬於船隻的光，正依序回答她手中的信。"
+      ]
+    }
+  ]
+}

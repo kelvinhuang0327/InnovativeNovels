@@ -1,0 +1,37 @@
+{
+  "schema": "innovative-novels/content-book/v1",
+  "bookId": "book-plum-rain-letter",
+  "catalogSequence": 4,
+  "title": "梅雨與信",
+  "authorName": "蘇晚",
+  "categoryLabel": "言情",
+  "description": "在一座總是下雨的小鎮，她收到一封本該十年前寄達的信，也重新遇見那個寫信的人。",
+  "chapters": [
+    {
+      "chapterId": "chapter-decade-late-letter",
+      "sequence": 1,
+      "title": "第一章：遲到十年的信",
+      "access": "READABLE",
+      "prose": [
+        "郵差把信放進信箱時，特別叮囑了一句：「地址是舊的，但郵戳是新的，妳自己看看。」",
+        "蘇晚拆開信封，認出那是十年前，她以為早已隨對方一起消失在雨裡的字跡。"
+      ]
+    },
+    {
+      "chapterId": "chapter-rainy-day-umbrella",
+      "sequence": 2,
+      "title": "第二章：雨天的傘",
+      "access": "READABLE",
+      "prose": [
+        "小鎮的雨從不整點下，卻總在她走到轉角書店前，準時落下第一滴。",
+        "傘是舊的，撐傘的人也是舊識，只是這一次，他沒有像十年前那樣，把傘留給她一個人走。"
+      ]
+    },
+    {
+      "chapterId": "chapter-after-reunion",
+      "sequence": 3,
+      "title": "第三章：重逢之後",
+      "access": "LOCKED"
+    }
+  ]
+}

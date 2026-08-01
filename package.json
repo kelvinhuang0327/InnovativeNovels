@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && npm run validate:content && vite build",
     "generate:pwa-assets": "pwa-assets-generator --preset minimal-2023 public/novel-mark.svg",
     "lint": "eslint .",
     "test": "vitest",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts"
   },
   "dependencies": {
     "react": "^19.2.7",
