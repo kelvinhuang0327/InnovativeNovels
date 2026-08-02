@@ -31,6 +31,11 @@ export function CatalogScreen({
     searchText,
     genre: selectedGenre,
   })
+  const isFiltering =
+    searchText.trim().length > 0 || selectedGenre !== undefined
+  const resultSummary = isFiltering
+    ? `找到 ${visibleBooks.length} 本`
+    : `共 ${visibleBooks.length} 本`
 
   const clearFilters = () => {
     setSearchText('')
@@ -53,13 +58,13 @@ export function CatalogScreen({
 
       <div className="catalog-controls">
         <label className="catalog-search-label" htmlFor={searchInputId}>
-          搜尋書名或簡介
+          搜尋小說
         </label>
         <input
           className="catalog-search-input"
           id={searchInputId}
           onChange={(event) => setSearchText(event.target.value)}
-          placeholder="輸入書名或簡介關鍵字"
+          placeholder="搜尋書名或作者"
           type="search"
           value={searchText}
         />
@@ -89,13 +94,15 @@ export function CatalogScreen({
           onClick={clearFilters}
           type="button"
         >
-          清除搜尋與篩選
+          清除篩選
         </button>
       </div>
 
+      <p className="catalog-result-count">{resultSummary}</p>
+
       {visibleBooks.length === 0 ? (
         <p className="empty-state" role="status">
-          找不到符合條件的書籍，換個關鍵字或分類再試試。
+          找不到符合條件的小說
         </p>
       ) : (
         visibleBooks.map(({ book, description }) => (

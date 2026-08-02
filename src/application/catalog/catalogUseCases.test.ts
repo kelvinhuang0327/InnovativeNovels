@@ -10,9 +10,10 @@ function makeBook(
   title: string,
   categoryLabel: string,
   description: string,
+  authorName = '作者',
 ): ContentBook {
   return {
-    book: { id: bookId(id), title, authorName: '作者', categoryLabel },
+    book: { id: bookId(id), title, authorName, categoryLabel },
     description,
     chapters: [
       {
@@ -27,10 +28,11 @@ function makeBook(
 }
 
 const books: readonly ContentBook[] = [
-  makeBook('book-a', '海邊書店', '懸疑', '一間書店裡的秘密。'),
-  makeBook('book-b', '山中劍客', '仙俠', '劍與修行的故事。'),
-  makeBook('book-c', '城市夜歸人', '都市', '深夜的都市故事。'),
-  makeBook('book-d', '雨中告白', '言情', '一段遲來的告白。'),
+  makeBook('book-a', '海邊書店', '懸疑', '一間書店裡的秘密。', '沈墨'),
+  makeBook('book-b', '山中劍客', '仙俠', '劍與修行的故事。', '岑海'),
+  makeBook('book-c', '城市夜歸人', '都市', '深夜的都市故事。', '林晚'),
+  makeBook('book-d', '雨中告白', '言情', '一段遲來的告白。', 'Wendy Lai'),
+  makeBook('book-b2', '海上劍歌', '仙俠', '另一段劍與修行的故事。', '柳硯'),
 ]
 
 describe('listGenres', () => {
@@ -45,7 +47,7 @@ describe('listGenres', () => {
 
 describe('filterCatalog', () => {
   it('returns every book when no query or genre is set', () => {
-    expect(filterCatalog(books, {})).toHaveLength(4)
+    expect(filterCatalog(books, {})).toHaveLength(5)
   })
 
   it('matches by title', () => {
@@ -56,6 +58,21 @@ describe('filterCatalog', () => {
   it('matches by description', () => {
     const result = filterCatalog(books, { searchText: '告白' })
     expect(result.map((entry) => entry.book.id)).toEqual(['book-d'])
+  })
+
+  it('matches by author', () => {
+    const result = filterCatalog(books, { searchText: '岑海' })
+    expect(result.map((entry) => entry.book.id)).toEqual(['book-b'])
+  })
+
+  it('matches Latin author names case-insensitively', () => {
+    const result = filterCatalog(books, { searchText: 'wendy' })
+    expect(result.map((entry) => entry.book.id)).toEqual(['book-d'])
+  })
+
+  it('trims surrounding whitespace before matching', () => {
+    const result = filterCatalog(books, { searchText: '  劍客  ' })
+    expect(result.map((entry) => entry.book.id)).toEqual(['book-b'])
   })
 
   it('filters by genre', () => {
@@ -73,6 +90,11 @@ describe('filterCatalog', () => {
   })
 
   it('treats a blank search as no filter and restores every book', () => {
-    expect(filterCatalog(books, { searchText: '   ' })).toHaveLength(4)
+    expect(filterCatalog(books, { searchText: '   ' })).toHaveLength(5)
+  })
+
+  it('preserves the original catalog order among matching results', () => {
+    const result = filterCatalog(books, { genre: '仙俠' })
+    expect(result.map((entry) => entry.book.id)).toEqual(['book-b', 'book-b2'])
   })
 })

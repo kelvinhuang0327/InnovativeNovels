@@ -336,6 +336,13 @@ button:focus-visible {
   margin-top: 1rem;
 }
 
+.catalog-result-count {
+  margin-top: 1.5rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
 .empty-state {
   margin-top: 2rem;
   padding: 1.25rem;

@@ -44,6 +44,7 @@ export function filterCatalog(
     const matchesQuery =
       normalizedQuery.length === 0 ||
       book.title.toLowerCase().includes(normalizedQuery) ||
+      book.authorName.toLowerCase().includes(normalizedQuery) ||
       description.toLowerCase().includes(normalizedQuery)
 
     return matchesGenre && matchesQuery
