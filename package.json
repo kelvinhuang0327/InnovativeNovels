@@ -11,13 +11,21 @@
     "test": "vitest",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts"
+    "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts",
+    "cap:sync": "cap sync",
+    "cap:ios": "cap open ios",
+    "cap:android": "cap open android",
+    "verify:wrapper": "node scripts/verify-wrapper.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.8",
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

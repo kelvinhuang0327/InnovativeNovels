@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Native generated build outputs
+ios/App/DerivedData
+ios/App/Pods
