@@ -101,6 +101,21 @@ describe('BrowserPwaAdapter', () => {
     expect(snapshots.at(-1)?.installAvailable).toBe(false)
   })
 
+  it('detects standalone mode when window.Capacitor isNativePlatform returns true', () => {
+    const mockWindow = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      Capacitor: { isNativePlatform: () => true },
+    } as unknown as Window
+    const adapter = new BrowserPwaAdapter(
+      mockWindow,
+      { onLine: true } as Navigator,
+    )
+    const snapshot = adapter.getSnapshot()
+    expect(snapshot.installAvailable).toBe(false)
+    expect(snapshot.manualInstallAvailable).toBe(false)
+  })
+
   it('publishes online and offline browser events', () => {
     const adapter = new BrowserPwaAdapter(
       window,

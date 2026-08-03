@@ -74,7 +74,12 @@ export class BrowserPwaAdapter implements BrowserPwaPort {
       browserWindow.matchMedia?.('(display-mode: standalone)').matches ===
         true ||
       (browserNavigator as Navigator & { readonly standalone?: boolean })
-        .standalone === true,
+        .standalone === true ||
+      (
+        browserWindow as Window & {
+          readonly Capacitor?: { isNativePlatform?: () => boolean }
+        }
+      ).Capacitor?.isNativePlatform?.() === true,
     detectManualInstallEligibility: ManualInstallEligibilityDetector = () =>
       detectIosManualInstallEligibility(browserNavigator),
   ) {
