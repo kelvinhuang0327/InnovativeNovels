@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InnovativeNovels — Fable Nightly Status</title>
+<link rel="stylesheet" href="tests/fable-nightly/dashboard/dashboard.css">
+</head>
+<body>
+<main>
+  <p class="disclaimer">
+    The Dashboard is a generated read-only projection.
+    Editing this HTML, its JavaScript, its CSS, <code>nightly-data.json</code>, or <code>nightly-data.js</code>
+    does not change nightly, candidate, repair, Judge, revalidation, or defect status.
+    Every displayed state identifies its evidence source below.
+  </p>
+  <div id="dashboard-root">
+    <p class="empty-state">Loading Fable Nightly status…</p>
+  </div>
+</main>
+<script src="tests/fable-nightly/dashboard-data/nightly-data.js"></script>
+<script src="tests/fable-nightly/dashboard/dashboard.js"></script>
+</body>
+</html>

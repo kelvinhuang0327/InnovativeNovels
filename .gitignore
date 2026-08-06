@@ -26,3 +26,7 @@ dist-ssr
 # Native generated build outputs
 ios/App/DerivedData
 ios/App/Pods
+
+# Fable Nightly Dashboard generated projections
+/tests/fable-nightly/dashboard-data/nightly-data.json
+/tests/fable-nightly/dashboard-data/nightly-data.js
