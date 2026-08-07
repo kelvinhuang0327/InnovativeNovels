@@ -9,6 +9,10 @@
     "generate:pwa-assets": "pwa-assets-generator --preset minimal-2023 public/novel-mark.svg",
     "lint": "eslint .",
     "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:chromium": "playwright test --project=desktop-chromium",
+    "test:e2e:webkit": "playwright test --project=desktop-webkit",
+    "test:e2e:mobile": "playwright test --project=mobile-chromium --project=mobile-webkit",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts",
@@ -27,6 +31,7 @@
   "devDependencies": {
     "@capacitor/cli": "^7.6.8",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.2",

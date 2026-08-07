@@ -30,3 +30,8 @@ ios/App/Pods
 # Fable Nightly Dashboard generated projections
 /tests/fable-nightly/dashboard-data/nightly-data.json
 /tests/fable-nightly/dashboard-data/nightly-data.js
+
+# Playwright runtime outputs
+playwright-report/
+test-results/
+blob-report/
