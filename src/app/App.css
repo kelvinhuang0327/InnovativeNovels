@@ -368,6 +368,49 @@ button:focus-visible {
   background: #fffdf8;
 }
 
+.authoring-form-actions {
+  flex-wrap: wrap;
+}
+
+.agent-exchange-panel {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid #ded8cd;
+  border-radius: 1.25rem;
+  background: #fffdf8;
+}
+
+.agent-exchange-panel h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.5rem;
+}
+
+.agent-exchange-panel p {
+  margin: 0;
+  color: #65594d;
+  line-height: 1.6;
+}
+
+.agent-exchange-panel form {
+  display: grid;
+  gap: 1rem;
+}
+
+.agent-exchange-panel textarea {
+  min-height: 12rem;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.authoring-copy-status {
+  align-self: center;
+  color: #346b42 !important;
+  font-weight: 700;
+}
+
 .authoring-field {
   display: grid;
   gap: 0.4rem;

@@ -6,6 +6,11 @@ import {
 import type { ContentRepository } from '../application/catalog/contentRepository'
 import type { AuthoringGatewayClient } from '../application/authoring/authoringGatewayClient'
 import { AuthoringGatewayClientAdapter } from '../application/authoring/authoringGatewayClient'
+import type {
+  AuthoringSession,
+  AuthoringSessionRepository,
+} from '../application/authoring/authoringSessionRepository'
+import type { ClipboardPort } from '../application/authoring/clipboardPort'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
@@ -41,7 +46,9 @@ import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
+import { BrowserClipboardAdapter } from '../infrastructure/authoring/browserClipboardAdapter'
 import { LocalStorageActiveReaderSessionRepository } from '../infrastructure/persistence/localStorageActiveReaderSessionRepository'
+import { LocalStorageAuthoringSessionRepository } from '../infrastructure/persistence/localStorageAuthoringSessionRepository'
 import { LocalStorageChapterBookmarksRepository } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
 import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
@@ -56,6 +63,8 @@ export interface AppDependencies {
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
   readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
   readonly authoringGatewayClient?: AuthoringGatewayClient
+  readonly authoringSessionRepository?: AuthoringSessionRepository
+  readonly clipboardPort?: ClipboardPort
 }
 
 interface AppProps {
@@ -130,6 +139,22 @@ class MemoryActiveReaderSessionRepository
   }
 }
 
+class MemoryAuthoringSessionRepository implements AuthoringSessionRepository {
+  private session: AuthoringSession | undefined
+
+  load(): AuthoringSession | undefined {
+    return this.session
+  }
+
+  save(session: AuthoringSession): void {
+    this.session = session
+  }
+
+  clear(): void {
+    this.session = undefined
+  }
+}
+
 function createDefaultDependencies(): AppDependencies {
   return {
     contentRepository: defaultContentRepository,
@@ -145,6 +170,10 @@ function createDefaultDependencies(): AppDependencies {
     activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
       window.localStorage,
     ),
+    authoringSessionRepository: new LocalStorageAuthoringSessionRepository(
+      window.localStorage,
+    ),
+    clipboardPort: new BrowserClipboardAdapter(window.navigator.clipboard),
   }
 }
 
@@ -160,6 +189,11 @@ function App({
   const activeSessionRepo =
     dependencies.activeReaderSessionRepository ??
     new MemoryActiveReaderSessionRepository()
+  const [memoryAuthoringSessionRepo] = useState(
+    () => new MemoryAuthoringSessionRepository(),
+  )
+  const authoringSessionRepo =
+    dependencies.authoringSessionRepository ?? memoryAuthoringSessionRepo
 
   const [screen, setScreen] = useState<Screen>(() => {
     const activeBookId = activeSessionRepo.load()
@@ -331,10 +365,12 @@ function App({
 
       {screen.name === 'authoring' && (
         <AuthoringPreviewScreen
+          clipboardPort={dependencies.clipboardPort}
           gatewayClient={
             dependencies.authoringGatewayClient ?? defaultAuthoringGatewayClient
           }
           onBack={() => setScreen({ name: 'catalog' })}
+          sessionRepository={authoringSessionRepo}
         />
       )}
 

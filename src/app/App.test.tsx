@@ -844,6 +844,59 @@ describe('AI Authoring Core V1 isolation', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回閱讀目錄' }))
     expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
   })
+
+  it('imports the 潮汐檔案 Agent Draft without changing the production catalog', async () => {
+    const contentRepository = new StaticContentRepository()
+    const initialCatalogCount = contentRepository.listBooks().length
+    const agentDraftJson = JSON.stringify({
+      title: '潮汐檔案',
+      genre: '科幻懸疑',
+      chapters: [
+        {
+          sequence: 1,
+          title: '沉入海底的鐘',
+          prose: '第一段海水覆過鐘面。\n\n第二段城市失去第一個音節。',
+        },
+        {
+          sequence: 2,
+          title: '舊港的回聲',
+          prose: '第一段舊港起霧。\n\n第二段回聲折回昨天。',
+        },
+        {
+          sequence: 3,
+          title: '第四點整',
+          prose: '第一段潮汐停住。\n\n第二段空白浮出水面。',
+        },
+      ],
+    })
+
+    render(
+      <App
+        dependencies={{
+          ...createDependencies(),
+          contentRepository,
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟創作預覽' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    expect(screen.getByText('DRAFT / NOT PUBLISHED')).toBeInTheDocument()
+    expect(contentRepository.listBooks()).toHaveLength(initialCatalogCount)
+    expect(
+      contentRepository.listBooks().some(({ book }) => book.title === '潮汐檔案'),
+    ).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '返回閱讀目錄' }))
+    expect(screen.getByText(`共 ${initialCatalogCount} 本`)).toBeInTheDocument()
+  })
 })
 
 describe('Persistent reader chapter navigation integrated journey', () => {
