@@ -12,6 +12,7 @@ const EXPECTED_CATALOG_ORDER = [
   'book-ember-crown',
   'book-orbit-last-light',
   'book-legacy-book-1',
+  'book-legacy-book-2',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -52,6 +53,11 @@ const EXPECTED_BOOK_METADATA: Record<
     title: '吞噬古帝',
     authorName: '黑白仙鶴',
     categoryLabel: '玄幻奇幻',
+  },
+  'book-legacy-book-2': {
+    title: '開局流放，醫妃搬空國庫去逃荒',
+    authorName: '蘇輕歌',
+    categoryLabel: '古代言情',
   },
 }
 
@@ -95,6 +101,10 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-legacy-book-1-2',
     'chapter-legacy-book-1-3',
     'chapter-legacy-book-1-4',
+  ],
+  'book-legacy-book-2': [
+    'chapter-legacy-book-2-1',
+    'chapter-legacy-book-2-2',
   ],
 }
 
@@ -154,6 +164,14 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     sequence: 5,
     access: CHAPTER_ACCESS.READABLE,
   },
+  'chapter-legacy-book-2-1': {
+    sequence: 1,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-legacy-book-2-2': {
+    sequence: 2,
+    access: CHAPTER_ACCESS.READABLE,
+  },
 }
 
 const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
@@ -189,6 +207,13 @@ const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
     '小鎮的雨從不整點下，卻總在她走到轉角書店前，準時落下第一滴。',
     '傘是舊的，撐傘的人也是舊識，只是這一次，他沒有像十年前那樣，把傘留給她一個人走。',
   ],
+  'chapter-legacy-book-2-1': [
+    '新婚的紅燭還未燃盡，宮牆之外的風聲便已裹著流放的消息撲面而來。',
+    '她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。',
+  ],
+  'chapter-legacy-book-2-2': [
+    '當最後一紙文書落地，親緣也像門外的雪一樣，乾脆地斷了個乾淨。',
+  ],
 }
 
 const LOCKED_CHAPTER_IDS = [
@@ -199,20 +224,29 @@ const LOCKED_CHAPTER_IDS = [
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the seven books in the expected catalog order', () => {
+  it('lists exactly the eight books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(7)
+    expect(books).toHaveLength(8)
   })
 
-  it('represents all seven target genres in the catalog', () => {
+  it('represents all eight target genres in the catalog', () => {
     const repository = new StaticContentRepository()
     const genres = repository.listBooks().map((entry) => entry.book.categoryLabel)
 
     expect(new Set(genres)).toEqual(
-      new Set(['懸疑', '仙俠', '都市', '言情', '奇幻', '科幻', '玄幻奇幻']),
+      new Set([
+        '懸疑',
+        '仙俠',
+        '都市',
+        '言情',
+        '奇幻',
+        '科幻',
+        '玄幻奇幻',
+        '古代言情',
+      ]),
     )
   })
 
@@ -297,7 +331,7 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(8)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(10)
   })
 
   it('returns undefined prose for every LOCKED chapter', () => {

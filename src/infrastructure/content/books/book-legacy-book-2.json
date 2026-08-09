@@ -1,0 +1,30 @@
+{
+  "schema": "innovative-novels/content-book/v1",
+  "bookId": "book-legacy-book-2",
+  "catalogSequence": 8,
+  "title": "開局流放，醫妃搬空國庫去逃荒",
+  "authorName": "蘇輕歌",
+  "categoryLabel": "古代言情",
+  "description": "另一部用於展示目錄狀態與分類差異的樣本內容，模擬推薦流與閱讀偏好切換。",
+  "chapters": [
+    {
+      "chapterId": "chapter-legacy-book-2-1",
+      "sequence": 1,
+      "title": "第1章 新婚夜",
+      "access": "READABLE",
+      "prose": [
+        "新婚的紅燭還未燃盡，宮牆之外的風聲便已裹著流放的消息撲面而來。",
+        "她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。"
+      ]
+    },
+    {
+      "chapterId": "chapter-legacy-book-2-2",
+      "sequence": 2,
+      "title": "第2章 斷親",
+      "access": "READABLE",
+      "prose": [
+        "當最後一紙文書落地，親緣也像門外的雪一樣，乾脆地斷了個乾淨。"
+      ]
+    }
+  ]
+}
