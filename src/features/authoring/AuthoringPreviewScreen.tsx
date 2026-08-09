@@ -1,13 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import {
-  createAuthoringDraft,
-  type CreateDraftResult,
-} from '../../application/authoring/createDraftUseCase'
-import type { GenerationProvider } from '../../application/authoring/generationProvider'
+import type {
+  AuthoringGatewayClient,
+  AuthoringGatewayClientResult,
+} from '../../application/authoring/authoringGatewayClient'
 import type { AuthoringSpec } from '../../domain/authoring/authoringContracts'
 
 interface AuthoringPreviewScreenProps {
-  readonly provider: GenerationProvider
+  readonly gatewayClient: AuthoringGatewayClient
   readonly onBack: () => void
 }
 
@@ -19,10 +18,13 @@ const INITIAL_SPEC: AuthoringSpec = {
   requestedChapterCount: 3,
 }
 
-type SuccessfulDraftResult = Extract<CreateDraftResult, { readonly ok: true }>
+type SuccessfulDraftResult = Extract<
+  AuthoringGatewayClientResult,
+  { readonly ok: true }
+>
 
 export function AuthoringPreviewScreen({
-  provider,
+  gatewayClient,
   onBack,
 }: AuthoringPreviewScreenProps) {
   const [spec, setSpec] = useState<AuthoringSpec>(INITIAL_SPEC)
@@ -36,19 +38,22 @@ export function AuthoringPreviewScreen({
     setErrorMessage(undefined)
     setResult(undefined)
 
-    const nextResult = await createAuthoringDraft(spec, { provider })
-    setIsSubmitting(false)
+    try {
+      const nextResult = await gatewayClient.generateDraft(spec)
+      if (!nextResult.ok) {
+        setErrorMessage(
+          nextResult.errors?.map((error) => error.message).join(' ') ??
+            nextResult.message,
+        )
+        return
+      }
 
-    if (!nextResult.ok) {
-      setErrorMessage(
-        nextResult.status === 'validation_error'
-          ? nextResult.errors?.map((error) => error.message).join(' ')
-          : nextResult.error?.message ?? '草稿提供者失敗。',
-      )
-      return
+      setResult(nextResult)
+    } catch {
+      setErrorMessage('創作預覽暫時無法處理。')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setResult(nextResult)
   }
 
   return (

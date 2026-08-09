@@ -11,6 +11,8 @@ import type {
   ContentBook,
   ContentRepository,
 } from '../application/catalog/contentRepository'
+import { AuthoringGatewayClientAdapter } from '../application/authoring/authoringGatewayClient'
+import { createAuthoringGatewayHandler } from '../infrastructure/authoring/authoringGateway'
 import { CHAPTER_ACCESS } from '../domain/access/chapterAccess'
 import { chapterSequence } from '../domain/catalog/chapter'
 import { bookId, chapterId } from '../domain/catalog/identifiers'
@@ -800,12 +802,26 @@ describe('AI Authoring Core V1 isolation', () => {
 
   it('previews a deterministic draft without adding it to the production catalog', async () => {
     const contentRepository = new StaticContentRepository()
+    const gatewayHandler = createAuthoringGatewayHandler()
+    const authoringGatewayClient = new AuthoringGatewayClientAdapter({
+      fetchImpl: async (_input, init) => {
+        const result = await gatewayHandler({
+          method: init?.method ?? '',
+          body: typeof init?.body === 'string' ? init.body : '',
+        })
+        return new Response(JSON.stringify(result.body), {
+          status: result.status,
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+    })
 
     render(
       <App
         dependencies={{
           ...createDependencies(),
           contentRepository,
+          authoringGatewayClient,
         }}
       />,
     )

@@ -4,7 +4,8 @@ import {
   listCatalog,
 } from '../application/catalog/catalogUseCases'
 import type { ContentRepository } from '../application/catalog/contentRepository'
-import type { GenerationProvider } from '../application/authoring/generationProvider'
+import type { AuthoringGatewayClient } from '../application/authoring/authoringGatewayClient'
+import { AuthoringGatewayClientAdapter } from '../application/authoring/authoringGatewayClient'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
@@ -46,7 +47,6 @@ import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persi
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
 import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
 import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
-import { DeterministicDraftProvider } from '../infrastructure/authoring/deterministicDraftProvider'
 import './App.css'
 
 export interface AppDependencies {
@@ -55,7 +55,7 @@ export interface AppDependencies {
   readonly readerPreferencesRepository?: ReaderPreferencesRepository
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
   readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
-  readonly authoringProvider?: GenerationProvider
+  readonly authoringGatewayClient?: AuthoringGatewayClient
 }
 
 interface AppProps {
@@ -78,7 +78,7 @@ type Screen =
     }
 
 const defaultContentRepository = new StaticContentRepository()
-const defaultAuthoringProvider = new DeterministicDraftProvider()
+const defaultAuthoringGatewayClient = new AuthoringGatewayClientAdapter()
 const defaultPwaDependencies: PwaDependencies = {
   browser: new BrowserPwaAdapter(window, window.navigator),
   serviceWorker: new ViteServiceWorkerAdapter(),
@@ -331,10 +331,10 @@ function App({
 
       {screen.name === 'authoring' && (
         <AuthoringPreviewScreen
-          onBack={() => setScreen({ name: 'catalog' })}
-          provider={
-            dependencies.authoringProvider ?? defaultAuthoringProvider
+          gatewayClient={
+            dependencies.authoringGatewayClient ?? defaultAuthoringGatewayClient
           }
+          onBack={() => setScreen({ name: 'catalog' })}
         />
       )}
 
