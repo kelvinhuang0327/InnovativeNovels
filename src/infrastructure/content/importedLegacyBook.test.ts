@@ -15,6 +15,26 @@ import { StaticContentRepository } from './staticContentRepository'
 
 const IMPORTED_BOOK_ID = 'book-legacy-book-1'
 const SECOND_IMPORTED_BOOK_ID = 'book-legacy-book-2'
+const NEW_IMPORTED_BOOKS = [
+  {
+    id: 'book-legacy-book-3',
+    title: '都市迷局',
+    categoryLabel: '都市',
+    firstChapterTitle: '第一章：告別的信封',
+  },
+  {
+    id: 'book-legacy-book-6',
+    title: '最後一班記憶列車',
+    categoryLabel: '科幻',
+    firstChapterTitle: '第一章：資料考古師',
+  },
+  {
+    id: 'book-legacy-book-4',
+    title: '同一個屋簷下',
+    categoryLabel: '言情',
+    firstChapterTitle: '第一章：陌生的鑰匙',
+  },
+] as const
 
 function createReadingStateRepository(): ReadingStateRepository {
   let savedPosition: ReadingPosition | undefined
@@ -35,7 +55,7 @@ describe('imported legacy book application path', () => {
     const matches = filterCatalog(books, { searchText: '吞噬古帝' })
     const book = getBookDetail(repository, IMPORTED_BOOK_ID)
 
-    expect(books).toHaveLength(8)
+    expect(books).toHaveLength(11)
     expect(matches.map((entry) => entry.book.id)).toEqual([IMPORTED_BOOK_ID])
     expect(book?.book).toMatchObject({
       id: IMPORTED_BOOK_ID,
@@ -129,4 +149,45 @@ describe('imported legacy book application path', () => {
       '她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。',
     ])
   })
+
+  it.each(NEW_IMPORTED_BOOKS)(
+    'discovers $id through Catalog and opens a readable chapter without exposing locked prose',
+    ({ id, title, categoryLabel, firstChapterTitle }) => {
+      const repository = new StaticContentRepository()
+      const readingState = createReadingStateRepository()
+      const books = listCatalog(repository)
+      const matches = filterCatalog(books, { searchText: title })
+      const book = getBookDetail(repository, id)
+
+      expect(matches.map((entry) => entry.book.id)).toEqual([id])
+      expect(book?.book).toMatchObject({ id, title, categoryLabel })
+      expect(book?.chapters).toHaveLength(13)
+      expect(book?.chapters.map((chapter) => chapter.sequence)).toEqual(
+        Array.from({ length: 13 }, (_, index) => index + 1),
+      )
+      expect(book?.chapters.slice(0, 10).every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
+      expect(book?.chapters.slice(10).every((chapter) => chapter.access === CHAPTER_ACCESS.LOCKED)).toBe(true)
+
+      const destination = resolveStartOrContinue(repository, readingState, id)
+
+      expect(destination?.position).toMatchObject({
+        bookId: id,
+        chapterId: `chapter-legacy-${id.replace('book-legacy-', '')}-1`,
+      })
+
+      if (!destination) {
+        throw new Error(`Imported book ${id} did not resolve a readable start chapter`)
+      }
+
+      const opened = openReadingChapter(repository, readingState, destination.position)
+
+      expect(opened?.chapter.title).toBe(firstChapterTitle)
+      expect(opened?.prose.length).toBeGreaterThan(0)
+      expect(
+        repository.getChapterProse(
+          `chapter-legacy-${id.replace('book-legacy-', '')}-11`,
+        ),
+      ).toBeUndefined()
+    },
+  )
 })

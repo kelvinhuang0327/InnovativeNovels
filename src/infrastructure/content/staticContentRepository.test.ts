@@ -13,6 +13,9 @@ const EXPECTED_CATALOG_ORDER = [
   'book-orbit-last-light',
   'book-legacy-book-1',
   'book-legacy-book-2',
+  'book-legacy-book-3',
+  'book-legacy-book-6',
+  'book-legacy-book-4',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -58,6 +61,21 @@ const EXPECTED_BOOK_METADATA: Record<
     title: '開局流放，醫妃搬空國庫去逃荒',
     authorName: '蘇輕歌',
     categoryLabel: '古代言情',
+  },
+  'book-legacy-book-3': {
+    title: '都市迷局',
+    authorName: 'NovelCraft AI',
+    categoryLabel: '都市',
+  },
+  'book-legacy-book-6': {
+    title: '最後一班記憶列車',
+    authorName: 'NovelCraft AI',
+    categoryLabel: '科幻',
+  },
+  'book-legacy-book-4': {
+    title: '同一個屋簷下',
+    authorName: 'NovelCraft AI',
+    categoryLabel: '言情',
   },
 }
 
@@ -106,6 +124,18 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-legacy-book-2-1',
     'chapter-legacy-book-2-2',
   ],
+  'book-legacy-book-3': Array.from(
+    { length: 13 },
+    (_, index) => `chapter-legacy-book-3-${index + 1}`,
+  ),
+  'book-legacy-book-6': Array.from(
+    { length: 13 },
+    (_, index) => `chapter-legacy-book-6-${index + 1}`,
+  ),
+  'book-legacy-book-4': Array.from(
+    { length: 13 },
+    (_, index) => `chapter-legacy-book-4-${index + 1}`,
+  ),
 }
 
 const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
@@ -174,6 +204,17 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   },
 }
 
+for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-book-4']) {
+  const legacyBookId = bookId.replace('book-legacy-', '')
+
+  for (let sequence = 1; sequence <= 13; sequence += 1) {
+    EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS[`chapter-legacy-${legacyBookId}-${sequence}`] = {
+      sequence,
+      access: sequence <= 10 ? CHAPTER_ACCESS.READABLE : CHAPTER_ACCESS.LOCKED,
+    }
+  }
+}
+
 const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
   'chapter-tide-letter': [
     '清晨的第一道潮聲穿過港口時，澄夏在門縫下發現一封帶著鹽晶的信。',
@@ -221,18 +262,21 @@ const LOCKED_CHAPTER_IDS = [
   'chapter-immortal-tribulation',
   'chapter-break-room-truth',
   'chapter-after-reunion',
+  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-3-${index + 11}`),
+  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-6-${index + 11}`),
+  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-4-${index + 11}`),
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the eight books in the expected catalog order', () => {
+  it('lists exactly the eleven books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(8)
+    expect(books).toHaveLength(11)
   })
 
-  it('represents all eight target genres in the catalog', () => {
+  it('represents all eleven target genres in the catalog', () => {
     const repository = new StaticContentRepository()
     const genres = repository.listBooks().map((entry) => entry.book.categoryLabel)
 
@@ -303,7 +347,7 @@ describe('StaticContentRepository parity', () => {
     }
   })
 
-  it('has exactly four LOCKED chapters and no UNAVAILABLE chapters', () => {
+  it('has exactly thirteen LOCKED chapters and no UNAVAILABLE chapters', () => {
     const repository = new StaticContentRepository()
     const allChapters = repository
       .listBooks()
@@ -319,6 +363,7 @@ describe('StaticContentRepository parity', () => {
     expect(locked.map((chapter) => chapter.id).sort()).toEqual(
       [...LOCKED_CHAPTER_IDS].sort(),
     )
+    expect(locked).toHaveLength(13)
     expect(unavailable).toHaveLength(0)
   })
 
