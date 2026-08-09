@@ -789,6 +789,47 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
   })
 })
 
+describe('AI Authoring Core V1 isolation', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('previews a deterministic draft without adding it to the production catalog', async () => {
+    const contentRepository = new StaticContentRepository()
+
+    render(
+      <App
+        dependencies={{
+          ...createDependencies(),
+          contentRepository,
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟創作預覽' }))
+    fireEvent.change(screen.getByLabelText('故事前提'), {
+      target: { value: '一名守夜人發現城市的鐘每天少響一聲。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '產生草稿預覽' }))
+
+    expect(await screen.findByText('DRAFT / NOT PUBLISHED')).toBeInTheDocument()
+    expect(screen.getByText('第 1 章：第1章：火種')).toBeInTheDocument()
+    expect(contentRepository.listBooks()).toHaveLength(12)
+    expect(
+      contentRepository
+        .listBooks()
+        .some(({ book }) => book.title === '懸疑故事預覽'),
+    ).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '返回閱讀目錄' }))
+    expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
+  })
+})
+
 describe('Persistent reader chapter navigation integrated journey', () => {
   afterEach(() => {
     cleanup()

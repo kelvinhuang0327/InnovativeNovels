@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import usePwaControllerSource from '../application/pwa/usePwaController.ts?raw'
+import authoringSource from '../features/authoring/AuthoringPreviewScreen.tsx?raw'
 import bookDetailSource from '../features/book-detail/BookDetailScreen.tsx?raw'
 import catalogSource from '../features/catalog/CatalogScreen.tsx?raw'
 import continueReadingShelfSource from '../features/library/ContinueReadingShelf.tsx?raw'
@@ -19,6 +20,7 @@ const featureFiles = [
   ['ChapterBookmarksModal.tsx', bookmarksModalSource],
   ['TableOfContentsModal.tsx', tocModalSource],
   ['ContinueReadingShelf.tsx', continueReadingShelfSource],
+  ['AuthoringPreviewScreen.tsx', authoringSource],
   ['PwaControls.tsx', pwaControlsSource],
 ]
 
@@ -55,5 +57,11 @@ describe('feature boundaries', () => {
   it('keeps manual install guidance dismissal free of persistence', () => {
     expect(usePwaControllerSource).not.toMatch(/\blocalStorage\b/)
     expect(usePwaControllerSource).not.toMatch(/ReadingState/)
+  })
+
+  it('keeps provider and network behavior out of authoring feature UI', () => {
+    expect(authoringSource).not.toMatch(/DeterministicDraftProvider/)
+    expect(authoringSource).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket/)
+    expect(authoringSource).not.toMatch(/localStorage/)
   })
 })

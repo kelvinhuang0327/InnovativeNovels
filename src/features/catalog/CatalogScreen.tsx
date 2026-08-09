@@ -12,6 +12,7 @@ interface CatalogScreenProps {
   readonly continueReading: readonly ContinueReadingEntry[]
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
+  readonly onOpenAuthoring?: () => void
 }
 
 export function CatalogScreen({
@@ -19,6 +20,7 @@ export function CatalogScreen({
   continueReading,
   onOpenBook,
   onContinueBook,
+  onOpenAuthoring,
 }: CatalogScreenProps) {
   const [searchText, setSearchText] = useState('')
   const [selectedGenre, setSelectedGenre] = useState<string | undefined>(
@@ -48,6 +50,14 @@ export function CatalogScreen({
         探索故事
       </h1>
       <p className="screen-copy">從一段潮聲開始，走進今天的閱讀旅程。</p>
+
+      {onOpenAuthoring && (
+        <div className="authoring-entry">
+          <button className="button-secondary" onClick={onOpenAuthoring} type="button">
+            開啟創作預覽
+          </button>
+        </div>
+      )}
 
       {continueReading.length > 0 && (
         <ContinueReadingShelf

@@ -343,6 +343,149 @@ button:focus-visible {
   font-weight: 400;
 }
 
+.authoring-entry {
+  margin-top: 1.5rem;
+}
+
+.authoring-navigation {
+  margin-top: 0;
+}
+
+.authoring-provider-note {
+  margin: 0.75rem 0 0;
+  color: #65594d;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.authoring-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid #ded8cd;
+  border-radius: 1.25rem;
+  background: #fffdf8;
+}
+
+.authoring-field {
+  display: grid;
+  gap: 0.4rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.authoring-field input,
+.authoring-field textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #ded8cd;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #2b221a;
+  font: inherit;
+  font-weight: 400;
+}
+
+.authoring-field textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.authoring-field input:focus-visible,
+.authoring-field textarea:focus-visible {
+  outline: 3px solid #e1a867;
+  outline-offset: 3px;
+}
+
+.authoring-error {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border-left: 0.35rem solid #8d3f2f;
+  background: rgba(141, 63, 47, 0.08);
+  color: #713125;
+  line-height: 1.6;
+}
+
+.draft-preview {
+  margin-top: 2rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 2px solid #8d3f2f;
+  border-radius: 1.25rem;
+  background: #fffdf8;
+}
+
+.draft-preview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.authoring-draft-status {
+  margin: 0;
+  color: #8d3f2f;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.authoring-quality-status {
+  margin: 0;
+  color: #713125;
+  font-weight: 800;
+}
+
+.draft-preview h2 {
+  margin-bottom: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.8rem;
+}
+
+.draft-preview h3 {
+  margin: 2rem 0 0.75rem;
+  color: #2b221a;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.draft-preview h4 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.authoring-category {
+  color: #8d3f2f;
+  font-weight: 700;
+}
+
+.draft-preview ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.6;
+}
+
+.draft-chapter-list {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.draft-chapter-list li {
+  padding: 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.draft-chapter-list p {
+  margin: 0.75rem 0 0;
+  line-height: 1.7;
+}
+
 .empty-state {
   margin-top: 2rem;
   padding: 1.25rem;

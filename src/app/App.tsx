@@ -4,6 +4,7 @@ import {
   listCatalog,
 } from '../application/catalog/catalogUseCases'
 import type { ContentRepository } from '../application/catalog/contentRepository'
+import type { GenerationProvider } from '../application/authoring/generationProvider'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
@@ -34,6 +35,7 @@ import {
   type ReaderPreferences,
 } from '../domain/reading/readerPreferences'
 import { BookDetailScreen } from '../features/book-detail/BookDetailScreen'
+import { AuthoringPreviewScreen } from '../features/authoring/AuthoringPreviewScreen'
 import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
@@ -44,6 +46,7 @@ import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persi
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
 import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
 import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
+import { DeterministicDraftProvider } from '../infrastructure/authoring/deterministicDraftProvider'
 import './App.css'
 
 export interface AppDependencies {
@@ -52,6 +55,7 @@ export interface AppDependencies {
   readonly readerPreferencesRepository?: ReaderPreferencesRepository
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
   readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
+  readonly authoringProvider?: GenerationProvider
 }
 
 interface AppProps {
@@ -61,6 +65,7 @@ interface AppProps {
 
 type Screen =
   | { readonly name: 'catalog' }
+  | { readonly name: 'authoring' }
   | {
       readonly name: 'book-detail'
       readonly bookId: string
@@ -73,6 +78,7 @@ type Screen =
     }
 
 const defaultContentRepository = new StaticContentRepository()
+const defaultAuthoringProvider = new DeterministicDraftProvider()
 const defaultPwaDependencies: PwaDependencies = {
   browser: new BrowserPwaAdapter(window, window.navigator),
   serviceWorker: new ViteServiceWorkerAdapter(),
@@ -319,6 +325,16 @@ function App({
           )}
           onContinueBook={openReader}
           onOpenBook={openBookDetail}
+          onOpenAuthoring={() => setScreen({ name: 'authoring' })}
+        />
+      )}
+
+      {screen.name === 'authoring' && (
+        <AuthoringPreviewScreen
+          onBack={() => setScreen({ name: 'catalog' })}
+          provider={
+            dependencies.authoringProvider ?? defaultAuthoringProvider
+          }
         />
       )}
 
