@@ -34,6 +34,12 @@ const NEW_IMPORTED_BOOKS = [
     categoryLabel: '言情',
     firstChapterTitle: '第一章：陌生的鑰匙',
   },
+  {
+    id: 'book-legacy-book-5',
+    title: '鏡海之城',
+    categoryLabel: '奇幻',
+    firstChapterTitle: '第一章：水面的另一側',
+  },
 ] as const
 
 function createReadingStateRepository(): ReadingStateRepository {
@@ -55,7 +61,7 @@ describe('imported legacy book application path', () => {
     const matches = filterCatalog(books, { searchText: '吞噬古帝' })
     const book = getBookDetail(repository, IMPORTED_BOOK_ID)
 
-    expect(books).toHaveLength(11)
+    expect(books).toHaveLength(12)
     expect(matches.map((entry) => entry.book.id)).toEqual([IMPORTED_BOOK_ID])
     expect(book?.book).toMatchObject({
       id: IMPORTED_BOOK_ID,

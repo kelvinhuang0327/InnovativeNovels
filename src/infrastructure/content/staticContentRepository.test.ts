@@ -16,6 +16,7 @@ const EXPECTED_CATALOG_ORDER = [
   'book-legacy-book-3',
   'book-legacy-book-6',
   'book-legacy-book-4',
+  'book-legacy-book-5',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -77,6 +78,11 @@ const EXPECTED_BOOK_METADATA: Record<
     authorName: 'NovelCraft AI',
     categoryLabel: '言情',
   },
+  'book-legacy-book-5': {
+    title: '鏡海之城',
+    authorName: 'NovelCraft AI',
+    categoryLabel: '奇幻',
+  },
 }
 
 const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
@@ -135,6 +141,10 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
   'book-legacy-book-4': Array.from(
     { length: 13 },
     (_, index) => `chapter-legacy-book-4-${index + 1}`,
+  ),
+  'book-legacy-book-5': Array.from(
+    { length: 13 },
+    (_, index) => `chapter-legacy-book-5-${index + 1}`,
   ),
 }
 
@@ -204,7 +214,7 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   },
 }
 
-for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-book-4']) {
+for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-book-4', 'book-legacy-book-5']) {
   const legacyBookId = bookId.replace('book-legacy-', '')
 
   for (let sequence = 1; sequence <= 13; sequence += 1) {
@@ -265,18 +275,19 @@ const LOCKED_CHAPTER_IDS = [
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-3-${index + 11}`),
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-6-${index + 11}`),
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-4-${index + 11}`),
+  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-5-${index + 11}`),
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the eleven books in the expected catalog order', () => {
+  it('lists exactly the twelve books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(11)
+    expect(books).toHaveLength(12)
   })
 
-  it('represents all eleven target genres in the catalog', () => {
+  it('represents all target genres in the catalog', () => {
     const repository = new StaticContentRepository()
     const genres = repository.listBooks().map((entry) => entry.book.categoryLabel)
 
@@ -347,7 +358,7 @@ describe('StaticContentRepository parity', () => {
     }
   })
 
-  it('has exactly thirteen LOCKED chapters and no UNAVAILABLE chapters', () => {
+  it('has exactly sixteen LOCKED chapters and no UNAVAILABLE chapters', () => {
     const repository = new StaticContentRepository()
     const allChapters = repository
       .listBooks()
@@ -363,7 +374,7 @@ describe('StaticContentRepository parity', () => {
     expect(locked.map((chapter) => chapter.id).sort()).toEqual(
       [...LOCKED_CHAPTER_IDS].sort(),
     )
-    expect(locked).toHaveLength(13)
+    expect(locked).toHaveLength(16)
     expect(unavailable).toHaveLength(0)
   })
 
