@@ -292,7 +292,7 @@ describe('loadCatalogContent', () => {
 })
 
 describe('loadProductionCatalogContent', () => {
-  it('discovers exactly the six real fixtures via eager glob, sorted by catalogSequence', () => {
+  it('discovers exactly the seven real fixtures via eager glob, sorted by catalogSequence', () => {
     const { books, proseByChapterId } = loadProductionCatalogContent()
 
     expect(books.map((entry) => entry.book.id)).toEqual([
@@ -302,10 +302,11 @@ describe('loadProductionCatalogContent', () => {
       'book-plum-rain-letter',
       'book-ember-crown',
       'book-orbit-last-light',
+      'book-legacy-book-1',
     ])
     expect(books[0].chapters.map((chapter) => chapter.sequence)).toEqual([
       3, 1, 2,
     ])
-    expect(proseByChapterId.size).toBe(18)
+    expect(proseByChapterId.size).toBe(22)
   })
 })

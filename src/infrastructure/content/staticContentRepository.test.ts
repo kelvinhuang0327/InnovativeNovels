@@ -11,6 +11,7 @@ const EXPECTED_CATALOG_ORDER = [
   'book-plum-rain-letter',
   'book-ember-crown',
   'book-orbit-last-light',
+  'book-legacy-book-1',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -46,6 +47,11 @@ const EXPECTED_BOOK_METADATA: Record<
     title: '軌道盡頭的微光',
     authorName: '岑海',
     categoryLabel: '科幻',
+  },
+  'book-legacy-book-1': {
+    title: '吞噬古帝',
+    authorName: '黑白仙鶴',
+    categoryLabel: '玄幻奇幻',
   },
 }
 
@@ -83,6 +89,12 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-orbit-fracture-line',
     'chapter-orbit-last-brace',
     'chapter-orbit-safe-passage',
+  ],
+  'book-legacy-book-1': [
+    'chapter-legacy-book-1-1',
+    'chapter-legacy-book-1-2',
+    'chapter-legacy-book-1-3',
+    'chapter-legacy-book-1-4',
   ],
 }
 
@@ -187,20 +199,20 @@ const LOCKED_CHAPTER_IDS = [
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the six books in the expected catalog order', () => {
+  it('lists exactly the seven books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(6)
+    expect(books).toHaveLength(7)
   })
 
-  it('represents all six target genres in the catalog', () => {
+  it('represents all seven target genres in the catalog', () => {
     const repository = new StaticContentRepository()
     const genres = repository.listBooks().map((entry) => entry.book.categoryLabel)
 
     expect(new Set(genres)).toEqual(
-      new Set(['懸疑', '仙俠', '都市', '言情', '奇幻', '科幻']),
+      new Set(['懸疑', '仙俠', '都市', '言情', '奇幻', '科幻', '玄幻奇幻']),
     )
   })
 
