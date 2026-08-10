@@ -314,7 +314,7 @@ describe('loadProductionCatalogContent', () => {
     expect(books[0].chapters.map((chapter) => chapter.sequence)).toEqual([
       3, 1, 2,
     ])
-    expect(proseByChapterId.size).toBe(67)
+    expect(proseByChapterId.size).toBe(69)
   })
 
   it('loads the complete owner-reviewed tide archive metadata and paragraphs', () => {
@@ -335,14 +335,18 @@ describe('loadProductionCatalogContent', () => {
       '沉入海底的鐘',
       '舊港的回聲',
       '第四點整',
+      '退潮後的灰線',
+      '第七口井',
     ])
     expect(entry?.chapters.every((chapter) => chapter.access === 'READABLE')).toBe(true)
     expect(entry?.chapters.map((chapter) => chapter.id)).toEqual([
       'chapter-tide-archive-001',
       'chapter-tide-archive-002',
       'chapter-tide-archive-003',
+      'chapter-tide-archive-004',
+      'chapter-tide-archive-005',
     ])
-    expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([1, 2, 3])
+    expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([1, 2, 3, 4, 5])
     expect(proseByChapterId.get('chapter-tide-archive-001')).toEqual(
       tideArchiveFixture.chapters[0].prose,
     )

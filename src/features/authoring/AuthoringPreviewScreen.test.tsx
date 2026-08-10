@@ -94,7 +94,7 @@ const extendedPublishedDraftJson = JSON.stringify({
   title: tideArchiveFixture.title,
   genre: tideArchiveFixture.categoryLabel,
   chapters: [
-    ...tideArchiveFixture.chapters.map((chapter) => ({
+    ...tideArchiveFixture.chapters.slice(0, 3).map((chapter) => ({
       sequence: chapter.sequence,
       title: chapter.title,
       prose: chapter.prose?.join('\n\n') ?? '',
@@ -111,6 +111,12 @@ const extendedPublishedDraftJson = JSON.stringify({
     },
   ],
 })
+
+const appendBaseProductionBooks = liveProduction.books.map((entry) =>
+  entry.book.id === 'book-tide-archive'
+    ? { ...entry, chapters: entry.chapters.slice(0, 3) }
+    : entry,
+)
 
 function createSessionRepository(): AuthoringSessionRepository {
   let session: Parameters<AuthoringSessionRepository['save']>[0] | undefined
@@ -463,7 +469,7 @@ describe('AuthoringPreviewScreen', () => {
           clipboardPort={{ writeText }}
           gatewayClient={createClient()}
           onBack={vi.fn()}
-          productionBooks={liveProduction.books}
+          productionBooks={appendBaseProductionBooks}
           productionChapterProse={(chapterId) =>
             liveProduction.proseByChapterId.get(chapterId)
           }

@@ -159,6 +159,8 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-tide-archive-001',
     'chapter-tide-archive-002',
     'chapter-tide-archive-003',
+    'chapter-tide-archive-004',
+    'chapter-tide-archive-005',
   ],
 }
 
@@ -410,7 +412,7 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(13)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(15)
   })
 
   it('lets the reader open the full published first chapter', () => {

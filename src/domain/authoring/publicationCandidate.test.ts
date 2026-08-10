@@ -60,6 +60,8 @@ describe('publication candidate builder', () => {
       'chapter-tide-archive-001',
       'chapter-tide-archive-002',
       'chapter-tide-archive-003',
+      'chapter-tide-archive-004',
+      'chapter-tide-archive-005',
     ])
     expect(first.candidate).toEqual(second.candidate)
   })
@@ -115,6 +117,8 @@ describe('publication candidate builder', () => {
       'chapter-tide-archive-001',
       'chapter-tide-archive-002',
       'chapter-tide-archive-003',
+      'chapter-tide-archive-004',
+      'chapter-tide-archive-005',
     ])
     expect(result.issues.map((item) => item.code)).toContain(
       'CHAPTER_ID_COLLISION',
@@ -125,7 +129,6 @@ describe('publication candidate builder', () => {
     const reordered = draft({
       chapters: [draftShape.chapters[2], draftShape.chapters[0], draftShape.chapters[1]],
     })
-    const original = buildPublicationCandidate(draft(), metadata)
     const changedSlug = buildPublicationCandidate(draft(), {
       ...metadata,
       publicationSlug: 'different-archive',
@@ -142,13 +145,19 @@ describe('publication candidate builder', () => {
       '舊港的回聲',
     ])
     expect(rebuilt.candidate?.chapters.map((chapter) => chapter.chapterId)).toEqual(
-      original.candidate?.chapters.map((chapter) => chapter.chapterId),
+      [
+        'chapter-tide-archive-001',
+        'chapter-tide-archive-002',
+        'chapter-tide-archive-003',
+      ],
     )
   })
 
   it('maps every valid authored chapter to READABLE and rejects empty prose', () => {
     const ready = buildPublicationCandidate(draft(), metadata)
     expect(ready.candidate?.chapters.map((chapter) => chapter.access)).toEqual([
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
       CHAPTER_ACCESS.READABLE,
       CHAPTER_ACCESS.READABLE,
       CHAPTER_ACCESS.READABLE,
@@ -184,6 +193,8 @@ describe('publication candidate builder', () => {
       9,
       11,
       11,
+      52,
+      61,
     ])
     expect(() =>
       parseContentBookFixture(

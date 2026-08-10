@@ -42,7 +42,7 @@ const publishedBook: PublishedBookSnapshot = createPublishedBookSnapshot(
     },
     catalogSequence: targetEntry.catalogSequence,
     description: targetEntry.description,
-    chapters: targetEntry.chapters.map((chapter) => ({
+    chapters: targetEntry.chapters.slice(0, 3).map((chapter) => ({
       chapterId: chapter.id as string,
       sequence: chapter.sequence,
       title: chapter.title,
@@ -52,8 +52,10 @@ const publishedBook: PublishedBookSnapshot = createPublishedBookSnapshot(
   (chapterId) => productionCatalog.proseByChapterId.get(chapterId),
 ) as PublishedBookSnapshot
 
-const allProductionChapterIds = productionCatalog.books.flatMap(({ chapters }) =>
-  chapters.map((chapter) => chapter.id as string),
+const allProductionChapterIds = productionCatalog.books.flatMap(({ book, chapters }) =>
+  (book.id === 'book-tide-archive' ? chapters.slice(0, 3) : chapters).map(
+    (chapter) => chapter.id as string,
+  ),
 )
 
 const validator = (fixture: Parameters<typeof parseContentBookFixture>[1]) => {
