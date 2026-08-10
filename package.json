@@ -12,6 +12,7 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts",
+    "apply:published-append-candidate": "node --loader ./scripts/typescript-loader.mjs ./scripts/apply-published-append-candidate.mjs",
     "cap:sync": "cap sync",
     "cap:ios": "cap open ios",
     "cap:android": "cap open android",
