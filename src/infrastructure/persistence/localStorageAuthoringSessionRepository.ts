@@ -25,6 +25,7 @@ interface StoredAuthoringSession {
   readonly draft?: GeneratedDraft
   readonly publicationPreparation?: PublicationPreparationMetadata
   readonly targetPublishedBookId?: string
+  readonly basePublishedBookFingerprint?: string
   readonly publishedAppendCandidate?: PublishedAppendCandidate
 }
 
@@ -36,6 +37,7 @@ const SESSION_FIELDS = new Set([
   'draft',
   'publicationPreparation',
   'targetPublishedBookId',
+  'basePublishedBookFingerprint',
   'publishedAppendCandidate',
 ])
 const SPEC_FIELDS = new Set([
@@ -244,6 +246,19 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       return undefined
     }
 
+    const basePublishedBookFingerprint =
+      candidate.basePublishedBookFingerprint === undefined
+        ? undefined
+        : typeof candidate.basePublishedBookFingerprint === 'string'
+          ? candidate.basePublishedBookFingerprint
+          : undefined
+    if (
+      candidate.basePublishedBookFingerprint !== undefined &&
+      basePublishedBookFingerprint === undefined
+    ) {
+      return undefined
+    }
+
     const publishedAppendCandidate =
       candidate.publishedAppendCandidate === undefined
         ? undefined
@@ -271,6 +286,7 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       draft,
       publicationPreparation,
       targetPublishedBookId,
+      basePublishedBookFingerprint,
       publishedAppendCandidate,
     }
   } catch {
@@ -316,6 +332,7 @@ export class LocalStorageAuthoringSessionRepository
         : undefined,
         publicationPreparation: session.publicationPreparation,
         targetPublishedBookId: session.targetPublishedBookId,
+        basePublishedBookFingerprint: session.basePublishedBookFingerprint,
         publishedAppendCandidate: session.publishedAppendCandidate,
       }
       this.storage.setItem(

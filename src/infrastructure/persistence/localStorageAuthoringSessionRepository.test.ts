@@ -41,6 +41,7 @@ const session = {
     catalogSequence: 13,
   },
   targetPublishedBookId: 'book-tide-archive',
+  basePublishedBookFingerprint: 'base-fingerprint-v1',
   publishedAppendCandidate: {
     schemaVersion: 1 as const,
     readiness: 'READY' as const,
@@ -113,6 +114,7 @@ describe('LocalStorageAuthoringSessionRepository', () => {
       session.publicationPreparation,
     )
     expect(restored?.targetPublishedBookId).toBe('book-tide-archive')
+    expect(restored?.basePublishedBookFingerprint).toBe('base-fingerprint-v1')
     expect(restored?.publishedAppendCandidate?.appendedChapters).toHaveLength(1)
   })
 

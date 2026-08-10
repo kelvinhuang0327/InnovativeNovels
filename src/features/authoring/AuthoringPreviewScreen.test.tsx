@@ -12,6 +12,8 @@ import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
 import tideArchiveFixture from '../../infrastructure/content/books/book-tide-archive.json'
 import { parseContentBookFixture } from '../../infrastructure/content/catalogContentContract'
 import { loadProductionCatalogContent } from '../../infrastructure/content/catalogContentLoader'
+import { fingerprintPublishedBook } from '../../domain/authoring/publishedAppendCandidate'
+import { createPublishedBookSnapshot } from '../../domain/authoring/publishedAppendCandidate'
 import { AuthoringPreviewScreen } from './AuthoringPreviewScreen'
 
 const generatedDraft: GeneratedDraft = {
@@ -166,6 +168,165 @@ describe('AuthoringPreviewScreen', () => {
         premise: '一名守夜人發現城市的鐘每天少響一聲。',
       }),
     )
+  })
+
+  it('loads book-tide-archive as a five-chapter continuation and prepares a six-seven append candidate', async () => {
+    const sessionRepository = createSessionRepository()
+    const productionBook = liveProduction.books.find(
+      ({ book }) => book.id === 'book-tide-archive',
+    )
+    expect(productionBook).toBeDefined()
+    if (!productionBook) {
+      return
+    }
+
+    const snapshot = createPublishedBookSnapshot(
+      {
+        book: {
+          id: productionBook.book.id as string,
+          title: productionBook.book.title,
+          authorName: productionBook.book.authorName,
+          categoryLabel: productionBook.book.categoryLabel,
+        },
+        catalogSequence: productionBook.catalogSequence,
+        description: productionBook.description,
+        chapters: productionBook.chapters.map((chapter) => ({
+          chapterId: chapter.id as string,
+          sequence: chapter.sequence,
+          title: chapter.title,
+          access: chapter.access,
+        })),
+      },
+      (chapterId) => liveProduction.proseByChapterId.get(chapterId),
+    )
+    expect(snapshot).toBeDefined()
+    if (!snapshot) {
+      return
+    }
+    const baseFingerprint = await fingerprintPublishedBook(snapshot)
+    const productionBefore = JSON.stringify(liveProduction)
+    const catalogCountBefore = liveProduction.books.length
+
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        productionBooks={liveProduction.books}
+        productionChapterProse={(chapterId) =>
+          liveProduction.proseByChapterId.get(chapterId)
+        }
+        sessionRepository={sessionRepository}
+        validateProductionFixture={(fixture) =>
+          parseContentBookFixture(`./books/${fixture.bookId}.json`, fixture)
+        }
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Published Book'), {
+      target: { value: 'book-tide-archive' },
+    })
+    expect(screen.getByText(/將載入「潮汐檔案」的/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue Published Book' }))
+
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(5)
+    expect(screen.getByText('第 5 章：第七口井')).toBeInTheDocument()
+    expect(screen.getByText(/Base fingerprint captured/)).toHaveTextContent(baseFingerprint)
+    expect(sessionRepository.load()).toEqual(
+      expect.objectContaining({
+        targetPublishedBookId: 'book-tide-archive',
+        basePublishedBookFingerprint: baseFingerprint,
+        draft: expect.objectContaining({ chapters: expect.any(Array) }),
+      }),
+    )
+
+    fireEvent.change(screen.getByLabelText('Requested next chapters（1–5）'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Continuation Prompt' }))
+    expect(
+      (screen.getByRole('textbox', {
+        name: 'Generated Continuation Prompt',
+      }) as HTMLTextAreaElement).value,
+    ).toContain('starting at sequence 6')
+
+    const continuationJson = JSON.stringify({
+      chapters: [
+        {
+          sequence: 6,
+          title: '第六章',
+          prose: '六之一。\n\n六之二。\n\n六之三。\n\n六之四。\n\n六之五。',
+        },
+        {
+          sequence: 7,
+          title: '第七章',
+          prose: '七之一。\n\n七之二。\n\n七之三。\n\n七之四。\n\n七之五。',
+        },
+      ],
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Continuation JSON' }), {
+      target: { value: continuationJson },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Import Continuation' }))
+    expect(screen.getByText('品質檢查：STALE')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(7)
+    expect(screen.getByText('第 1 章：沉入海底的鐘')).toBeInTheDocument()
+    expect(screen.getByText('第 5 章：第七口井')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare Chapter Append' }))
+
+    expect(await screen.findByText('Proposed appended chapter count：2')).toBeInTheDocument()
+    expect(screen.getByText('Append candidate readiness：READY')).toBeInTheDocument()
+    expect(screen.getByText('Production validation：PASS')).toBeInTheDocument()
+    const candidate = JSON.parse(
+      (screen.getByRole('textbox', { name: 'Append Candidate JSON' }) as HTMLTextAreaElement).value,
+    ) as {
+      appendedChapters: Array<{ sequence: number }>
+      updatedFixturePreview: { chapters: unknown[] }
+    }
+    expect(candidate.appendedChapters.map(({ sequence }) => sequence)).toEqual([6, 7])
+    expect(candidate.updatedFixturePreview.chapters).toHaveLength(7)
+    expect(JSON.stringify(liveProduction)).toBe(productionBefore)
+    expect(liveProduction.books).toHaveLength(catalogCountBefore)
+    expect(productionBook.chapters).toHaveLength(5)
+  })
+
+  it('preserves the existing session when replacement is cancelled', async () => {
+    const sessionRepository = createSessionRepository()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        productionBooks={liveProduction.books}
+        productionChapterProse={(chapterId) =>
+          liveProduction.proseByChapterId.get(chapterId)
+        }
+        sessionRepository={sessionRepository}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('故事前提'), {
+      target: { value: '現有草稿的故事前提。' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Import Structured Draft' }))
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    const before = sessionRepository.load()
+
+    fireEvent.change(screen.getByLabelText('Published Book'), {
+      target: { value: 'book-tide-archive' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue Published Book' }))
+
+    expect(confirm).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(3)
+    expect(sessionRepository.load()).toEqual(before)
+    confirm.mockRestore()
   })
 
   it('shows validation feedback returned by the gateway', async () => {

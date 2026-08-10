@@ -9,6 +9,7 @@ export interface AuthoringSession {
   readonly draft?: Draft
   readonly publicationPreparation?: PublicationPreparationMetadata
   readonly targetPublishedBookId?: string
+  readonly basePublishedBookFingerprint?: string
   readonly publishedAppendCandidate?: PublishedAppendCandidate
 }
 

@@ -48,11 +48,13 @@ import {
   buildPublishedAppendCandidate,
   createPublishedBookSnapshot,
   exportPublishedAppendCandidate,
+  fingerprintPublishedBook,
   isPublishedAppendCandidateCurrent,
   type PublishedAppendCandidate,
   type PublishedAppendCandidateBuildResult,
   type ProductionFixtureValidator,
 } from '../../domain/authoring/publishedAppendCandidate'
+import { buildPublishedBookContinuationDraft } from '../../domain/authoring/publishedBookContinuation'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
@@ -91,6 +93,7 @@ type DraftPreviewResult = SuccessfulDraftResult & {
     | 'gateway'
     | 'agent-import'
     | 'continuation-import'
+    | 'published-book-import'
     | 'restored-session'
 }
 
@@ -121,6 +124,7 @@ function hasMeaningfulSession(
   draft: Draft | undefined,
   publicationPreparation: PublicationPreparationMetadata,
   targetPublishedBookId: string | undefined,
+  basePublishedBookFingerprint: string | undefined,
   publishedAppendCandidate: PublishedAppendCandidate | undefined,
 ): boolean {
   return (
@@ -137,6 +141,7 @@ function hasMeaningfulSession(
     Boolean(publicationPreparation.description.trim()) ||
     publicationPreparation.catalogSequence !== undefined ||
     Boolean(targetPublishedBookId) ||
+    Boolean(basePublishedBookFingerprint) ||
     Boolean(publishedAppendCandidate)
   )
 }
@@ -162,6 +167,49 @@ function withQuality(
   quality: DraftQualityResult,
 ): Draft {
   return { ...generated, status: 'DRAFT', quality }
+}
+
+function snapshotForPublishedBook(
+  selectedPublishedBook: ContentBook,
+  productionChapterProse: (
+    chapterId: string,
+  ) => readonly string[] | undefined,
+) {
+  return createPublishedBookSnapshot(
+    {
+      book: {
+        id: selectedPublishedBook.book.id as string,
+        title: selectedPublishedBook.book.title,
+        authorName: selectedPublishedBook.book.authorName,
+        categoryLabel: selectedPublishedBook.book.categoryLabel,
+      },
+      catalogSequence: selectedPublishedBook.catalogSequence,
+      description: selectedPublishedBook.description,
+      chapters: selectedPublishedBook.chapters.map((chapter) => ({
+        chapterId: chapter.id as string,
+        sequence: chapter.sequence,
+        title: chapter.title,
+        access: chapter.access,
+      })),
+    },
+    productionChapterProse,
+  )
+}
+
+function draftsHaveSameContent(left: Draft | undefined, right: Draft): boolean {
+  if (!left) {
+    return false
+  }
+
+  return JSON.stringify({
+    title: left.title,
+    categoryLabel: left.categoryLabel,
+    chapters: left.chapters,
+  }) === JSON.stringify({
+    title: right.title,
+    categoryLabel: right.categoryLabel,
+    chapters: right.chapters,
+  })
 }
 
 export function AuthoringPreviewScreen({
@@ -196,6 +244,11 @@ export function AuthoringPreviewScreen({
   const [targetPublishedBookId, setTargetPublishedBookId] = useState<
     string | undefined
   >(() => restoredSession?.targetPublishedBookId)
+  const [basePublishedBookFingerprint, setBasePublishedBookFingerprint] =
+    useState<string | undefined>(() => restoredSession?.basePublishedBookFingerprint)
+  const [publishedBookSelection, setPublishedBookSelection] = useState(
+    () => restoredSession?.targetPublishedBookId ?? '',
+  )
   const [publishedAppendCandidate, setPublishedAppendCandidate] = useState<
     PublishedAppendCandidate | undefined
   >(() => restoredSession?.publishedAppendCandidate)
@@ -237,6 +290,7 @@ export function AuthoringPreviewScreen({
         result?.draft,
         publicationPreparation,
         targetPublishedBookId,
+        basePublishedBookFingerprint,
         publishedAppendCandidate,
       )
     ) {
@@ -251,6 +305,7 @@ export function AuthoringPreviewScreen({
       draft: result?.draft,
       publicationPreparation,
       targetPublishedBookId,
+      basePublishedBookFingerprint,
       publishedAppendCandidate,
     })
   }, [
@@ -258,6 +313,7 @@ export function AuthoringPreviewScreen({
     continuationPrompt,
     publicationPreparation,
     publishedAppendCandidate,
+    basePublishedBookFingerprint,
     result,
     sessionRepository,
     spec,
@@ -281,24 +337,12 @@ export function AuthoringPreviewScreen({
   const selectedPublishedBook = productionBooks.find(
     ({ book }) => (book.id as string) === targetPublishedBookId,
   )
+  const continuationSelectionBook = productionBooks.find(
+    ({ book }) => (book.id as string) === publishedBookSelection,
+  )
   const publishedBookSnapshot = selectedPublishedBook
-    ? createPublishedBookSnapshot(
-        {
-          book: {
-            id: selectedPublishedBook.book.id as string,
-            title: selectedPublishedBook.book.title,
-            authorName: selectedPublishedBook.book.authorName,
-            categoryLabel: selectedPublishedBook.book.categoryLabel,
-          },
-          catalogSequence: selectedPublishedBook.catalogSequence,
-          description: selectedPublishedBook.description,
-          chapters: selectedPublishedBook.chapters.map((chapter) => ({
-            chapterId: chapter.id as string,
-            sequence: chapter.sequence,
-            title: chapter.title,
-            access: chapter.access,
-          })),
-        },
+    ? snapshotForPublishedBook(
+        selectedPublishedBook,
         productionChapterProse ?? (() => undefined),
       )
     : undefined
@@ -544,6 +588,8 @@ export function AuthoringPreviewScreen({
     setResult(undefined)
     setPublicationPreparation(INITIAL_PUBLICATION_PREPARATION)
     setTargetPublishedBookId(undefined)
+    setBasePublishedBookFingerprint(undefined)
+    setPublishedBookSelection('')
     setPublishedAppendCandidate(undefined)
     setAppendBuildResult(undefined)
     setQualityIsStale(false)
@@ -555,6 +601,97 @@ export function AuthoringPreviewScreen({
     setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
+  }
+
+  const handleContinuePublishedBook = async () => {
+    setErrorMessage(undefined)
+    setImportErrors([])
+    setContinuationImportErrors([])
+
+    if (!continuationSelectionBook) {
+      setErrorMessage('請先選擇要開始續寫的 published book。')
+      return
+    }
+
+    const snapshot = snapshotForPublishedBook(
+      continuationSelectionBook,
+      productionChapterProse ?? (() => undefined),
+    )
+    if (!snapshot) {
+      setErrorMessage(
+        'PUBLISHED_BOOK_MALFORMED: published book 缺少有效的 catalog metadata，無法開始續寫。',
+      )
+      return
+    }
+
+    const converted = buildPublishedBookContinuationDraft(snapshot)
+    if (!converted.ok) {
+      setErrorMessage(converted.issue.message)
+      return
+    }
+
+    const nextSpec: AuthoringSpec = {
+      ...INITIAL_SPEC,
+      premise: continuationSelectionBook.description,
+      genre: continuationSelectionBook.book.categoryLabel,
+      titleHint: continuationSelectionBook.book.title,
+    }
+    const hasMateriallyDifferentSession =
+      hasMeaningfulSession(
+        spec,
+        agentPrompt,
+        continuationPrompt,
+        result?.draft,
+        publicationPreparation,
+        targetPublishedBookId,
+        basePublishedBookFingerprint,
+        publishedAppendCandidate,
+      ) &&
+      (targetPublishedBookId !== (continuationSelectionBook.book.id as string) ||
+        !draftsHaveSameContent(result?.draft, converted.draft) ||
+        JSON.stringify(spec) !== JSON.stringify(nextSpec) ||
+        Boolean(agentPrompt) ||
+        Boolean(continuationPrompt) ||
+        hasPublicationPreparationInput ||
+        Boolean(publishedAppendCandidate))
+
+    if (
+      hasMateriallyDifferentSession &&
+      !window.confirm(
+        '目前已有 Authoring Draft 或 session。開始此 published book continuation 會取代它，是否繼續？',
+      )
+    ) {
+      return
+    }
+
+    let baseFingerprint: string
+    try {
+      baseFingerprint = await fingerprintPublishedBook(snapshot)
+    } catch {
+      setErrorMessage('無法建立 published book 的 deterministic base fingerprint。')
+      return
+    }
+
+    setSpec(nextSpec)
+    setAgentPrompt(undefined)
+    setContinuationPrompt(undefined)
+    setRawAgentDraft('')
+    setRawContinuationJson('')
+    setContinuationImportErrors([])
+    setImportErrors([])
+    setPublicationPreparation(INITIAL_PUBLICATION_PREPARATION)
+    setTargetPublishedBookId(continuationSelectionBook.book.id as string)
+    setBasePublishedBookFingerprint(baseFingerprint)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
+    setResult({
+      ok: true,
+      draft: converted.draft,
+      quality: converted.draft.quality,
+      providerName: 'published-book-continuation',
+      source: 'published-book-import',
+    })
+    setQualityIsStale(true)
   }
 
   const handlePrepareAppend = async () => {
@@ -607,6 +744,53 @@ export function AuthoringPreviewScreen({
       <p className="authoring-provider-note" role="status">
         Draft provider / AI provider not connected
       </p>
+
+      {productionBooks.length > 0 && (
+        <section
+          aria-labelledby="published-book-continuation-heading"
+          className="agent-exchange-panel"
+        >
+          <h2 id="published-book-continuation-heading">
+            Continue Published Book
+          </h2>
+          <p>
+            從目前 production 的完整章節建立本地 Authoring Draft；不會修改或發佈 production。
+          </p>
+          <label className="authoring-field" htmlFor="published-book-selection">
+            Published Book
+            <select
+              id="published-book-selection"
+              onChange={(event) => setPublishedBookSelection(event.target.value)}
+              value={publishedBookSelection}
+            >
+              <option value="">選擇要續寫的書</option>
+              {productionBooks.map(({ book, chapters }) => (
+                <option key={book.id} value={book.id}>
+                  {book.title}（已出版 {chapters.length} 章）
+                </option>
+              ))}
+            </select>
+          </label>
+          {continuationSelectionBook && (
+            <p className="authoring-draft-status" role="status">
+              將載入「{continuationSelectionBook.book.title}」的{' '}
+              {continuationSelectionBook.chapters.length} 章；既有章節正文與順序會完整保留。
+            </p>
+          )}
+          <button
+            disabled={!continuationSelectionBook}
+            onClick={() => void handleContinuePublishedBook()}
+            type="button"
+          >
+            Continue Published Book
+          </button>
+          {basePublishedBookFingerprint && targetPublishedBookId && (
+            <p className="authoring-provider-note" role="status">
+              Base fingerprint captured for {targetPublishedBookId}：{basePublishedBookFingerprint}
+            </p>
+          )}
+        </section>
+      )}
 
       <form className="authoring-form" onSubmit={handleSubmit}>
         <label className="authoring-field" htmlFor="authoring-premise">
@@ -781,6 +965,8 @@ export function AuthoringPreviewScreen({
                   ? '來源：外部 Agent JSON（本地匯入）'
                   : result.source === 'continuation-import'
                     ? '來源：外部 Continuation JSON（本地附加）'
+                  : result.source === 'published-book-import'
+                    ? '來源：published production book（本地續寫 Draft）'
                   : result.source === 'restored-session'
                     ? '來源：本地 authoring session restore'
                     : `Provider: ${result.providerName}`}
