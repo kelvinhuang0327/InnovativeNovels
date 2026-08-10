@@ -55,6 +55,12 @@ import {
   type ProductionFixtureValidator,
 } from '../../domain/authoring/publishedAppendCandidate'
 import { buildPublishedBookContinuationDraft } from '../../domain/authoring/publishedBookContinuation'
+import {
+  createEmptyStoryBible,
+  hasStoryBibleContent,
+  type StoryBibleV1,
+} from '../../domain/authoring/storyBible'
+import { StoryBibleEditor } from './StoryBibleEditor'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
@@ -119,6 +125,7 @@ function restoredAppendBuildResult(
 
 function hasMeaningfulSession(
   spec: AuthoringSpec,
+  storyBible: StoryBibleV1,
   agentPrompt: string | undefined,
   continuationPrompt: string | undefined,
   draft: Draft | undefined,
@@ -133,6 +140,7 @@ function hasMeaningfulSession(
     Boolean(spec.titleHint?.trim()) ||
     Boolean(spec.instructions?.trim()) ||
     spec.requestedChapterCount !== INITIAL_SPEC.requestedChapterCount ||
+    hasStoryBibleContent(storyBible) ||
     Boolean(agentPrompt) ||
     Boolean(continuationPrompt) ||
     Boolean(draft) ||
@@ -227,6 +235,9 @@ export function AuthoringPreviewScreen({
   const [spec, setSpec] = useState<AuthoringSpec>(
     () => restoredSession?.spec ?? INITIAL_SPEC,
   )
+  const [storyBible, setStoryBible] = useState<StoryBibleV1>(
+    () => restoredSession?.storyBible ?? createEmptyStoryBible(),
+  )
   const [agentPrompt, setAgentPrompt] = useState<string | undefined>(
     () => restoredSession?.agentPrompt,
   )
@@ -285,6 +296,7 @@ export function AuthoringPreviewScreen({
     if (
       !hasMeaningfulSession(
         spec,
+        storyBible,
         agentPrompt,
         continuationPrompt,
         result?.draft,
@@ -300,6 +312,7 @@ export function AuthoringPreviewScreen({
 
     sessionRepository.save({
       spec,
+      storyBible,
       agentPrompt,
       continuationPrompt,
       draft: result?.draft,
@@ -317,6 +330,7 @@ export function AuthoringPreviewScreen({
     result,
     sessionRepository,
     spec,
+    storyBible,
     targetPublishedBookId,
   ])
 
@@ -440,6 +454,7 @@ export function AuthoringPreviewScreen({
       }
 
       setResult({ ...nextResult, source: 'gateway' })
+      setStoryBible(createEmptyStoryBible())
       setPublishedAppendCandidate(undefined)
       setAppendBuildResult(undefined)
       setQualityIsStale(false)
@@ -457,7 +472,7 @@ export function AuthoringPreviewScreen({
       return
     }
 
-    setAgentPrompt(buildAgentPrompt(spec))
+    setAgentPrompt(buildAgentPrompt(spec, storyBible))
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
     setErrorMessage(undefined)
@@ -473,6 +488,7 @@ export function AuthoringPreviewScreen({
       result.draft,
       spec,
       continuationChapterCount,
+      storyBible,
     )
     if (!continuation.ok) {
       setErrorMessage(continuation.message)
@@ -513,6 +529,7 @@ export function AuthoringPreviewScreen({
     setImportErrors([])
     setContinuationImportErrors([])
     setContinuationPrompt(undefined)
+    setStoryBible(createEmptyStoryBible())
     setPublishedAppendCandidate(undefined)
     setAppendBuildResult(undefined)
     setResult({
@@ -583,6 +600,7 @@ export function AuthoringPreviewScreen({
   const handleClearSession = () => {
     sessionRepository?.clear()
     setSpec(INITIAL_SPEC)
+    setStoryBible(createEmptyStoryBible())
     setAgentPrompt(undefined)
     setContinuationPrompt(undefined)
     setResult(undefined)
@@ -639,6 +657,7 @@ export function AuthoringPreviewScreen({
     const hasMateriallyDifferentSession =
       hasMeaningfulSession(
         spec,
+        storyBible,
         agentPrompt,
         continuationPrompt,
         result?.draft,
@@ -650,6 +669,7 @@ export function AuthoringPreviewScreen({
       (targetPublishedBookId !== (continuationSelectionBook.book.id as string) ||
         !draftsHaveSameContent(result?.draft, converted.draft) ||
         JSON.stringify(spec) !== JSON.stringify(nextSpec) ||
+        hasStoryBibleContent(storyBible) ||
         Boolean(agentPrompt) ||
         Boolean(continuationPrompt) ||
         hasPublicationPreparationInput ||
@@ -673,6 +693,7 @@ export function AuthoringPreviewScreen({
     }
 
     setSpec(nextSpec)
+    setStoryBible(createEmptyStoryBible())
     setAgentPrompt(undefined)
     setContinuationPrompt(undefined)
     setRawAgentDraft('')
@@ -879,6 +900,17 @@ export function AuthoringPreviewScreen({
           </button>
         </div>
       </form>
+
+      <StoryBibleEditor
+        onChange={(nextStoryBible) => {
+          setStoryBible(nextStoryBible)
+          setAgentPrompt(undefined)
+          setContinuationPrompt(undefined)
+          setClipboardStatus(undefined)
+          setClipboardTarget(undefined)
+        }}
+        storyBible={storyBible}
+      />
 
       {errorMessage && (
         <p className="authoring-error" role="alert">

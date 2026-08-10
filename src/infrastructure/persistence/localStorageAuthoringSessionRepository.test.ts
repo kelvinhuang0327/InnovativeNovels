@@ -6,6 +6,7 @@ import {
 import {
   READING_STATE_STORAGE_KEY,
 } from './localStorageReadingStateRepository'
+import { createEmptyStoryBible } from '../../domain/authoring/storyBible'
 
 const session = {
   spec: {
@@ -14,6 +15,14 @@ const session = {
     titleHint: '潮汐檔案',
     instructions: '保留線索。',
     requestedChapterCount: 3,
+  },
+  storyBible: {
+    characters: [
+      { name: '林澄', notes: '追查潮汐裝置。' },
+    ],
+    worldRules: ['潮汐裝置會記錄沒有被選中的未來。'],
+    openThreads: ['下一次低潮前找到第一座鐘。'],
+    styleNotes: ['維持克制的科幻懸疑氛圍。'],
   },
   agentPrompt: 'Role: Novel Generation Agent',
   continuationPrompt: 'Role: Novel Continuation Agent',
@@ -105,6 +114,7 @@ describe('LocalStorageAuthoringSessionRepository', () => {
 
     const restored = repository.load()
     expect(restored?.spec).toEqual(session.spec)
+    expect(restored?.storyBible).toEqual(session.storyBible)
     expect(restored?.agentPrompt).toBe(session.agentPrompt)
     expect(restored?.continuationPrompt).toBe(session.continuationPrompt)
     expect(restored?.draft?.title).toBe('潮汐檔案')
@@ -165,6 +175,39 @@ describe('LocalStorageAuthoringSessionRepository', () => {
 
     expect(repository.load()).toBeUndefined()
     expect(window.localStorage.getItem(AUTHORING_SESSION_STORAGE_KEY)).toBeNull()
+  })
+
+  it('loads legacy sessions without Story Bible with an empty default', () => {
+    window.localStorage.setItem(
+      AUTHORING_SESSION_STORAGE_KEY,
+      JSON.stringify({ schemaVersion: 1, spec: session.spec }),
+    )
+    const repository = new LocalStorageAuthoringSessionRepository(
+      window.localStorage,
+    )
+
+    expect(repository.load()?.storyBible).toEqual(createEmptyStoryBible())
+  })
+
+  it('fails closed on malformed Story Bible without touching unrelated storage', () => {
+    window.localStorage.setItem(
+      AUTHORING_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        spec: session.spec,
+        storyBible: { characters: [{ name: '林澄' }] },
+      }),
+    )
+    window.localStorage.setItem(READING_STATE_STORAGE_KEY, 'reader-state')
+    const repository = new LocalStorageAuthoringSessionRepository(
+      window.localStorage,
+    )
+
+    expect(repository.load()).toBeUndefined()
+    expect(window.localStorage.getItem(AUTHORING_SESSION_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(
+      'reader-state',
+    )
   })
 
   it('clears only authoring session data', () => {

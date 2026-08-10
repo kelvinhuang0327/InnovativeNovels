@@ -240,6 +240,63 @@ describe('AuthoringPreviewScreen', () => {
       }),
     )
 
+    fireEvent.change(screen.getByLabelText('New Character name'), {
+      target: { value: '林澄' },
+    })
+    fireEvent.change(screen.getByLabelText('New Character notes'), {
+      target: { value: '氣象局工作；主角；追查潮汐裝置與父親留下的線索。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Character' }))
+    fireEvent.change(screen.getByLabelText('New Character name'), {
+      target: { value: '林嶼' },
+    })
+    fireEvent.change(screen.getByLabelText('New Character notes'), {
+      target: { value: '林澄失蹤的哥哥；曾成為潮汐裝置守門人；聲音仍可能存在於回路中。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Character' }))
+    fireEvent.change(screen.getByLabelText('New World rule text'), {
+      target: { value: '潮汐裝置會記錄沒有被選中的未來。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add world rule' }))
+    fireEvent.change(screen.getByLabelText('New World rule text'), {
+      target: { value: '部分未被選中的路可能在潮汐壓力下重新靠岸。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add world rule' }))
+    fireEvent.change(screen.getByLabelText('New Open thread text'), {
+      target: { value: '下一次低潮前找到第一座鐘。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add open thread' }))
+    fireEvent.change(screen.getByLabelText('New Open thread text'), {
+      target: { value: '確認落後林嶼十一秒的第二個聲音是誰。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add open thread' }))
+    fireEvent.change(screen.getByLabelText('New Style note text'), {
+      target: { value: '維持克制的科幻懸疑氛圍。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add style note' }))
+    fireEvent.change(screen.getByLabelText('New Style note text'), {
+      target: { value: '避免用大段 exposition 一次解釋全部世界觀。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add style note' }))
+    expect(sessionRepository.load()?.storyBible).toEqual({
+      characters: [
+        { name: '林澄', notes: '氣象局工作；主角；追查潮汐裝置與父親留下的線索。' },
+        { name: '林嶼', notes: '林澄失蹤的哥哥；曾成為潮汐裝置守門人；聲音仍可能存在於回路中。' },
+      ],
+      worldRules: [
+        '潮汐裝置會記錄沒有被選中的未來。',
+        '部分未被選中的路可能在潮汐壓力下重新靠岸。',
+      ],
+      openThreads: [
+        '下一次低潮前找到第一座鐘。',
+        '確認落後林嶼十一秒的第二個聲音是誰。',
+      ],
+      styleNotes: [
+        '維持克制的科幻懸疑氛圍。',
+        '避免用大段 exposition 一次解釋全部世界觀。',
+      ],
+    })
+
     fireEvent.change(screen.getByLabelText('Requested next chapters（1–5）'), {
       target: { value: '2' },
     })
@@ -249,6 +306,18 @@ describe('AuthoringPreviewScreen', () => {
         name: 'Generated Continuation Prompt',
       }) as HTMLTextAreaElement).value,
     ).toContain('starting at sequence 6')
+    const continuationPrompt = (
+      screen.getByRole('textbox', {
+        name: 'Generated Continuation Prompt',
+      }) as HTMLTextAreaElement
+    ).value
+    expect(
+      continuationPrompt.match(
+        /林澄: 氣象局工作；主角；追查潮汐裝置與父親留下的線索。/g,
+      ),
+    ).toHaveLength(1)
+    expect(continuationPrompt).toContain('潮汐裝置會記錄沒有被選中的未來。')
+    expect(continuationPrompt).toContain('確認落後林嶼十一秒的第二個聲音是誰。')
 
     const continuationJson = JSON.stringify({
       chapters: [
@@ -274,6 +343,10 @@ describe('AuthoringPreviewScreen', () => {
     expect(screen.getByText('第 5 章：第七口井')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    fireEvent.change(screen.getByDisplayValue('下一次低潮前找到第一座鐘。'), {
+      target: { value: '下一次低潮前找到第一座鐘。' },
+    })
+    expect(screen.queryByText('品質檢查：STALE')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Prepare Chapter Append' }))
 
     expect(await screen.findByText('Proposed appended chapter count：2')).toBeInTheDocument()
@@ -287,6 +360,10 @@ describe('AuthoringPreviewScreen', () => {
     }
     expect(candidate.appendedChapters.map(({ sequence }) => sequence)).toEqual([6, 7])
     expect(candidate.updatedFixturePreview.chapters).toHaveLength(7)
+    expect(sessionRepository.load()?.storyBible.openThreads).toEqual([
+      '下一次低潮前找到第一座鐘。',
+      '確認落後林嶼十一秒的第二個聲音是誰。',
+    ])
     expect(JSON.stringify(liveProduction)).toBe(productionBefore)
     expect(liveProduction.books).toHaveLength(catalogCountBefore)
     expect(productionBook.chapters).toHaveLength(5)

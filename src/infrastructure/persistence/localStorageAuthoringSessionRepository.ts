@@ -9,6 +9,11 @@ import {
   type PublishedAppendCandidate,
 } from '../../domain/authoring/publishedAppendCandidate'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import {
+  createEmptyStoryBible,
+  parseStoryBible,
+  type StoryBibleV1,
+} from '../../domain/authoring/storyBible'
 import type {
   AuthoringSession,
   AuthoringSessionRepository,
@@ -20,6 +25,7 @@ export const AUTHORING_SESSION_STORAGE_KEY =
 interface StoredAuthoringSession {
   readonly schemaVersion: 1
   readonly spec: AuthoringSpec
+  readonly storyBible: StoryBibleV1
   readonly agentPrompt?: string
   readonly continuationPrompt?: string
   readonly draft?: GeneratedDraft
@@ -32,6 +38,7 @@ interface StoredAuthoringSession {
 const SESSION_FIELDS = new Set([
   'schemaVersion',
   'spec',
+  'storyBible',
   'agentPrompt',
   'continuationPrompt',
   'draft',
@@ -200,6 +207,14 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       return undefined
     }
 
+    const storyBible =
+      candidate.storyBible === undefined
+        ? createEmptyStoryBible()
+        : parseStoryBible(candidate.storyBible)
+    if (candidate.storyBible !== undefined && !storyBible) {
+      return undefined
+    }
+
     if (
       candidate.agentPrompt !== undefined &&
       typeof candidate.agentPrompt !== 'string'
@@ -281,6 +296,7 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
 
     return {
       spec,
+      storyBible: storyBible ?? createEmptyStoryBible(),
       agentPrompt: candidate.agentPrompt as string | undefined,
       continuationPrompt: candidate.continuationPrompt as string | undefined,
       draft,
@@ -321,6 +337,7 @@ export class LocalStorageAuthoringSessionRepository
       const stored: StoredAuthoringSession = {
         schemaVersion: 1,
         spec: session.spec,
+        storyBible: session.storyBible,
         agentPrompt: session.agentPrompt,
         continuationPrompt: session.continuationPrompt,
         draft: session.draft

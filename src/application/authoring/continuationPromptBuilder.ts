@@ -1,5 +1,7 @@
 import type { AuthoringSpec, Draft } from '../../domain/authoring/authoringContracts'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import { createEmptyStoryBible, type StoryBibleV1 } from '../../domain/authoring/storyBible'
+import { buildStoryBiblePromptSection } from './storyBiblePrompt'
 import {
   MAX_CONTINUATION_CHAPTER_COUNT,
   MIN_CONTINUATION_CHAPTER_COUNT,
@@ -66,6 +68,7 @@ export function buildContinuationPrompt(
   draft: Draft,
   spec: AuthoringSpec,
   requestedChapterCount: number,
+  storyBible: StoryBibleV1 = createEmptyStoryBible(),
 ): ContinuationPromptResult {
   if (
     !Number.isInteger(requestedChapterCount) ||
@@ -91,10 +94,18 @@ export function buildContinuationPrompt(
   const prompt = [
     'Role: Novel Continuation Agent',
     '',
-    'Continue the existing Draft below with new chapters only.',
+    'Continuation task: Continue the existing Draft below with new chapters only.',
     `Return exactly ${requestedChapterCount} new chapter(s), starting at sequence ${expectedStartSequence}.`,
     '',
-    'Existing Draft context:',
+    'Story identity:',
+    `Title: ${context.title}`,
+    `Genre: ${context.genre}`,
+    `Premise: ${context.premise}`,
+    ...(context.instructions ? [`Instructions: ${context.instructions}`] : []),
+    '',
+    ...buildStoryBiblePromptSection(storyBible),
+    '',
+    'Existing chapter context:',
     JSON.stringify(context, null, 2),
     '',
     'Required raw JSON output contract:',

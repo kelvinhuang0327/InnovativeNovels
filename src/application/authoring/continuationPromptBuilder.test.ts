@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AuthoringSpec, Draft } from '../../domain/authoring/authoringContracts'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import type { StoryBibleV1 } from '../../domain/authoring/storyBible'
 import {
   buildContinuationContext,
   buildContinuationPrompt,
@@ -31,6 +32,22 @@ const draft: Draft = {
       prose: [`第 ${sequence} 章第一段。`, `第 ${sequence} 章第二段。`],
     })),
   }),
+}
+
+const storyBible: StoryBibleV1 = {
+  characters: [
+    { name: '林澄', notes: '氣象局工作；主角；追查潮汐裝置與父親留下的線索。' },
+    { name: '林嶼', notes: '林澄失蹤的哥哥；曾成為潮汐裝置守門人；聲音仍可能存在於回路中。' },
+  ],
+  worldRules: [
+    '潮汐裝置會記錄沒有被選中的未來。',
+    '部分未被選中的路可能在潮汐壓力下重新靠岸。',
+  ],
+  openThreads: [
+    '下一次低潮前找到第一座鐘。',
+    '確認落後林嶼十一秒的第二個聲音是誰。',
+  ],
+  styleNotes: ['維持克制的科幻懸疑氛圍。', '避免用大段 exposition 一次解釋全部世界觀。'],
 }
 
 describe('continuation prompt builder', () => {
@@ -85,5 +102,44 @@ describe('continuation prompt builder', () => {
       ok: false,
       message: '目前 Draft 有硬性驗證失敗，請先修正後再續寫。',
     })
+  })
+
+  it('injects a deterministic Story Bible without expanding recent chapter context', () => {
+    const first = buildContinuationPrompt(draft, spec, 2, storyBible)
+    const second = buildContinuationPrompt(draft, spec, 2, storyBible)
+
+    expect(first).toEqual(second)
+    expect(first.ok).toBe(true)
+    if (first.ok) {
+      expect(first.expectedStartSequence).toBe(6)
+      expect(first.prompt).toContain('STORY BIBLE — CHARACTERS')
+      expect(first.prompt).toContain('林澄: 氣象局工作；主角；追查潮汐裝置與父親留下的線索。')
+      expect(first.prompt).toContain('STORY BIBLE — WORLD RULES')
+      expect(first.prompt).toContain('部分未被選中的路可能在潮汐壓力下重新靠岸。')
+      expect(first.prompt).toContain('STORY BIBLE — OPEN THREADS')
+      expect(first.prompt).toContain('確認落後林嶼十一秒的第二個聲音是誰。')
+      expect(first.prompt).toContain('STORY BIBLE — STYLE NOTES')
+      expect(first.prompt).toContain('避免用大段 exposition 一次解釋全部世界觀。')
+      expect(first.prompt).toContain('starting at sequence 6')
+      expect(first.prompt).not.toContain('第 1 章第一段。')
+    }
+
+    const changed = buildContinuationPrompt(
+      draft,
+      spec,
+      2,
+      { ...storyBible, styleNotes: ['改變風格偏好。'] },
+    )
+    expect(changed).not.toEqual(first)
+  })
+
+  it('keeps an empty Story Bible valid with deterministic empty markers', () => {
+    const result = buildContinuationPrompt(draft, spec, 2)
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.prompt.match(/- \(empty\)/g)).toHaveLength(4)
+      expect(result.prompt).toContain('starting at sequence 6')
+    }
   })
 })

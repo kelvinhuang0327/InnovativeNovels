@@ -2,6 +2,8 @@ import {
   buildGenerationRequest,
   type AuthoringSpec,
 } from '../../domain/authoring/authoringContracts'
+import { createEmptyStoryBible, type StoryBibleV1 } from '../../domain/authoring/storyBible'
+import { buildStoryBiblePromptSection } from './storyBiblePrompt'
 
 const EXCHANGE_CONTRACT = `{
   "title": "小說名稱",
@@ -15,7 +17,10 @@ const EXCHANGE_CONTRACT = `{
   ]
 }`
 
-export function buildAgentPrompt(spec: AuthoringSpec): string {
+export function buildAgentPrompt(
+  spec: AuthoringSpec,
+  storyBible: StoryBibleV1 = createEmptyStoryBible(),
+): string {
   const request = buildGenerationRequest(spec)
 
   return [
@@ -26,6 +31,8 @@ export function buildAgentPrompt(spec: AuthoringSpec): string {
     '',
     'Authoring Spec:',
     JSON.stringify(request, null, 2),
+    '',
+    ...buildStoryBiblePromptSection(storyBible),
     '',
     'Required JSON output contract:',
     EXCHANGE_CONTRACT,

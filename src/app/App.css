@@ -405,6 +405,48 @@ button:focus-visible {
   font-size: 0.85rem;
 }
 
+.story-bible-panel {
+  gap: 1.25rem;
+}
+
+.story-bible-panel h2,
+.story-bible-panel h3 {
+  margin: 0;
+}
+
+.story-bible-section {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ded8cd;
+}
+
+.story-bible-add-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.story-bible-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.story-bible-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.story-bible-item .authoring-field {
+  margin: 0;
+}
+
 .authoring-copy-status {
   align-self: center;
   color: #346b42 !important;
