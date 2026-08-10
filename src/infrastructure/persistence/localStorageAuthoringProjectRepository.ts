@@ -1,5 +1,7 @@
 import type {
+  AuthoringProjectV1,
   AuthoringProjectLoadResult,
+  AuthoringProjectImportResult,
   AuthoringProjectRepository,
   AuthoringProjectStoreV1,
 } from '../../application/authoring/authoringProjectRepository'
@@ -10,6 +12,10 @@ import {
   parseAuthoringSession,
   serializeAuthoringSession,
 } from './localStorageAuthoringSessionRepository'
+import {
+  parsePortableAuthoringProject,
+  serializePortableAuthoringProject,
+} from './portableAuthoringProject'
 
 export const AUTHORING_PROJECTS_STORAGE_KEY =
   'innovative-novels:authoring-projects:v1'
@@ -124,6 +130,39 @@ function defaultProjectName(session: AuthoringSession): string {
   )
 }
 
+function allocateProjectId(
+  projects: AuthoringProjectStoreV1['projects'],
+  idGenerator: () => string,
+  forbiddenProjectId?: string,
+): string | undefined {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidate = idGenerator()
+    if (
+      candidate.trim().length > 0 &&
+      candidate !== forbiddenProjectId &&
+      !projects.some((project) => project.projectId === candidate)
+    ) {
+      return candidate
+    }
+  }
+  return undefined
+}
+
+function remapProjectLocalIdentity(
+  session: AuthoringSession,
+  sourceProjectId: string,
+  importedProjectId: string,
+): AuthoringSession | undefined {
+  const batch = session.continuityReviewBatch
+  if (!batch) return session
+  if (batch.projectId === undefined) return session
+  if (batch.projectId !== sourceProjectId) return undefined
+  return {
+    ...session,
+    continuityReviewBatch: { ...batch, projectId: importedProjectId },
+  }
+}
+
 export class LocalStorageAuthoringProjectRepository
   implements AuthoringProjectRepository
 {
@@ -194,15 +233,35 @@ export class LocalStorageAuthoringProjectRepository
   }
 
   save(store: AuthoringProjectStoreV1): boolean {
+    let previous: string | null | undefined
     try {
+      previous = this.storage.getItem(AUTHORING_PROJECTS_STORAGE_KEY)
       const serialized = serializeProjectStore(store)
       if (!parseProjectStore(serialized)) {
         return false
       }
       this.storage.setItem(AUTHORING_PROJECTS_STORAGE_KEY, serialized)
       const readBack = this.storage.getItem(AUTHORING_PROJECTS_STORAGE_KEY)
-      return readBack !== null && parseProjectStore(readBack) !== undefined
+      const verified = readBack !== null && parseProjectStore(readBack) !== undefined
+      if (verified) return true
+      if (previous === null) {
+        this.storage.removeItem(AUTHORING_PROJECTS_STORAGE_KEY)
+      } else {
+        this.storage.setItem(AUTHORING_PROJECTS_STORAGE_KEY, previous)
+      }
+      return false
     } catch {
+      if (previous !== undefined) {
+        try {
+          if (previous === null) {
+            this.storage.removeItem(AUTHORING_PROJECTS_STORAGE_KEY)
+          } else {
+            this.storage.setItem(AUTHORING_PROJECTS_STORAGE_KEY, previous)
+          }
+        } catch {
+          // The storage implementation did not allow a rollback.
+        }
+      }
       return false
     }
   }
@@ -217,14 +276,7 @@ export class LocalStorageAuthoringProjectRepository
       return { ok: false, message: 'Project name cannot be empty.' }
     }
 
-    let projectId: string | undefined
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const candidate = this.idGenerator()
-      if (!store.projects.some((project) => project.projectId === candidate)) {
-        projectId = candidate
-        break
-      }
-    }
+    const projectId = allocateProjectId(store.projects, this.idGenerator)
     if (!projectId) {
       return { ok: false, message: 'A unique local project identity could not be allocated.' }
     }
@@ -240,5 +292,64 @@ export class LocalStorageAuthoringProjectRepository
     return this.save(nextStore)
       ? { ok: true, store: nextStore }
       : { ok: false, message: 'The new project could not be saved.' }
+  }
+
+  exportPortableProject(project: AuthoringProjectV1): string {
+    return serializePortableAuthoringProject(project)
+  }
+
+  importPortableProject(
+    store: AuthoringProjectStoreV1,
+    serialized: string,
+  ): AuthoringProjectImportResult {
+    const parsed = parsePortableAuthoringProject(serialized)
+    if (!parsed.ok) return parsed
+
+    const sourceProjectId = parsed.project.project.projectId
+    const importedProjectId = allocateProjectId(
+      store.projects,
+      this.idGenerator,
+      sourceProjectId,
+    )
+    if (!importedProjectId) {
+      return {
+        ok: false,
+        code: 'PROJECT_ID_ALLOCATION_FAILED',
+        message: 'A fresh local project identity could not be allocated.',
+      }
+    }
+
+    const importedSession = remapProjectLocalIdentity(
+      parsed.project.project.session,
+      sourceProjectId,
+      importedProjectId,
+    )
+    if (!importedSession) {
+      return {
+        ok: false,
+        code: 'PROJECT_LOCAL_IDENTITY_INVALID',
+        message: 'The saved Continuity Review batch belongs to a different project.',
+      }
+    }
+
+    const importedProject: AuthoringProjectV1 = {
+      projectId: importedProjectId,
+      name: parsed.project.project.name,
+      session: importedSession,
+    }
+    const nextStore: AuthoringProjectStoreV1 = {
+      schemaVersion: 1,
+      activeProjectId: importedProjectId,
+      projects: [...store.projects, importedProject],
+    }
+
+    if (!this.save(nextStore)) {
+      return {
+        ok: false,
+        code: 'PERSISTENCE_FAILED',
+        message: 'The imported project could not be saved. Existing projects were not changed.',
+      }
+    }
+    return { ok: true, store: nextStore, importedProjectId }
   }
 }

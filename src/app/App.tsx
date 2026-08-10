@@ -12,6 +12,7 @@ import type {
   AuthoringSessionRepository,
 } from '../application/authoring/authoringSessionRepository'
 import type { ClipboardPort } from '../application/authoring/clipboardPort'
+import type { PortableProjectFilePort } from '../application/authoring/portableProjectFilePort'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
@@ -49,6 +50,7 @@ import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
 import { parseContentBookFixture } from '../infrastructure/content/catalogContentContract'
 import { BrowserClipboardAdapter } from '../infrastructure/authoring/browserClipboardAdapter'
+import { BrowserPortableProjectFileAdapter } from '../infrastructure/authoring/browserPortableProjectFileAdapter'
 import { LocalStorageActiveReaderSessionRepository } from '../infrastructure/persistence/localStorageActiveReaderSessionRepository'
 import { LocalStorageAuthoringSessionRepository } from '../infrastructure/persistence/localStorageAuthoringSessionRepository'
 import { LocalStorageAuthoringProjectRepository } from '../infrastructure/persistence/localStorageAuthoringProjectRepository'
@@ -69,6 +71,7 @@ export interface AppDependencies {
   readonly authoringProjectRepository?: AuthoringProjectRepository
   readonly authoringSessionRepository?: AuthoringSessionRepository
   readonly clipboardPort?: ClipboardPort
+  readonly portableProjectFilePort?: PortableProjectFilePort
 }
 
 interface AppProps {
@@ -181,6 +184,7 @@ function createDefaultDependencies(): AppDependencies {
       window.localStorage,
     ),
     clipboardPort: new BrowserClipboardAdapter(window.navigator.clipboard),
+    portableProjectFilePort: new BrowserPortableProjectFileAdapter(),
   }
 }
 
@@ -378,6 +382,7 @@ function App({
           }
           onBack={() => setScreen({ name: 'catalog' })}
           projectRepository={dependencies.authoringProjectRepository}
+          portableProjectFilePort={dependencies.portableProjectFilePort}
           productionBooks={dependencies.contentRepository.listBooks()}
           productionChapterProse={(chapterId) =>
             dependencies.contentRepository.getChapterProse(chapterId)

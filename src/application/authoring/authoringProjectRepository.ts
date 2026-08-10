@@ -17,6 +17,18 @@ export type AuthoringProjectLoadResult =
 
 export type AuthoringProjectOperationResult = AuthoringProjectLoadResult
 
+export type AuthoringProjectImportResult =
+  | {
+      readonly ok: true
+      readonly store: AuthoringProjectStoreV1
+      readonly importedProjectId: string
+    }
+  | {
+      readonly ok: false
+      readonly code: string
+      readonly message: string
+    }
+
 export interface AuthoringProjectRepository {
   load(): AuthoringProjectLoadResult
   save(store: AuthoringProjectStoreV1): boolean
@@ -25,6 +37,11 @@ export interface AuthoringProjectRepository {
     name: string,
     session: AuthoringSession,
   ): AuthoringProjectOperationResult
+  exportPortableProject(project: AuthoringProjectV1): string
+  importPortableProject(
+    store: AuthoringProjectStoreV1,
+    serialized: string,
+  ): AuthoringProjectImportResult
 }
 
 export function getActiveProject(

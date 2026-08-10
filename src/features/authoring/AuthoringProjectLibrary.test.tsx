@@ -5,6 +5,7 @@ import type {
   AuthoringProjectStoreV1,
 } from '../../application/authoring/authoringProjectRepository'
 import { createEmptyAuthoringSession } from '../../application/authoring/authoringSessionDefaults'
+import type { PortableProjectFilePort } from '../../application/authoring/portableProjectFilePort'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
 import { loadProductionCatalogContent } from '../../infrastructure/content/catalogContentLoader'
 import { parseContentBookFixture } from '../../infrastructure/content/catalogContentContract'
@@ -270,5 +271,103 @@ describe('Authoring project library UI', () => {
       expect(projectB?.session.draft).toBeUndefined()
     }
     expect(JSON.stringify(production)).toBe(productionBefore)
+  })
+
+  it('exports the active project and imports it as a new active project', async () => {
+    const ids = ['project-imported']
+    const repository = new LocalStorageAuthoringProjectRepository(
+      window.localStorage,
+      () => ids.shift() ?? 'unexpected-id',
+    )
+    seedStore(repository)
+    const read = vi.fn(async () => ({
+      ok: true as const,
+      text: String(portableDownload.mock.calls[0]?.[1] ?? ''),
+    }))
+    const portableDownload = vi.fn()
+    const portableProjectFilePort: PortableProjectFilePort = {
+      download: portableDownload,
+      read,
+    }
+
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createGatewayClient()}
+        onBack={vi.fn()}
+        portableProjectFilePort={portableProjectFilePort}
+        projectRepository={repository}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export Current Project' }))
+    expect(portableDownload).toHaveBeenCalledTimes(1)
+    expect(portableDownload.mock.calls[0]?.[0]).toBe(
+      'innovative-novels-project-潮汐檔案續寫.json',
+    )
+    const exported = JSON.parse(String(portableDownload.mock.calls[0]?.[1])) as {
+      format: string
+      version: number
+      project: { projectId: string; name: string }
+    }
+    expect(exported.format).toBe('innovative-novels-authoring-project')
+    expect(exported.version).toBe(1)
+    expect(exported.project).toMatchObject({
+      projectId: 'project-a',
+      name: '潮汐檔案續寫',
+    })
+
+    fireEvent.change(screen.getByLabelText('Import Project file'), {
+      target: { files: [new File(['portable'], 'project.json', { type: 'text/plain' })] },
+    })
+    expect(await screen.findByLabelText('Current Project')).toHaveValue('project-imported')
+
+    const loaded = repository.load()
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) {
+      expect(loaded.store.projects).toHaveLength(3)
+      expect(loaded.store.projects[0]).toEqual(
+        expect.objectContaining({ projectId: 'project-a', name: '潮汐檔案續寫' }),
+      )
+      expect(loaded.store.projects[1]).toEqual(
+        expect.objectContaining({ projectId: 'project-b', name: '新故事測試' }),
+      )
+      expect(loaded.store.projects[2]).toEqual(
+        expect.objectContaining({ projectId: 'project-imported', name: '潮汐檔案續寫' }),
+      )
+    }
+  })
+
+  it('shows invalid portable-file errors without mutating the project store', async () => {
+    const repository = createRepository()
+    seedStore(repository)
+    const before = window.localStorage.getItem('innovative-novels:authoring-projects:v1')
+    const portableProjectFilePort: PortableProjectFilePort = {
+      download: vi.fn(),
+      read: vi.fn(async () => ({
+        ok: true as const,
+        text: '```json\n{}\n```',
+      })),
+    }
+
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createGatewayClient()}
+        onBack={vi.fn()}
+        portableProjectFilePort={portableProjectFilePort}
+        projectRepository={repository}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Import Project file'), {
+      target: { files: [new File(['portable'], 'project.json')] },
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The selected file is not valid JSON.',
+    )
+    expect(window.localStorage.getItem('innovative-novels:authoring-projects:v1')).toBe(before)
+    const loaded = repository.load()
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) expect(loaded.store.projects).toHaveLength(2)
   })
 })

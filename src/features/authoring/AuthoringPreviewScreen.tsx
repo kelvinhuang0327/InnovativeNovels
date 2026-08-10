@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import type {
   AuthoringGatewayClient,
   AuthoringGatewayClientResult,
@@ -31,6 +31,12 @@ import type {
 } from '../../application/authoring/authoringSessionRepository'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { ClipboardPort } from '../../application/authoring/clipboardPort'
+import {
+  buildPortableProjectFileName,
+  getPortableProjectByteLength,
+  MAX_PORTABLE_PROJECT_FILE_BYTES,
+  type PortableProjectFilePort,
+} from '../../application/authoring/portableProjectFilePort'
 import type {
   AuthoringSpec,
   Draft,
@@ -89,6 +95,7 @@ interface AuthoringPreviewScreenProps {
   readonly projectRepository?: AuthoringProjectRepository
   readonly sessionRepository?: AuthoringSessionRepository
   readonly clipboardPort?: ClipboardPort
+  readonly portableProjectFilePort?: PortableProjectFilePort
   readonly productionBooks?: readonly ContentBook[]
   readonly productionChapterProse?: (
     chapterId: string,
@@ -237,6 +244,7 @@ export function AuthoringPreviewScreen({
   projectRepository,
   sessionRepository,
   clipboardPort,
+  portableProjectFilePort,
   productionBooks = [],
   productionChapterProse,
   validateProductionFixture,
@@ -322,6 +330,7 @@ export function AuthoringPreviewScreen({
   const [clipboardStatus, setClipboardStatus] = useState<ClipboardStatus>()
   const [clipboardTarget, setClipboardTarget] = useState<ClipboardTarget>()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPortableProjectBusy, setIsPortableProjectBusy] = useState(false)
 
   useEffect(() => {
     if (projectRepository && projectStore) {
@@ -540,6 +549,86 @@ export function AuthoringPreviewScreen({
     setNewProjectName('Untitled Project')
     setProjectError(undefined)
     restoreProjectSession(newSession)
+  }
+
+  const handleExportProject = () => {
+    if (!projectRepository || !projectStore || !portableProjectFilePort) {
+      return
+    }
+    const activeProject = getActiveProject(projectStore)
+    const project = {
+      ...activeProject,
+      session: currentSession(),
+    }
+    const serialized = projectRepository.exportPortableProject(project)
+    if (getPortableProjectByteLength(serialized) > MAX_PORTABLE_PROJECT_FILE_BYTES) {
+      setProjectError(
+        'This project is too large to export safely with the current portable-file limit.',
+      )
+      return
+    }
+    portableProjectFilePort.download(
+      buildPortableProjectFileName(project.name, project.projectId),
+      serialized,
+    )
+    setProjectError(undefined)
+  }
+
+  const handleImportProject = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget
+    const files = input.files
+    input.value = ''
+    if (!projectRepository || !projectStore || !portableProjectFilePort) {
+      return
+    }
+    if (!files || files.length !== 1 || !files[0]) {
+      setProjectError('Please select exactly one portable project JSON file.')
+      return
+    }
+
+    setIsPortableProjectBusy(true)
+    setProjectError(undefined)
+    try {
+      const read = await portableProjectFilePort.read(files[0])
+      if (!read.ok) {
+        setProjectError(read.message)
+        return
+      }
+
+      const currentStore = replaceProjectSession(
+        projectStore,
+        projectStore.activeProjectId,
+        currentSession(),
+      )
+      const imported = projectRepository.importPortableProject(
+        currentStore,
+        read.text,
+      )
+      if (!imported.ok) {
+        setProjectError(imported.message)
+        return
+      }
+
+      const importedProject = imported.store.projects.find(
+        (project) => project.projectId === imported.importedProjectId,
+      )
+      if (!importedProject) {
+        setProjectError('The imported project could not be found after saving.')
+        return
+      }
+      setProjectStore(imported.store)
+      setProjectName(importedProject.name)
+      restoreProjectSession(importedProject.session)
+      setProjectError(undefined)
+    } catch {
+      setProjectError(
+        'The imported project could not be loaded safely. Existing projects were not changed.',
+      )
+    } finally {
+      setIsPortableProjectBusy(false)
+    }
   }
 
   const currentQuality = result
@@ -1062,6 +1151,28 @@ export function AuthoringPreviewScreen({
           <button onClick={handleCreateProject} type="button">
             New Project
           </button>
+          {portableProjectFilePort && (
+            <div className="actions">
+              <button
+                disabled={isPortableProjectBusy}
+                onClick={handleExportProject}
+                type="button"
+              >
+                Export Current Project
+              </button>
+              <label className="button-secondary" htmlFor="portable-project-file">
+                Import Project
+                <input
+                  accept=".json,application/json"
+                  aria-label="Import Project file"
+                  disabled={isPortableProjectBusy}
+                  id="portable-project-file"
+                  onChange={(event) => void handleImportProject(event)}
+                  type="file"
+                />
+              </label>
+            </div>
+          )}
           {projectError && (
             <p className="authoring-error" role="alert">
               {projectError}
