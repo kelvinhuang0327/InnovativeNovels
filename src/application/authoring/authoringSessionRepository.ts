@@ -1,9 +1,11 @@
 import type { AuthoringSpec, Draft } from '../../domain/authoring/authoringContracts'
+import type { PublicationPreparationMetadata } from '../../domain/authoring/publicationCandidate'
 
 export interface AuthoringSession {
   readonly spec: AuthoringSpec
   readonly agentPrompt?: string
   readonly draft?: Draft
+  readonly publicationPreparation?: PublicationPreparationMetadata
 }
 
 export interface AuthoringSessionRepository {

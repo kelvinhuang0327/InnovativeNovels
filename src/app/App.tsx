@@ -370,6 +370,7 @@ function App({
             dependencies.authoringGatewayClient ?? defaultAuthoringGatewayClient
           }
           onBack={() => setScreen({ name: 'catalog' })}
+          productionBooks={dependencies.contentRepository.listBooks()}
           sessionRepository={authoringSessionRepo}
         />
       )}

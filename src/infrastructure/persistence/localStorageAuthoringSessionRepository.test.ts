@@ -33,6 +33,12 @@ const session = {
       warnings: [],
     },
   },
+  publicationPreparation: {
+    publicationSlug: 'tide-archive',
+    authorName: '林澄',
+    description: '潮汐帶回遺失的記憶。',
+    catalogSequence: 13,
+  },
 }
 
 describe('LocalStorageAuthoringSessionRepository', () => {
@@ -53,6 +59,9 @@ describe('LocalStorageAuthoringSessionRepository', () => {
     expect(restored?.draft?.title).toBe('潮汐檔案')
     expect(restored?.draft?.status).toBe('DRAFT')
     expect(restored?.draft?.quality).toBeDefined()
+    expect(restored?.publicationPreparation).toEqual(
+      session.publicationPreparation,
+    )
   })
 
   it('fails closed on malformed stored JSON and leaves unrelated storage untouched', () => {

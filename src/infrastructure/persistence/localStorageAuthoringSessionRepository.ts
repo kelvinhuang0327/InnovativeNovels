@@ -3,6 +3,7 @@ import type {
   Draft,
   GeneratedDraft,
 } from '../../domain/authoring/authoringContracts'
+import type { PublicationPreparationMetadata } from '../../domain/authoring/publicationCandidate'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
 import type {
   AuthoringSession,
@@ -17,9 +18,16 @@ interface StoredAuthoringSession {
   readonly spec: AuthoringSpec
   readonly agentPrompt?: string
   readonly draft?: GeneratedDraft
+  readonly publicationPreparation?: PublicationPreparationMetadata
 }
 
-const SESSION_FIELDS = new Set(['schemaVersion', 'spec', 'agentPrompt', 'draft'])
+const SESSION_FIELDS = new Set([
+  'schemaVersion',
+  'spec',
+  'agentPrompt',
+  'draft',
+  'publicationPreparation',
+])
 const SPEC_FIELDS = new Set([
   'premise',
   'genre',
@@ -29,6 +37,12 @@ const SPEC_FIELDS = new Set([
 ])
 const DRAFT_FIELDS = new Set(['title', 'categoryLabel', 'chapters'])
 const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose'])
+const PUBLICATION_PREPARATION_FIELDS = new Set([
+  'publicationSlug',
+  'authorName',
+  'description',
+  'catalogSequence',
+])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -125,6 +139,35 @@ function parseGeneratedDraft(value: unknown): GeneratedDraft | undefined {
   }
 }
 
+function parsePublicationPreparation(
+  value: unknown,
+): PublicationPreparationMetadata | undefined {
+  if (
+    !isRecord(value) ||
+    !hasOnlyFields(value, PUBLICATION_PREPARATION_FIELDS) ||
+    typeof value.publicationSlug !== 'string' ||
+    typeof value.authorName !== 'string' ||
+    typeof value.description !== 'string'
+  ) {
+    return undefined
+  }
+
+  if (
+    value.catalogSequence !== undefined &&
+    (!Number.isInteger(value.catalogSequence) ||
+      (value.catalogSequence as number) < 1)
+  ) {
+    return undefined
+  }
+
+  return {
+    publicationSlug: value.publicationSlug,
+    authorName: value.authorName,
+    description: value.description,
+    catalogSequence: value.catalogSequence as number | undefined,
+  }
+}
+
 function parseStoredSession(serialized: string | null): AuthoringSession | undefined {
   if (!serialized) {
     return undefined
@@ -160,6 +203,17 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       return undefined
     }
 
+    const publicationPreparation =
+      candidate.publicationPreparation === undefined
+        ? undefined
+        : parsePublicationPreparation(candidate.publicationPreparation)
+    if (
+      candidate.publicationPreparation !== undefined &&
+      !publicationPreparation
+    ) {
+      return undefined
+    }
+
     let draft: Draft | undefined
     if (generatedDraft) {
       draft = {
@@ -173,6 +227,7 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       spec,
       agentPrompt: candidate.agentPrompt as string | undefined,
       draft,
+      publicationPreparation,
     }
   } catch {
     return undefined
@@ -214,6 +269,7 @@ export class LocalStorageAuthoringSessionRepository
               chapters: session.draft.chapters,
             }
           : undefined,
+        publicationPreparation: session.publicationPreparation,
       }
       this.storage.setItem(
         AUTHORING_SESSION_STORAGE_KEY,

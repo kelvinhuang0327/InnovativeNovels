@@ -10,6 +10,7 @@ import type {
   AuthoringSession,
   AuthoringSessionRepository,
 } from '../../application/authoring/authoringSessionRepository'
+import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { ClipboardPort } from '../../application/authoring/clipboardPort'
 import type {
   AuthoringSpec,
@@ -29,12 +30,17 @@ import {
   type DraftQualityResult,
 } from '../../domain/authoring/qualityEvaluator'
 import { validateAuthoringSpec } from '../../domain/authoring/authoringContracts'
+import {
+  buildPublicationCandidate,
+  type PublicationPreparationMetadata,
+} from '../../domain/authoring/publicationCandidate'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
   readonly onBack: () => void
   readonly sessionRepository?: AuthoringSessionRepository
   readonly clipboardPort?: ClipboardPort
+  readonly productionBooks?: readonly ContentBook[]
 }
 
 const INITIAL_SPEC: AuthoringSpec = {
@@ -43,6 +49,13 @@ const INITIAL_SPEC: AuthoringSpec = {
   titleHint: '',
   instructions: '',
   requestedChapterCount: 3,
+}
+
+const INITIAL_PUBLICATION_PREPARATION: PublicationPreparationMetadata = {
+  publicationSlug: '',
+  authorName: '',
+  description: '',
+  catalogSequence: undefined,
 }
 
 type SuccessfulDraftResult = Extract<
@@ -61,6 +74,7 @@ function hasMeaningfulSession(
   spec: AuthoringSpec,
   agentPrompt: string | undefined,
   draft: Draft | undefined,
+  publicationPreparation: PublicationPreparationMetadata,
 ): boolean {
   return (
     spec.premise.trim().length > 0 ||
@@ -69,7 +83,11 @@ function hasMeaningfulSession(
     Boolean(spec.instructions?.trim()) ||
     spec.requestedChapterCount !== INITIAL_SPEC.requestedChapterCount ||
     Boolean(agentPrompt) ||
-    Boolean(draft)
+    Boolean(draft) ||
+    Boolean(publicationPreparation.publicationSlug.trim()) ||
+    Boolean(publicationPreparation.authorName.trim()) ||
+    Boolean(publicationPreparation.description.trim()) ||
+    publicationPreparation.catalogSequence !== undefined
   )
 }
 
@@ -101,6 +119,7 @@ export function AuthoringPreviewScreen({
   onBack,
   sessionRepository,
   clipboardPort,
+  productionBooks = [],
 }: AuthoringPreviewScreenProps) {
   const [restoredSession] = useState<AuthoringSession | undefined>(() =>
     sessionRepository?.load(),
@@ -114,6 +133,11 @@ export function AuthoringPreviewScreen({
   const [result, setResult] = useState<DraftPreviewResult | undefined>(() =>
     restoredPreviewResult(restoredSession),
   )
+  const [publicationPreparation, setPublicationPreparation] =
+    useState<PublicationPreparationMetadata>(
+      () =>
+        restoredSession?.publicationPreparation ?? INITIAL_PUBLICATION_PREPARATION,
+    )
   const [qualityIsStale, setQualityIsStale] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>()
   const [importErrors, setImportErrors] = useState<
@@ -129,7 +153,14 @@ export function AuthoringPreviewScreen({
       return
     }
 
-    if (!hasMeaningfulSession(spec, agentPrompt, result?.draft)) {
+    if (
+      !hasMeaningfulSession(
+        spec,
+        agentPrompt,
+        result?.draft,
+        publicationPreparation,
+      )
+    ) {
       sessionRepository.clear()
       return
     }
@@ -138,13 +169,29 @@ export function AuthoringPreviewScreen({
       spec,
       agentPrompt,
       draft: result?.draft,
+      publicationPreparation,
     })
-  }, [agentPrompt, result, sessionRepository, spec])
+  }, [agentPrompt, publicationPreparation, result, sessionRepository, spec])
 
   const currentQuality = result
     ? evaluateDraftQuality(result.draft)
     : undefined
   const isExportBlocked = Boolean(currentQuality?.hardFailures.length)
+  const publicationCandidate = result
+    ? buildPublicationCandidate(
+        result.draft,
+        publicationPreparation,
+        productionBooks.map(({ book, chapters }) => ({
+          bookId: book.id as string,
+          chapterIds: chapters.map((chapter) => chapter.id as string),
+        })),
+      )
+    : undefined
+  const hasPublicationPreparationInput =
+    publicationPreparation.publicationSlug.trim().length > 0 ||
+    publicationPreparation.authorName.trim().length > 0 ||
+    publicationPreparation.description.trim().length > 0 ||
+    publicationPreparation.catalogSequence !== undefined
 
   const updateCurrentDraft = (edit: (draft: GeneratedDraft) => GeneratedDraft) => {
     setResult((current) => {
@@ -257,6 +304,7 @@ export function AuthoringPreviewScreen({
     setSpec(INITIAL_SPEC)
     setAgentPrompt(undefined)
     setResult(undefined)
+    setPublicationPreparation(INITIAL_PUBLICATION_PREPARATION)
     setQualityIsStale(false)
     setErrorMessage(undefined)
     setImportErrors([])
@@ -680,6 +728,121 @@ export function AuthoringPreviewScreen({
           </section>
 
           <section aria-labelledby="draft-export-heading" className="draft-export-panel">
+            <section
+              aria-labelledby="publication-candidate-heading"
+              className="draft-export-panel"
+            >
+              <h3 id="publication-candidate-heading">
+                Publication Candidate Preparation
+              </h3>
+              <p>
+                填寫發佈準備 metadata，產生留在本地、尚未加入 production catalog 的候選內容。
+              </p>
+              <div className="authoring-draft-fields">
+                <label className="authoring-field" htmlFor="publication-slug">
+                  Publication slug
+                  <input
+                    id="publication-slug"
+                    onChange={(event) =>
+                      setPublicationPreparation((current) => ({
+                        ...current,
+                        publicationSlug: event.target.value,
+                      }))
+                    }
+                    value={publicationPreparation.publicationSlug}
+                  />
+                </label>
+                <label className="authoring-field" htmlFor="publication-author-name">
+                  Publication author name
+                  <input
+                    id="publication-author-name"
+                    onChange={(event) =>
+                      setPublicationPreparation((current) => ({
+                        ...current,
+                        authorName: event.target.value,
+                      }))
+                    }
+                    value={publicationPreparation.authorName}
+                  />
+                </label>
+                <label className="authoring-field" htmlFor="publication-catalog-sequence">
+                  Catalog sequence
+                  <input
+                    id="publication-catalog-sequence"
+                    min={1}
+                    onChange={(event) =>
+                      setPublicationPreparation((current) => ({
+                        ...current,
+                        catalogSequence:
+                          event.target.value.length > 0
+                            ? Number(event.target.value)
+                            : undefined,
+                      }))
+                    }
+                    type="number"
+                    value={publicationPreparation.catalogSequence ?? ''}
+                  />
+                </label>
+              </div>
+              <label className="authoring-field" htmlFor="publication-description">
+                Publication description
+                <textarea
+                  id="publication-description"
+                  onChange={(event) =>
+                    setPublicationPreparation((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  value={publicationPreparation.description}
+                />
+              </label>
+              {hasPublicationPreparationInput && publicationCandidate && (
+                <>
+                  <p className="authoring-quality-status" role="status">
+                    Candidate readiness：{publicationCandidate.readiness}
+                  </p>
+                  {publicationCandidate.issues.length > 0 && (
+                    <ul className="authoring-error" role="alert">
+                      {publicationCandidate.issues.map((candidateIssue) => (
+                        <li key={candidateIssue.code}>
+                          {candidateIssue.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {publicationCandidate.warnings.length > 0 && (
+                    <ul className="quality-warning-list">
+                      {publicationCandidate.warnings.map((warning) => (
+                        <li
+                          key={`${warning.code}-${warning.chapterSequence ?? 'draft'}`}
+                        >
+                          {warning.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {publicationCandidate.candidate && (
+                    <label
+                      className="authoring-field"
+                      htmlFor="publication-candidate-json"
+                    >
+                      Publication Candidate JSON
+                      <textarea
+                        aria-label="Publication Candidate JSON"
+                        id="publication-candidate-json"
+                        readOnly
+                        value={JSON.stringify(
+                          publicationCandidate.candidate,
+                          null,
+                          2,
+                        )}
+                      />
+                    </label>
+                  )}
+                </>
+              )}
+            </section>
             <h3 id="draft-export-heading">Draft JSON Export</h3>
             <p>只包含目前編輯中的 title、genre 與 chapters，不含 session 或發佈資訊。</p>
             <label className="authoring-field" htmlFor="draft-json-export">

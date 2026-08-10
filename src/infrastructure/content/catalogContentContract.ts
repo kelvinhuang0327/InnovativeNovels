@@ -1,9 +1,14 @@
 import type { Book } from '../../domain/catalog/book'
 import { CHAPTER_ACCESS, type ChapterAccess } from '../../domain/access/chapterAccess'
 import { chapterSequence, type Chapter } from '../../domain/catalog/chapter'
+import {
+  CONTENT_BOOK_SCHEMA,
+  type ContentBookFixtureV1,
+} from '../../domain/catalog/contentBookFixture'
 import { bookId as toBookId, chapterId as toChapterId } from '../../domain/catalog/identifiers'
 
-export const CONTENT_BOOK_SCHEMA = 'innovative-novels/content-book/v1'
+export { CONTENT_BOOK_SCHEMA }
+export type { ContentBookFixtureV1 }
 
 export type ContentImportReason =
   | 'INVALID_ROOT'

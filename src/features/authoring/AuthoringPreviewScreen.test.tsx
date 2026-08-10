@@ -222,6 +222,58 @@ describe('AuthoringPreviewScreen', () => {
     expect(gatewayClient.generateDraft).not.toHaveBeenCalled()
   })
 
+  it('prepares a deterministic production candidate without an authored access selector', async () => {
+    render(
+      <AuthoringPreviewScreen gatewayClient={createClient()} onBack={vi.fn()} />,
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Publication slug'), {
+      target: { value: 'tide-archive' },
+    })
+    fireEvent.change(screen.getByLabelText('Publication author name'), {
+      target: { value: '林澄' },
+    })
+    fireEvent.change(screen.getByLabelText('Publication description'), {
+      target: { value: '潮汐帶回遺失的記憶。' },
+    })
+    fireEvent.change(screen.getByLabelText('Catalog sequence'), {
+      target: { value: '13' },
+    })
+
+    expect(screen.getByText('Candidate readiness：READY_WITH_WARNINGS')).toBeInTheDocument()
+    const candidate = JSON.parse(
+      (
+        screen.getByRole('textbox', {
+          name: 'Publication Candidate JSON',
+        }) as HTMLTextAreaElement
+      ).value,
+    ) as {
+      bookId: string
+      chapters: Array<{ chapterId: string; access: string }>
+    }
+    expect(candidate.bookId).toBe('book-tide-archive')
+    expect(candidate.chapters.map((chapter) => chapter.chapterId)).toEqual([
+      'chapter-tide-archive-001',
+      'chapter-tide-archive-002',
+      'chapter-tide-archive-003',
+    ])
+    expect(candidate.chapters.map((chapter) => chapter.access)).toEqual([
+      'READABLE',
+      'READABLE',
+      'READABLE',
+    ])
+    expect(screen.queryByLabelText(/chapter access/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
   it('supports the full local editing, quality, reorder, and export flow', async () => {
     const writeText = vi.fn(async () => undefined)
     render(
