@@ -12,19 +12,31 @@ import {
 
 const metadata: PublicationPreparationMetadata = {
   publicationSlug: 'tide-archive',
-  authorName: '林澄',
-  description: '當潮汐帶回遺失的記憶，一名守燈人追查城市的空白。',
+  authorName: 'InnovativeNovels AI',
+  description:
+    '臨海城的鐘塔在凌晨三點十七分同時停擺，氣象局員林澄循著失蹤哥哥的訊息進入舊港鐘樓，發現城市正被一座能記錄未來的潮汐裝置拖向時間線重合的覆滅危機。',
   catalogSequence: 13,
 }
 
-const draftShape: GeneratedDraft = {
-  title: '潮汐檔案',
-  categoryLabel: '科幻懸疑',
-  chapters: [
-    { sequence: 1, title: '沉入海底的鐘', prose: ['第一段。', '第二段。'] },
-    { sequence: 2, title: '舊港的回聲', prose: ['第三段。', '第四段。'] },
-    { sequence: 3, title: '第四點整', prose: ['第五段。', '第六段。'] },
+const tideArchiveFixtureModules = import.meta.glob(
+  '../../infrastructure/content/books/book-tide-archive.json',
+  { eager: true, import: 'default' },
+) as Record<string, unknown>
+const parsedTideArchive = parseContentBookFixture(
+  './books/book-tide-archive.json',
+  tideArchiveFixtureModules[
+    '../../infrastructure/content/books/book-tide-archive.json'
   ],
+)
+
+const draftShape: GeneratedDraft = {
+  title: parsedTideArchive.book.title,
+  categoryLabel: parsedTideArchive.book.categoryLabel,
+  chapters: parsedTideArchive.chapters.map(({ chapter, prose }) => ({
+    sequence: chapter.sequence,
+    title: chapter.title,
+    prose: prose ?? [],
+  })),
 }
 
 function draft(overrides: Partial<GeneratedDraft> = {}): Draft {
@@ -42,7 +54,7 @@ describe('publication candidate builder', () => {
     const second = buildPublicationCandidate(draft(), metadata)
 
     expect(normalizePublicationSlug(' tide-archive ')).toBe('tide-archive')
-    expect(first.readiness).toBe('READY_WITH_WARNINGS')
+    expect(first.readiness).toBe('READY')
     expect(first.bookId).toBe('book-tide-archive')
     expect(first.chapterIds).toEqual([
       'chapter-tide-archive-001',
@@ -160,6 +172,19 @@ describe('publication candidate builder', () => {
     const result = buildPublicationCandidate(draft(), metadata)
 
     expect(result.candidate).toBeDefined()
+    expect(result.candidate).toMatchObject({
+      bookId: 'book-tide-archive',
+      catalogSequence: 13,
+      title: '潮汐檔案',
+      authorName: 'InnovativeNovels AI',
+      categoryLabel: '科幻懸疑',
+      description: metadata.description,
+    })
+    expect(result.candidate?.chapters.map((chapter) => chapter.prose?.length)).toEqual([
+      9,
+      11,
+      11,
+    ])
     expect(() =>
       parseContentBookFixture(
         './books/book-tide-archive.json',
@@ -168,15 +193,31 @@ describe('publication candidate builder', () => {
     ).not.toThrow()
   })
 
+  it('refuses to overwrite the published full-source fixture', () => {
+    const productionCatalog = loadProductionCatalogContent().books.map(
+      ({ book, chapters }) => ({
+        bookId: book.id as string,
+        chapterIds: chapters.map((chapter) => chapter.id as string),
+      }),
+    )
+    const result = buildPublicationCandidate(draft(), metadata, productionCatalog)
+
+    expect(result.readiness).toBe('BLOCKED')
+    expect(result.issues.map((item) => item.code)).toEqual(
+      expect.arrayContaining(['BOOK_ID_COLLISION', 'CHAPTER_ID_COLLISION']),
+    )
+  })
+
   it('does not mutate or discover the candidate in the existing production catalog', () => {
     const before = loadProductionCatalogContent()
-    const result = buildPublicationCandidate(draft(), metadata)
+    const result = buildPublicationCandidate(draft(), {
+      ...metadata,
+      publicationSlug: 'new-archive',
+      catalogSequence: 14,
+    })
     const after = loadProductionCatalogContent()
 
-    expect(result.candidate?.bookId).toBe('book-tide-archive')
-    expect(after.books.map(({ book }) => book.id)).not.toContain(
-      'book-tide-archive',
-    )
+    expect(result.candidate?.bookId).toBe('book-new-archive')
     expect(after.books).toEqual(before.books)
     expect(after.books.flatMap(({ chapters }) => chapters.map((chapter) => chapter.access))).toEqual(
       before.books.flatMap(({ chapters }) => chapters.map((chapter) => chapter.access)),

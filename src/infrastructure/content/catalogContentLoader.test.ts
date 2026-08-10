@@ -4,6 +4,7 @@ import {
   loadCatalogContent,
   loadProductionCatalogContent,
 } from './catalogContentLoader'
+import tideArchiveFixture from './books/book-tide-archive.json'
 
 function fixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -292,7 +293,7 @@ describe('loadCatalogContent', () => {
 })
 
 describe('loadProductionCatalogContent', () => {
-  it('discovers exactly the twelve real fixtures via eager glob, sorted by catalogSequence', () => {
+  it('discovers exactly the thirteen real fixtures via eager glob, sorted by catalogSequence', () => {
     const { books, proseByChapterId } = loadProductionCatalogContent()
 
     expect(books.map((entry) => entry.book.id)).toEqual([
@@ -308,10 +309,48 @@ describe('loadProductionCatalogContent', () => {
       'book-legacy-book-6',
       'book-legacy-book-4',
       'book-legacy-book-5',
+      'book-tide-archive',
     ])
     expect(books[0].chapters.map((chapter) => chapter.sequence)).toEqual([
       3, 1, 2,
     ])
-    expect(proseByChapterId.size).toBe(64)
+    expect(proseByChapterId.size).toBe(67)
+  })
+
+  it('loads the complete owner-reviewed tide archive metadata and paragraphs', () => {
+    const { books, proseByChapterId } = loadProductionCatalogContent()
+    const entry = books.find(({ book }) => book.id === 'book-tide-archive')
+
+    expect(tideArchiveFixture.catalogSequence).toBe(13)
+    expect(entry?.book).toMatchObject({
+      id: 'book-tide-archive',
+      title: '潮汐檔案',
+      authorName: 'InnovativeNovels AI',
+      categoryLabel: '科幻懸疑',
+    })
+    expect(entry?.description).toBe(
+      '臨海城的鐘塔在凌晨三點十七分同時停擺，氣象局員林澄循著失蹤哥哥的訊息進入舊港鐘樓，發現城市正被一座能記錄未來的潮汐裝置拖向時間線重合的覆滅危機。',
+    )
+    expect(entry?.chapters.map((chapter) => chapter.title)).toEqual([
+      '沉入海底的鐘',
+      '舊港的回聲',
+      '第四點整',
+    ])
+    expect(entry?.chapters.every((chapter) => chapter.access === 'READABLE')).toBe(true)
+    expect(entry?.chapters.map((chapter) => chapter.id)).toEqual([
+      'chapter-tide-archive-001',
+      'chapter-tide-archive-002',
+      'chapter-tide-archive-003',
+    ])
+    expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([1, 2, 3])
+    expect(proseByChapterId.get('chapter-tide-archive-001')).toEqual(
+      tideArchiveFixture.chapters[0].prose,
+    )
+    expect(proseByChapterId.get('chapter-tide-archive-002')).toEqual(
+      tideArchiveFixture.chapters[1].prose,
+    )
+    expect(proseByChapterId.get('chapter-tide-archive-003')).toEqual(
+      tideArchiveFixture.chapters[2].prose,
+    )
   })
 })

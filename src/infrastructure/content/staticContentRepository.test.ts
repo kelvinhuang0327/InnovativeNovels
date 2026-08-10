@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { openReadingChapter } from '../../application/reading/readingUseCases'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
+import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import { StaticContentRepository } from './staticContentRepository'
 import emberCrownFixture from './books/book-ember-crown.json'
 import orbitLastLightFixture from './books/book-orbit-last-light.json'
+import tideArchiveFixture from './books/book-tide-archive.json'
 
 const EXPECTED_CATALOG_ORDER = [
   'book-tide-city',
@@ -17,6 +20,7 @@ const EXPECTED_CATALOG_ORDER = [
   'book-legacy-book-6',
   'book-legacy-book-4',
   'book-legacy-book-5',
+  'book-tide-archive',
 ] as const
 
 const EXPECTED_BOOK_METADATA: Record<
@@ -83,6 +87,11 @@ const EXPECTED_BOOK_METADATA: Record<
     authorName: 'NovelCraft AI',
     categoryLabel: '奇幻',
   },
+  'book-tide-archive': {
+    title: '潮汐檔案',
+    authorName: 'InnovativeNovels AI',
+    categoryLabel: '科幻懸疑',
+  },
 }
 
 const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
@@ -146,6 +155,11 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     { length: 13 },
     (_, index) => `chapter-legacy-book-5-${index + 1}`,
   ),
+  'book-tide-archive': [
+    'chapter-tide-archive-001',
+    'chapter-tide-archive-002',
+    'chapter-tide-archive-003',
+  ],
 }
 
 const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
@@ -267,6 +281,14 @@ const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
   ],
 }
 
+for (const fixtureChapter of tideArchiveFixture.chapters) {
+  EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS[fixtureChapter.chapterId] = {
+    sequence: fixtureChapter.sequence,
+    access: fixtureChapter.access,
+  }
+  EXPECTED_ACCESSIBLE_PROSE[fixtureChapter.chapterId] = fixtureChapter.prose
+}
+
 const LOCKED_CHAPTER_IDS = [
   'chapter-sealed-gate',
   'chapter-immortal-tribulation',
@@ -279,12 +301,12 @@ const LOCKED_CHAPTER_IDS = [
 ] as const
 
 describe('StaticContentRepository parity', () => {
-  it('lists exactly the twelve books in the expected catalog order', () => {
+  it('lists exactly the thirteen books in the expected catalog order', () => {
     const repository = new StaticContentRepository()
     const books = repository.listBooks()
 
     expect(books.map((entry) => entry.book.id)).toEqual(EXPECTED_CATALOG_ORDER)
-    expect(books).toHaveLength(12)
+    expect(books).toHaveLength(13)
   })
 
   it('represents all target genres in the catalog', () => {
@@ -301,6 +323,7 @@ describe('StaticContentRepository parity', () => {
         '科幻',
         '玄幻奇幻',
         '古代言情',
+        '科幻懸疑',
       ]),
     )
   })
@@ -387,7 +410,27 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(10)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(13)
+  })
+
+  it('lets the reader open the full published first chapter', () => {
+    const repository = new StaticContentRepository()
+    const opened = openReadingChapter(
+      repository,
+      {
+        load: () => undefined,
+        save: () => undefined,
+        listSavedPositions: () => [],
+      },
+      {
+        bookId: bookId('book-tide-archive'),
+        chapterId: chapterId('chapter-tide-archive-001'),
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
+    )
+
+    expect(opened?.prose).toEqual(tideArchiveFixture.chapters[0].prose)
   })
 
   it('returns undefined prose for every LOCKED chapter', () => {

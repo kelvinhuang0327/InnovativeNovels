@@ -61,7 +61,7 @@ describe('imported legacy book application path', () => {
     const matches = filterCatalog(books, { searchText: '吞噬古帝' })
     const book = getBookDetail(repository, IMPORTED_BOOK_ID)
 
-    expect(books).toHaveLength(12)
+    expect(books).toHaveLength(13)
     expect(matches.map((entry) => entry.book.id)).toEqual([IMPORTED_BOOK_ID])
     expect(book?.book).toMatchObject({
       id: IMPORTED_BOOK_ID,

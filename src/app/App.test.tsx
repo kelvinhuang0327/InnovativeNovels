@@ -323,10 +323,10 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
   }
 
-  it('renders exactly twelve books in the catalog', () => {
+  it('renders exactly thirteen books in the catalog', () => {
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(12)
+    expect(screen.getAllByRole('article')).toHaveLength(13)
   })
 
   it('preserves stable Book IDs through Book Detail navigation for every catalog position', () => {
@@ -434,7 +434,7 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     expect(
       screen.queryByRole('heading', { name: '繼續閱讀' }),
     ).not.toBeInTheDocument()
-    expect(screen.getAllByRole('article')).toHaveLength(12)
+    expect(screen.getAllByRole('article')).toHaveLength(13)
   })
 
   it('ignores a saved position pointing at an unknown Chapter ID', () => {
@@ -834,7 +834,7 @@ describe('AI Authoring Core V1 isolation', () => {
 
     expect(await screen.findByText('DRAFT / NOT PUBLISHED')).toBeInTheDocument()
     expect(screen.getByText('第 1 章：第1章：火種')).toBeInTheDocument()
-    expect(contentRepository.listBooks()).toHaveLength(12)
+    expect(contentRepository.listBooks()).toHaveLength(13)
     expect(
       contentRepository
         .listBooks()
@@ -1534,7 +1534,7 @@ describe('Wave 4 mobile reader session recovery', () => {
     firstMount.unmount()
 
     render(<App dependencies={createDependencies()} />)
-    expect(screen.getAllByRole('article')).toHaveLength(12)
+    expect(screen.getAllByRole('article')).toHaveLength(13)
     expect(screen.queryByLabelText('閱讀器')).not.toBeInTheDocument()
   })
 
@@ -1603,7 +1603,7 @@ describe('Wave 4 mobile reader session recovery', () => {
 
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(12)
+    expect(screen.getAllByRole('article')).toHaveLength(13)
     expect(rawMarker()).toBeNull()
   })
 
@@ -1615,7 +1615,7 @@ describe('Wave 4 mobile reader session recovery', () => {
 
     render(<App dependencies={createDependencies()} />)
 
-    expect(screen.getAllByRole('article')).toHaveLength(12)
+    expect(screen.getAllByRole('article')).toHaveLength(13)
     expect(rawMarker()).toBeNull()
   })
 
