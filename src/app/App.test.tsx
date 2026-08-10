@@ -889,9 +889,38 @@ describe('AI Authoring Core V1 isolation', () => {
 
     expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
     expect(screen.getByText('DRAFT / NOT PUBLISHED')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('草稿標題'), {
+      target: { value: '潮汐檔案（本地編輯）' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[0], {
+      target: { value: '本地編輯的第一章正文。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Chapter' }))
+    fireEvent.change(screen.getAllByLabelText('章節標題')[3], {
+      target: { value: '本地新增章節' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[3], {
+      target: { value: '本地新增章節正文。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '上移第 4 章' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除第 2 章' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy JSON' }))
+
+    const exported = JSON.parse(
+      (screen.getByRole('textbox', {
+        name: 'Draft JSON Export',
+      }) as HTMLTextAreaElement).value,
+    ) as Record<string, unknown>
+    expect(exported).not.toHaveProperty('status')
+    expect(exported).not.toHaveProperty('quality')
+    expect(exported).not.toHaveProperty('bookId')
     expect(contentRepository.listBooks()).toHaveLength(initialCatalogCount)
     expect(
-      contentRepository.listBooks().some(({ book }) => book.title === '潮汐檔案'),
+      contentRepository
+        .listBooks()
+        .some(({ book }) => book.title === '潮汐檔案（本地編輯）'),
     ).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: '返回閱讀目錄' }))

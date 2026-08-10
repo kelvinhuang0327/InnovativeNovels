@@ -5,6 +5,7 @@ import type {
 } from '../../application/authoring/authoringGatewayClient'
 import { importAgentDraft } from '../../application/authoring/agentDraftImport'
 import { buildAgentPrompt } from '../../application/authoring/agentPromptBuilder'
+import { exportDraftJson } from '../../application/authoring/draftExport'
 import type {
   AuthoringSession,
   AuthoringSessionRepository,
@@ -13,8 +14,20 @@ import type { ClipboardPort } from '../../application/authoring/clipboardPort'
 import type {
   AuthoringSpec,
   Draft,
+  GeneratedDraft,
 } from '../../domain/authoring/authoringContracts'
 import type { AgentDraftValidationError } from '../../domain/authoring/agentDraftExchange'
+import {
+  addDraftChapter,
+  moveDraftChapter,
+  removeDraftChapter,
+  updateDraftChapter,
+  updateDraftMetadata,
+} from '../../domain/authoring/draftEditing'
+import {
+  evaluateDraftQuality,
+  type DraftQualityResult,
+} from '../../domain/authoring/qualityEvaluator'
 import { validateAuthoringSpec } from '../../domain/authoring/authoringContracts'
 
 interface AuthoringPreviewScreenProps {
@@ -42,6 +55,7 @@ type DraftPreviewResult = SuccessfulDraftResult & {
 }
 
 type ClipboardStatus = 'copying' | 'copied' | 'failed'
+type ClipboardTarget = 'prompt' | 'draft'
 
 function hasMeaningfulSession(
   spec: AuthoringSpec,
@@ -75,6 +89,13 @@ function restoredPreviewResult(
   }
 }
 
+function withQuality(
+  generated: GeneratedDraft,
+  quality: DraftQualityResult,
+): Draft {
+  return { ...generated, status: 'DRAFT', quality }
+}
+
 export function AuthoringPreviewScreen({
   gatewayClient,
   onBack,
@@ -93,12 +114,14 @@ export function AuthoringPreviewScreen({
   const [result, setResult] = useState<DraftPreviewResult | undefined>(() =>
     restoredPreviewResult(restoredSession),
   )
+  const [qualityIsStale, setQualityIsStale] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>()
   const [importErrors, setImportErrors] = useState<
     readonly AgentDraftValidationError[]
   >([])
   const [rawAgentDraft, setRawAgentDraft] = useState('')
   const [clipboardStatus, setClipboardStatus] = useState<ClipboardStatus>()
+  const [clipboardTarget, setClipboardTarget] = useState<ClipboardTarget>()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
@@ -118,6 +141,25 @@ export function AuthoringPreviewScreen({
     })
   }, [agentPrompt, result, sessionRepository, spec])
 
+  const currentQuality = result
+    ? evaluateDraftQuality(result.draft)
+    : undefined
+  const isExportBlocked = Boolean(currentQuality?.hardFailures.length)
+
+  const updateCurrentDraft = (edit: (draft: GeneratedDraft) => GeneratedDraft) => {
+    setResult((current) => {
+      if (!current) {
+        return current
+      }
+
+      return {
+        ...current,
+        draft: withQuality(edit(current.draft), current.draft.quality),
+      }
+    })
+    setQualityIsStale(true)
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSubmitting(true)
@@ -135,6 +177,7 @@ export function AuthoringPreviewScreen({
       }
 
       setResult({ ...nextResult, source: 'gateway' })
+      setQualityIsStale(false)
     } catch {
       setErrorMessage('創作預覽暫時無法處理。')
     } finally {
@@ -151,21 +194,19 @@ export function AuthoringPreviewScreen({
 
     setAgentPrompt(buildAgentPrompt(spec))
     setClipboardStatus(undefined)
+    setClipboardTarget(undefined)
     setErrorMessage(undefined)
     setImportErrors([])
   }
 
-  const handleCopyPrompt = async () => {
-    if (!agentPrompt) {
-      return
-    }
-
+  const handleCopy = async (text: string, target: ClipboardTarget) => {
+    setClipboardTarget(target)
     setClipboardStatus('copying')
     try {
       if (!clipboardPort) {
         throw new Error('Clipboard capability unavailable.')
       }
-      await clipboardPort.writeText(agentPrompt)
+      await clipboardPort.writeText(text)
       setClipboardStatus('copied')
     } catch {
       setClipboardStatus('failed')
@@ -190,6 +231,25 @@ export function AuthoringPreviewScreen({
       providerName: 'external-agent-import',
       source: 'agent-import',
     })
+    setQualityIsStale(false)
+  }
+
+  const handleRecheckQuality = () => {
+    if (!result) {
+      return
+    }
+
+    const quality = evaluateDraftQuality(result.draft)
+    setResult((current) =>
+      current
+        ? {
+            ...current,
+            draft: withQuality(current.draft, quality),
+            quality,
+          }
+        : current,
+    )
+    setQualityIsStale(false)
   }
 
   const handleClearSession = () => {
@@ -197,10 +257,12 @@ export function AuthoringPreviewScreen({
     setSpec(INITIAL_SPEC)
     setAgentPrompt(undefined)
     setResult(undefined)
+    setQualityIsStale(false)
     setErrorMessage(undefined)
     setImportErrors([])
     setRawAgentDraft('')
     setClipboardStatus(undefined)
+    setClipboardTarget(undefined)
   }
 
   return (
@@ -224,7 +286,7 @@ export function AuthoringPreviewScreen({
       </h1>
       <p className="screen-copy">
         輸入一份創作規格，產生可交給外部 Agent 的提示，匯入結構化 JSON，
-        並預覽尚未發佈的草稿與品質檢查結果。
+        並在本地編輯、檢查與匯出尚未發佈的草稿。
       </p>
       <p className="authoring-provider-note" role="status">
         Draft provider / AI provider not connected
@@ -342,17 +404,17 @@ export function AuthoringPreviewScreen({
           <div className="actions">
             <button
               disabled={clipboardStatus === 'copying'}
-              onClick={handleCopyPrompt}
+              onClick={() => void handleCopy(agentPrompt, 'prompt')}
               type="button"
             >
               Copy Agent Prompt
             </button>
-            {clipboardStatus === 'copied' && (
+            {clipboardStatus === 'copied' && clipboardTarget === 'prompt' && (
               <p className="authoring-copy-status" role="status">
                 Prompt copied.
               </p>
             )}
-            {clipboardStatus === 'failed' && (
+            {clipboardStatus === 'failed' && clipboardTarget === 'prompt' && (
               <p className="authoring-error" role="alert">
                 無法自動複製，請選取下方提示文字手動複製。
               </p>
@@ -393,7 +455,7 @@ export function AuthoringPreviewScreen({
         )}
       </section>
 
-      {result && (
+      {result && currentQuality && (
         <section aria-labelledby="draft-preview-heading" className="draft-preview">
           <div className="draft-preview-header">
             <div>
@@ -408,12 +470,16 @@ export function AuthoringPreviewScreen({
             </div>
             <div>
               <p className="authoring-quality-status" role="status">
-                品質檢查：{result.draft.quality.status}
+                品質檢查：{qualityIsStale ? 'STALE' : result.draft.quality.status}
               </p>
               <p className="authoring-quality-status">
-                驗證狀態：
-                {result.draft.quality.hardFailures.length === 0 ? 'PASS' : 'FAIL'}
+                驗證狀態：{currentQuality.hardFailures.length === 0 ? 'PASS' : 'FAIL'}
               </p>
+              {qualityIsStale && (
+                <p className="authoring-quality-stale" role="status">
+                  草稿已變更，品質結果需要重新檢查。
+                </p>
+              )}
             </div>
           </div>
 
@@ -421,29 +487,73 @@ export function AuthoringPreviewScreen({
           <p className="authoring-category">
             分類：{result.draft.categoryLabel}
           </p>
+          <div className="authoring-draft-fields">
+            <label className="authoring-field" htmlFor="draft-title">
+              草稿標題
+              <input
+                aria-describedby="draft-validation-feedback"
+                aria-invalid={currentQuality.hardFailures.some(
+                  (issue) => issue.code === 'TITLE_REQUIRED',
+                )}
+                id="draft-title"
+                onChange={(event) =>
+                  updateCurrentDraft((draft) =>
+                    updateDraftMetadata(draft, { title: event.target.value }),
+                  )
+                }
+                value={result.draft.title}
+              />
+            </label>
+            <label className="authoring-field" htmlFor="draft-genre">
+              草稿分類／Genre
+              <input
+                aria-describedby="draft-validation-feedback"
+                aria-invalid={currentQuality.hardFailures.some(
+                  (issue) => issue.code === 'CATEGORY_REQUIRED',
+                )}
+                id="draft-genre"
+                onChange={(event) =>
+                  updateCurrentDraft((draft) =>
+                    updateDraftMetadata(draft, {
+                      categoryLabel: event.target.value,
+                    }),
+                  )
+                }
+                value={result.draft.categoryLabel}
+              />
+            </label>
+          </div>
+
+          <div className="actions authoring-review-actions">
+            <button onClick={handleRecheckQuality} type="button">
+              Re-check Quality
+            </button>
+          </div>
 
           <section aria-labelledby="hard-failures-heading">
             <h3 id="hard-failures-heading">HARD_VALIDATION_FAILURE</h3>
-            {result.draft.quality.hardFailures.length === 0 ? (
-              <p>沒有硬性驗證失敗。</p>
-            ) : (
-              <ul>
-                {result.draft.quality.hardFailures.map((issue) => (
-                  <li key={`${issue.code}-${issue.chapterSequence ?? 'draft'}`}>
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div id="draft-validation-feedback">
+              {currentQuality.hardFailures.length === 0 ? (
+                <p>沒有硬性驗證失敗。</p>
+              ) : (
+                <ul>
+                  {currentQuality.hardFailures.map((issue) => (
+                    <li key={`${issue.code}-${issue.chapterSequence ?? 'draft'}`}>
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
 
           <section aria-labelledby="quality-warnings-heading">
             <h3 id="quality-warnings-heading">QUALITY_WARNING</h3>
-            {result.draft.quality.warnings.length === 0 ? (
+            {currentQuality.warnings.length === 0 ? (
               <p>沒有品質警告。</p>
             ) : (
               <ul>
-                {result.draft.quality.warnings.map((issue) => (
+                {currentQuality.warnings.map((issue) => (
                   <li key={`${issue.code}-${issue.chapterSequence ?? 'draft'}`}>
                     {issue.message}
                   </li>
@@ -452,21 +562,162 @@ export function AuthoringPreviewScreen({
             )}
           </section>
 
-          <h3>草稿章節</h3>
-          <ol className="draft-chapter-list">
-            {result.draft.chapters.map((chapter) => (
-              <li key={chapter.sequence}>
-                <h4>
-                  第 {chapter.sequence} 章：{chapter.title}
-                </h4>
-                {chapter.prose.map((paragraph, paragraphIndex) => (
-                  <p key={`${chapter.sequence}-${paragraphIndex}`}>
-                    {paragraph}
-                  </p>
-                ))}
-              </li>
-            ))}
-          </ol>
+          <section aria-labelledby="draft-chapters-heading">
+            <div className="draft-section-heading">
+              <h3 id="draft-chapters-heading">草稿章節</h3>
+              <button
+                onClick={() => updateCurrentDraft((draft) => addDraftChapter(draft))}
+                type="button"
+              >
+                Add Chapter
+              </button>
+            </div>
+            {result.draft.chapters.length === 0 ? (
+              <p className="authoring-error" role="alert">
+                目前沒有章節，草稿無法通過驗證。請新增章節。
+              </p>
+            ) : (
+              <ol className="draft-chapter-list">
+                {result.draft.chapters.map((chapter) => {
+                  const chapterTitleError = currentQuality.hardFailures.some(
+                    (issue) =>
+                      issue.code === 'CHAPTER_TITLE_REQUIRED' &&
+                      issue.chapterSequence === chapter.sequence,
+                  )
+                  const chapterProseError = currentQuality.hardFailures.some(
+                    (issue) =>
+                      issue.code === 'CHAPTER_PROSE_REQUIRED' &&
+                      issue.chapterSequence === chapter.sequence,
+                  )
+
+                  return (
+                    <li className="draft-chapter-editor" key={chapter.sequence}>
+                      <div className="draft-chapter-editor-header">
+                        <h4>
+                          第 {chapter.sequence} 章：{chapter.title}
+                        </h4>
+                        <div className="actions draft-chapter-actions">
+                          <button
+                            aria-label={`上移第 ${chapter.sequence} 章`}
+                            disabled={chapter.sequence === 1}
+                            onClick={() =>
+                              updateCurrentDraft((draft) =>
+                                moveDraftChapter(draft, chapter.sequence, 'up'),
+                              )
+                            }
+                            type="button"
+                          >
+                            Move Up
+                          </button>
+                          <button
+                            aria-label={`下移第 ${chapter.sequence} 章`}
+                            disabled={chapter.sequence === result.draft.chapters.length}
+                            onClick={() =>
+                              updateCurrentDraft((draft) =>
+                                moveDraftChapter(draft, chapter.sequence, 'down'),
+                              )
+                            }
+                            type="button"
+                          >
+                            Move Down
+                          </button>
+                          <button
+                            aria-label={`移除第 ${chapter.sequence} 章`}
+                            onClick={() =>
+                              updateCurrentDraft((draft) =>
+                                removeDraftChapter(draft, chapter.sequence),
+                              )
+                            }
+                            type="button"
+                          >
+                            Remove Chapter
+                          </button>
+                        </div>
+                      </div>
+                      <label
+                        className="authoring-field"
+                        htmlFor={`chapter-${chapter.sequence}-title`}
+                      >
+                        章節標題
+                        <input
+                          aria-describedby="draft-validation-feedback"
+                          aria-invalid={chapterTitleError}
+                          id={`chapter-${chapter.sequence}-title`}
+                          onChange={(event) =>
+                            updateCurrentDraft((draft) =>
+                              updateDraftChapter(draft, chapter.sequence, {
+                                title: event.target.value,
+                              }),
+                            )
+                          }
+                          value={chapter.title}
+                        />
+                      </label>
+                      <label
+                        className="authoring-field"
+                        htmlFor={`chapter-${chapter.sequence}-prose`}
+                      >
+                        章節正文
+                        <textarea
+                          aria-describedby="draft-validation-feedback"
+                          aria-invalid={chapterProseError}
+                          id={`chapter-${chapter.sequence}-prose`}
+                          onChange={(event) =>
+                            updateCurrentDraft((draft) =>
+                              updateDraftChapter(draft, chapter.sequence, {
+                                prose: [event.target.value],
+                              }),
+                            )
+                          }
+                          value={chapter.prose.join('\n\n')}
+                        />
+                      </label>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+          </section>
+
+          <section aria-labelledby="draft-export-heading" className="draft-export-panel">
+            <h3 id="draft-export-heading">Draft JSON Export</h3>
+            <p>只包含目前編輯中的 title、genre 與 chapters，不含 session 或發佈資訊。</p>
+            <label className="authoring-field" htmlFor="draft-json-export">
+              Current Draft JSON
+              <textarea
+                aria-label="Draft JSON Export"
+                id="draft-json-export"
+                readOnly
+                value={exportDraftJson(result.draft)}
+              />
+            </label>
+            <div className="actions">
+              <button
+                disabled={isExportBlocked || clipboardStatus === 'copying'}
+                onClick={() =>
+                  void handleCopy(exportDraftJson(result.draft), 'draft')
+                }
+                type="button"
+              >
+                Copy JSON
+              </button>
+              {isExportBlocked && (
+                <p className="authoring-error" role="alert">
+                  Draft JSON 目前不是有效可匯出草稿，請先修正硬性驗證失敗。
+                </p>
+              )}
+              {clipboardStatus === 'copied' && clipboardTarget === 'draft' && (
+                <p className="authoring-copy-status" role="status">
+                  Draft JSON copied.
+                </p>
+              )}
+              {clipboardStatus === 'failed' && clipboardTarget === 'draft' && (
+                <p className="authoring-error" role="alert">
+                  無法自動複製，請選取下方 JSON 文字手動複製。
+                </p>
+              )}
+            </div>
+          </section>
         </section>
       )}
     </section>

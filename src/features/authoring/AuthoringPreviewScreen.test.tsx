@@ -221,6 +221,119 @@ describe('AuthoringPreviewScreen', () => {
     expect(gatewayClient.generateDraft).not.toHaveBeenCalled()
   })
 
+  it('supports the full local editing, quality, reorder, and export flow', async () => {
+    const writeText = vi.fn(async () => undefined)
+    render(
+      <AuthoringPreviewScreen
+        clipboardPort={{ writeText }}
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('草稿標題'), {
+      target: { value: '潮汐檔案（編輯測試）' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[0], {
+      target: { value: '第一章已編輯正文。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Chapter' }))
+    expect(screen.getAllByLabelText('章節標題')).toHaveLength(4)
+    fireEvent.change(screen.getAllByLabelText('章節標題')[3], {
+      target: { value: '新增章節' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[3], {
+      target: { value: '新增章節正文。' },
+    })
+
+    expect(screen.getByText('品質檢查：STALE')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    expect(screen.getByText('品質檢查：WARNING')).toBeInTheDocument()
+    expect(screen.queryByText('品質檢查：STALE')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '上移第 4 章' }))
+    fireEvent.click(screen.getByRole('button', { name: '移除第 2 章' }))
+
+    expect(
+      screen.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent),
+    ).toEqual([
+      '第 1 章：沉入海底的鐘',
+      '第 2 章：新增章節',
+      '第 3 章：第四點整',
+    ])
+    expect(screen.getByText('品質檢查：STALE')).toBeInTheDocument()
+
+    const exportText = screen.getByRole('textbox', {
+      name: 'Draft JSON Export',
+    }) as HTMLTextAreaElement
+    const exported = JSON.parse(exportText.value) as {
+      title: string
+      genre: string
+      chapters: Array<{ sequence: number; title: string; prose: string }>
+    }
+    expect(exported).toEqual({
+      title: '潮汐檔案（編輯測試）',
+      genre: '科幻懸疑',
+      chapters: [
+        {
+          sequence: 1,
+          title: '沉入海底的鐘',
+          prose: '第一章已編輯正文。',
+        },
+        {
+          sequence: 2,
+          title: '新增章節',
+          prose: '新增章節正文。',
+        },
+        {
+          sequence: 3,
+          title: '第四點整',
+          prose: '第一段潮汐停住。\n\n第二段空白浮出水面。',
+        },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy JSON' }))
+    expect(writeText).toHaveBeenCalledWith(exportText.value)
+  })
+
+  it('keeps the current Draft JSON selectable when clipboard copy fails', async () => {
+    render(
+      <AuthoringPreviewScreen
+        clipboardPort={{
+          writeText: vi.fn(async () => {
+            throw new Error('clipboard denied')
+          }),
+        }}
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    const exportText = screen.getByRole('textbox', {
+      name: 'Draft JSON Export',
+    }) as HTMLTextAreaElement
+    fireEvent.click(screen.getByRole('button', { name: 'Copy JSON' }))
+
+    expect(await screen.findByText(/請選取下方 JSON/)).toBeInTheDocument()
+    expect(exportText.value).toContain('潮汐檔案')
+  })
+
   it('preserves the previous accepted Draft when a later import is invalid', async () => {
     render(
       <AuthoringPreviewScreen gatewayClient={createClient()} onBack={vi.fn()} />,
@@ -292,6 +405,12 @@ describe('AuthoringPreviewScreen', () => {
       screen.getByRole('button', { name: 'Import Structured Draft' }),
     )
     expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('草稿標題'), {
+      target: { value: '潮汐檔案（重新編輯）' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[0], {
+      target: { value: '重新編輯的第一章正文。' },
+    })
     firstRender.unmount()
 
     render(
@@ -303,7 +422,13 @@ describe('AuthoringPreviewScreen', () => {
     )
 
     expect(screen.getByDisplayValue('潮水每天提早一分鐘退去。')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '潮汐檔案（重新編輯）' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('草稿標題')).toHaveValue('潮汐檔案（重新編輯）')
+    expect(screen.getAllByLabelText('章節正文')[0]).toHaveValue(
+      '重新編輯的第一章正文。',
+    )
     expect(
       (screen.getByRole('textbox', {
         name: 'Generated Agent Prompt',

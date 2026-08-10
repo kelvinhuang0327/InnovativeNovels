@@ -481,6 +481,13 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.authoring-quality-stale {
+  margin: 0.5rem 0 0;
+  color: #8d3f2f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .draft-preview h2 {
   margin-bottom: 0;
   font-family: Georgia, 'Times New Roman', serif;
@@ -502,6 +509,64 @@ button:focus-visible {
 .authoring-category {
   color: #8d3f2f;
   font-weight: 700;
+}
+
+.authoring-draft-fields {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.authoring-review-actions {
+  margin-top: 1rem;
+}
+
+.draft-section-heading,
+.draft-chapter-editor-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.draft-section-heading h3 {
+  margin-bottom: 0;
+}
+
+.draft-chapter-editor-header {
+  align-items: flex-start;
+}
+
+.draft-chapter-actions {
+  justify-content: flex-end;
+}
+
+.draft-chapter-actions button {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.draft-chapter-editor .authoring-field {
+  margin-top: 1rem;
+}
+
+.draft-export-panel {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ded8cd;
+}
+
+.draft-export-panel p {
+  color: #65594d;
+  line-height: 1.6;
+}
+
+.draft-export-panel textarea {
+  min-height: 14rem;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.85rem;
 }
 
 .draft-preview ul {
