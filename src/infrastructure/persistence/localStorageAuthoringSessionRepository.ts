@@ -9,6 +9,7 @@ import {
   type PublishedAppendCandidate,
 } from '../../domain/authoring/publishedAppendCandidate'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import { parseContinuityReviewBatch, type ContinuityReviewBatchV1 } from '../../domain/authoring/continuityReview'
 import {
   createEmptyStoryBible,
   parseStoryBible,
@@ -33,6 +34,8 @@ interface StoredAuthoringSession {
   readonly targetPublishedBookId?: string
   readonly basePublishedBookFingerprint?: string
   readonly publishedAppendCandidate?: PublishedAppendCandidate
+  readonly lastContinuityReviewedSequence?: number
+  readonly continuityReviewBatch?: ContinuityReviewBatchV1
 }
 
 const SESSION_FIELDS = new Set([
@@ -46,6 +49,8 @@ const SESSION_FIELDS = new Set([
   'targetPublishedBookId',
   'basePublishedBookFingerprint',
   'publishedAppendCandidate',
+  'lastContinuityReviewedSequence',
+  'continuityReviewBatch',
 ])
 const SPEC_FIELDS = new Set([
   'premise',
@@ -287,6 +292,29 @@ export function parseAuthoringSession(
       return undefined
     }
 
+    const lastContinuityReviewedSequence =
+      candidate.lastContinuityReviewedSequence === undefined
+        ? 0
+        : typeof candidate.lastContinuityReviewedSequence === 'number' &&
+            Number.isInteger(candidate.lastContinuityReviewedSequence) &&
+            candidate.lastContinuityReviewedSequence >= 0
+          ? candidate.lastContinuityReviewedSequence
+          : undefined
+    if (lastContinuityReviewedSequence === undefined) {
+      return undefined
+    }
+
+    const continuityReviewBatch =
+      candidate.continuityReviewBatch === undefined
+        ? undefined
+        : parseContinuityReviewBatch(candidate.continuityReviewBatch)
+    if (
+      candidate.continuityReviewBatch !== undefined &&
+      !continuityReviewBatch
+    ) {
+      return undefined
+    }
+
     let draft: Draft | undefined
     if (generatedDraft) {
       draft = {
@@ -306,6 +334,8 @@ export function parseAuthoringSession(
       targetPublishedBookId,
       basePublishedBookFingerprint,
       publishedAppendCandidate,
+      lastContinuityReviewedSequence,
+      continuityReviewBatch,
     }
   } catch {
     return undefined
@@ -330,6 +360,8 @@ export function serializeAuthoringSession(session: AuthoringSession): string {
     targetPublishedBookId: session.targetPublishedBookId,
     basePublishedBookFingerprint: session.basePublishedBookFingerprint,
     publishedAppendCandidate: session.publishedAppendCandidate,
+    lastContinuityReviewedSequence: session.lastContinuityReviewedSequence ?? 0,
+    continuityReviewBatch: session.continuityReviewBatch,
   }
   return JSON.stringify(stored)
 }

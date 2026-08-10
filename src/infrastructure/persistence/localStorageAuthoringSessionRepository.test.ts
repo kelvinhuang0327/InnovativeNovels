@@ -189,6 +189,46 @@ describe('LocalStorageAuthoringSessionRepository', () => {
     expect(repository.load()?.storyBible).toEqual(createEmptyStoryBible())
   })
 
+  it('persists continuity checkpoint, active batch, decisions, and applied state additively', () => {
+    const continuityReviewBatch = {
+      schemaVersion: 1 as const,
+      projectId: 'project-a',
+      reviewedFromSequence: 4,
+      reviewedToSequence: 5,
+      sourceDraftFingerprint: 'draft-fingerprint',
+      sourceBibleFingerprint: 'bible-fingerprint',
+      generatedPrompt: 'Role: Novel Story Bible Continuity Review Agent',
+      proposals: [
+        {
+          proposal: {
+            type: 'ADD_WORLD_RULE' as const,
+            text: '新規則',
+            reason: '只供人工審核',
+          },
+          validity: 'VALID' as const,
+          decision: 'ACCEPT' as const,
+          applied: true,
+        },
+      ],
+      status: 'APPLIED' as const,
+      appliedStoryBibleFingerprint: 'applied-bible-fingerprint',
+    }
+    const repository = new LocalStorageAuthoringSessionRepository(
+      window.localStorage,
+    )
+
+    repository.save({
+      ...session,
+      lastContinuityReviewedSequence: 3,
+      continuityReviewBatch,
+    })
+
+    const restored = repository.load()
+    expect(restored?.lastContinuityReviewedSequence).toBe(3)
+    expect(restored?.continuityReviewBatch).toEqual(continuityReviewBatch)
+    expect(JSON.stringify(restored?.storyBible)).not.toContain('只供人工審核')
+  })
+
   it('fails closed on malformed Story Bible without touching unrelated storage', () => {
     window.localStorage.setItem(
       AUTHORING_SESSION_STORAGE_KEY,

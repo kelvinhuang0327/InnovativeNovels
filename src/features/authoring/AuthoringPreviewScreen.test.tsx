@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   AuthoringGatewayClient,
@@ -9,12 +9,14 @@ import type { AuthoringSessionRepository } from '../../application/authoring/aut
 import type { ClipboardPort } from '../../application/authoring/clipboardPort'
 import type { GeneratedDraft } from '../../domain/authoring/authoringContracts'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import { createEmptyStoryBible } from '../../domain/authoring/storyBible'
 import tideArchiveFixture from '../../infrastructure/content/books/book-tide-archive.json'
 import { parseContentBookFixture } from '../../infrastructure/content/catalogContentContract'
 import { loadProductionCatalogContent } from '../../infrastructure/content/catalogContentLoader'
 import { fingerprintPublishedBook } from '../../domain/authoring/publishedAppendCandidate'
 import { createPublishedBookSnapshot } from '../../domain/authoring/publishedAppendCandidate'
 import { AuthoringPreviewScreen } from './AuthoringPreviewScreen'
+import { LocalStorageAuthoringProjectRepository } from '../../infrastructure/persistence/localStorageAuthoringProjectRepository'
 
 const generatedDraft: GeneratedDraft = {
   title: '預覽草稿',
@@ -136,6 +138,7 @@ function createSessionRepository(): AuthoringSessionRepository {
 describe('AuthoringPreviewScreen', () => {
   afterEach(() => {
     cleanup()
+    window.localStorage.clear()
   })
 
   it('uses the gateway client to display a draft-only preview with quality results', async () => {
@@ -168,6 +171,128 @@ describe('AuthoringPreviewScreen', () => {
         premise: '一名守夜人發現城市的鐘每天少響一聲。',
       }),
     )
+  })
+
+  it('runs the continuity review workflow through the Authoring Workspace with explicit decisions and checkpoint completion', async () => {
+    const projectRepository = new LocalStorageAuthoringProjectRepository(
+      window.localStorage,
+      () => 'continuity-project',
+    )
+    const before = projectRepository.load()
+    expect(before.ok).toBe(true)
+
+    const rendered = render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        projectRepository={projectRepository}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('故事前提'), {
+      target: { value: '一名守夜人發現城市的鐘每天少響一聲。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '產生草稿預覽' }))
+    expect(await screen.findByRole('heading', { name: '預覽草稿' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review Next Chapters' }))
+    expect(await screen.findByDisplayValue(/Role: Novel Story Bible Continuity Review Agent/)).toBeInTheDocument()
+    const reviewPrompt = screen.getByDisplayValue(/Role: Novel Story Bible Continuity Review Agent/) as HTMLTextAreaElement
+    expect(reviewPrompt.value).toContain('第一段。')
+    expect(reviewPrompt.value).toContain('第二段。')
+
+    fireEvent.change(screen.getByLabelText('Proposal JSON (raw JSON only)'), {
+      target: {
+        value: JSON.stringify({
+          proposals: [
+            { type: 'ADD_WORLD_RULE', text: '鐘每天少響一聲。', reason: '章節正文支持。' },
+            { type: 'ADD_STYLE_NOTE', text: '保持克制。', reason: '拒絕此提案。' },
+          ],
+        }),
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Parse Proposals' }))
+    expect(await screen.findByText('ADD_WORLD_RULE')).toBeInTheDocument()
+    const afterImport = projectRepository.load()
+    expect(afterImport.ok).toBe(true)
+    if (!afterImport.ok) return
+    expect(afterImport.store.projects[0]?.session.storyBible).toEqual(createEmptyStoryBible())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept proposal 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reject proposal 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Accepted' }))
+
+    await waitFor(() => {
+      const stored = projectRepository.load()
+      expect(stored.ok).toBe(true)
+      if (stored.ok) {
+        expect(stored.store.projects[0]?.session.storyBible.worldRules).toEqual(['鐘每天少響一聲。'])
+        expect(stored.store.projects[0]?.session.storyBible.styleNotes).toEqual([])
+        expect(stored.store.projects[0]?.session.continuityReviewBatch?.status).toBe('APPLIED')
+      }
+    })
+    expect(screen.getByRole('button', { name: 'Complete Review' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Complete Review' }))
+
+    await waitFor(() => {
+      const stored = projectRepository.load()
+      expect(stored.ok).toBe(true)
+      if (stored.ok) {
+        expect(stored.store.projects[0]?.session.lastContinuityReviewedSequence).toBe(2)
+        expect(stored.store.projects[0]?.session.continuityReviewBatch).toBeUndefined()
+      }
+    })
+    expect(screen.getByText('Continuity review up to date.')).toBeInTheDocument()
+
+    rendered.unmount()
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        projectRepository={projectRepository}
+      />,
+    )
+    expect(screen.getByText('Continuity review up to date.')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('鐘每天少響一聲。')).toBeInTheDocument()
+  })
+
+  it('keeps active continuity batches isolated while switching projects', async () => {
+    const ids = ['project-a', 'project-b']
+    const projectRepository = new LocalStorageAuthoringProjectRepository(
+      window.localStorage,
+      () => ids.shift() ?? 'unexpected-project',
+    )
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        projectRepository={projectRepository}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('故事前提'), {
+      target: { value: '第一個專案的故事。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '產生草稿預覽' }))
+    expect(await screen.findByRole('heading', { name: '預覽草稿' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Review Next Chapters' }))
+    expect(await screen.findByDisplayValue(/Role: Novel Story Bible Continuity Review Agent/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('New project name'), { target: { value: 'Project B' } })
+    fireEvent.click(screen.getByRole('button', { name: 'New Project' }))
+    expect(await screen.findByText('Continuity review up to date.')).toBeInTheDocument()
+    const projectB = projectRepository.load()
+    expect(projectB.ok).toBe(true)
+    if (!projectB.ok) return
+    expect(projectB.store.projects.find((project) => project.projectId === 'project-b')?.session.continuityReviewBatch).toBeUndefined()
+
+    fireEvent.change(screen.getByLabelText('Current Project'), { target: { value: 'project-a' } })
+    expect(await screen.findByDisplayValue(/Role: Novel Story Bible Continuity Review Agent/)).toBeInTheDocument()
+    const projectA = projectRepository.load()
+    expect(projectA.ok).toBe(true)
+    if (projectA.ok) {
+      expect(projectA.store.projects.find((project) => project.projectId === 'project-a')?.session.continuityReviewBatch?.status).toBe('DRAFT')
+    }
   })
 
   it('loads book-tide-archive as a five-chapter continuation and prepares a six-seven append candidate', async () => {

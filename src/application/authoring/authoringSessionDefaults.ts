@@ -25,5 +25,6 @@ export function createEmptyAuthoringSession(): AuthoringSession {
     spec: { ...INITIAL_SPEC },
     storyBible: createEmptyStoryBible(),
     publicationPreparation: { ...INITIAL_PUBLICATION_PREPARATION },
+    lastContinuityReviewedSequence: 0,
   }
 }

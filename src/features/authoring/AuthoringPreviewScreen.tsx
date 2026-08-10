@@ -69,6 +69,11 @@ import {
   type PublishedAppendCandidateBuildResult,
   type ProductionFixtureValidator,
 } from '../../domain/authoring/publishedAppendCandidate'
+import {
+  advanceContinuityCheckpointAfterDraftEdit,
+  isContinuityReviewDraftRangeChanged,
+  type ContinuityReviewBatchV1,
+} from '../../domain/authoring/continuityReview'
 import { buildPublishedBookContinuationDraft } from '../../domain/authoring/publishedBookContinuation'
 import {
   createEmptyStoryBible,
@@ -76,6 +81,7 @@ import {
   type StoryBibleV1,
 } from '../../domain/authoring/storyBible'
 import { StoryBibleEditor } from './StoryBibleEditor'
+import { ContinuityReviewPanel } from './ContinuityReviewPanel'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
@@ -134,6 +140,8 @@ function hasMeaningfulSession(
   targetPublishedBookId: string | undefined,
   basePublishedBookFingerprint: string | undefined,
   publishedAppendCandidate: PublishedAppendCandidate | undefined,
+  lastContinuityReviewedSequence: number,
+  continuityReviewBatch: ContinuityReviewBatchV1 | undefined,
 ): boolean {
   return (
     spec.premise.trim().length > 0 ||
@@ -151,7 +159,9 @@ function hasMeaningfulSession(
     publicationPreparation.catalogSequence !== undefined ||
     Boolean(targetPublishedBookId) ||
     Boolean(basePublishedBookFingerprint) ||
-    Boolean(publishedAppendCandidate)
+    Boolean(publishedAppendCandidate) ||
+    lastContinuityReviewedSequence > 0 ||
+    Boolean(continuityReviewBatch)
   )
 }
 
@@ -283,6 +293,11 @@ export function AuthoringPreviewScreen({
   const [publishedAppendCandidate, setPublishedAppendCandidate] = useState<
     PublishedAppendCandidate | undefined
   >(() => restoredSession?.publishedAppendCandidate)
+  const [lastContinuityReviewedSequence, setLastContinuityReviewedSequence] =
+    useState(() => restoredSession?.lastContinuityReviewedSequence ?? 0)
+  const [continuityReviewBatch, setContinuityReviewBatch] = useState<
+    ContinuityReviewBatchV1 | undefined
+  >(() => restoredSession?.continuityReviewBatch)
   const [appendBuildResult, setAppendBuildResult] = useState<
     PublishedAppendCandidateBuildResult | undefined
   >(() =>
@@ -323,6 +338,8 @@ export function AuthoringPreviewScreen({
           targetPublishedBookId,
           basePublishedBookFingerprint,
           publishedAppendCandidate,
+          lastContinuityReviewedSequence,
+          continuityReviewBatch,
         },
       )
       projectRepository.save(nextStore)
@@ -344,6 +361,8 @@ export function AuthoringPreviewScreen({
         targetPublishedBookId,
         basePublishedBookFingerprint,
         publishedAppendCandidate,
+        lastContinuityReviewedSequence,
+        continuityReviewBatch,
       )
     ) {
       sessionRepository.clear()
@@ -360,6 +379,8 @@ export function AuthoringPreviewScreen({
       targetPublishedBookId,
       basePublishedBookFingerprint,
       publishedAppendCandidate,
+      lastContinuityReviewedSequence,
+      continuityReviewBatch,
     })
   }, [
     agentPrompt,
@@ -374,6 +395,8 @@ export function AuthoringPreviewScreen({
     spec,
     storyBible,
     targetPublishedBookId,
+    continuityReviewBatch,
+    lastContinuityReviewedSequence,
   ])
 
   const currentSession = (): AuthoringSession => ({
@@ -386,6 +409,8 @@ export function AuthoringPreviewScreen({
     targetPublishedBookId,
     basePublishedBookFingerprint,
     publishedAppendCandidate,
+    lastContinuityReviewedSequence,
+    continuityReviewBatch,
   })
 
   const restoreProjectSession = (session: AuthoringSession) => {
@@ -411,6 +436,8 @@ export function AuthoringPreviewScreen({
     setBasePublishedBookFingerprint(session.basePublishedBookFingerprint)
     setPublishedBookSelection(session.targetPublishedBookId ?? '')
     setPublishedAppendCandidate(session.publishedAppendCandidate)
+    setLastContinuityReviewedSequence(session.lastContinuityReviewedSequence ?? 0)
+    setContinuityReviewBatch(session.continuityReviewBatch)
     setAppendBuildResult(
       session.publishedAppendCandidate
         ? restoredAppendBuildResult(session.publishedAppendCandidate)
@@ -604,9 +631,23 @@ export function AuthoringPreviewScreen({
         return current
       }
 
+      const nextGeneratedDraft = edit(current.draft)
+      const nextDraft = withQuality(nextGeneratedDraft, current.draft.quality)
+      setLastContinuityReviewedSequence((checkpoint) =>
+        advanceContinuityCheckpointAfterDraftEdit(
+          current.draft,
+          nextDraft,
+          checkpoint,
+        ),
+      )
+      setContinuityReviewBatch((batch) =>
+        batch && isContinuityReviewDraftRangeChanged(batch, current.draft, nextDraft)
+          ? { ...batch, status: 'STALE' }
+          : batch,
+      )
       return {
         ...current,
-        draft: withQuality(edit(current.draft), current.draft.quality),
+        draft: nextDraft,
       }
     })
     setPublishedAppendCandidate(undefined)
@@ -636,6 +677,8 @@ export function AuthoringPreviewScreen({
 
       setResult({ ...nextResult, source: 'gateway' })
       setStoryBible(createEmptyStoryBible())
+      setLastContinuityReviewedSequence(0)
+      setContinuityReviewBatch(undefined)
       setPublishedAppendCandidate(undefined)
       setAppendBuildResult(undefined)
       setQualityIsStale(false)
@@ -711,6 +754,8 @@ export function AuthoringPreviewScreen({
     setContinuationImportErrors([])
     setContinuationPrompt(undefined)
     setStoryBible(createEmptyStoryBible())
+    setLastContinuityReviewedSequence(0)
+    setContinuityReviewBatch(undefined)
     setPublishedAppendCandidate(undefined)
     setAppendBuildResult(undefined)
     setResult({
@@ -798,6 +843,8 @@ export function AuthoringPreviewScreen({
     sessionRepository?.clear()
     setSpec(INITIAL_SPEC)
     setStoryBible(createEmptyStoryBible())
+    setLastContinuityReviewedSequence(0)
+    setContinuityReviewBatch(undefined)
     setAgentPrompt(undefined)
     setContinuationPrompt(undefined)
     setResult(undefined)
@@ -862,6 +909,8 @@ export function AuthoringPreviewScreen({
         targetPublishedBookId,
         basePublishedBookFingerprint,
         publishedAppendCandidate,
+        lastContinuityReviewedSequence,
+        continuityReviewBatch,
       ) &&
       (targetPublishedBookId !== (continuationSelectionBook.book.id as string) ||
         !draftsHaveSameContent(result?.draft, converted.draft) ||
@@ -870,7 +919,9 @@ export function AuthoringPreviewScreen({
         Boolean(agentPrompt) ||
         Boolean(continuationPrompt) ||
         hasPublicationPreparationInput ||
-        Boolean(publishedAppendCandidate))
+        Boolean(publishedAppendCandidate) ||
+        lastContinuityReviewedSequence > 0 ||
+        Boolean(continuityReviewBatch))
 
     if (
       hasMateriallyDifferentSession &&
@@ -891,6 +942,8 @@ export function AuthoringPreviewScreen({
 
     setSpec(nextSpec)
     setStoryBible(createEmptyStoryBible())
+    setLastContinuityReviewedSequence(0)
+    setContinuityReviewBatch(undefined)
     setAgentPrompt(undefined)
     setContinuationPrompt(undefined)
     setRawAgentDraft('')
@@ -1167,11 +1220,37 @@ export function AuthoringPreviewScreen({
       <StoryBibleEditor
         onChange={(nextStoryBible) => {
           setStoryBible(nextStoryBible)
+          setContinuityReviewBatch((batch) =>
+            batch ? { ...batch, status: 'STALE' } : batch,
+          )
           setAgentPrompt(undefined)
           setContinuationPrompt(undefined)
           setClipboardStatus(undefined)
           setClipboardTarget(undefined)
         }}
+        storyBible={storyBible}
+      />
+
+      <ContinuityReviewPanel
+        batch={continuityReviewBatch}
+        checkpoint={lastContinuityReviewedSequence}
+        clipboardPort={clipboardPort}
+        draft={result?.draft}
+        onApply={(nextStoryBible, nextBatch) => {
+          setStoryBible(nextStoryBible)
+          setContinuityReviewBatch(nextBatch)
+          setAgentPrompt(undefined)
+          setContinuationPrompt(undefined)
+          setClipboardStatus(undefined)
+          setClipboardTarget(undefined)
+        }}
+        onBatchChange={setContinuityReviewBatch}
+        onComplete={(nextCheckpoint) => {
+          setLastContinuityReviewedSequence(nextCheckpoint)
+          setContinuityReviewBatch(undefined)
+        }}
+        projectId={projectStore?.activeProjectId}
+        spec={spec}
         storyBible={storyBible}
       />
 
