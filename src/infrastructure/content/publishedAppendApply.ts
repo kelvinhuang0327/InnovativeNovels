@@ -96,6 +96,7 @@ export interface PublishedAppendApplyOptions {
 
 interface FixtureEntry {
   readonly fixturePath: string
+  readonly serialized: string
   readonly raw: unknown
   readonly parsed: ParsedContentBook
 }
@@ -150,6 +151,7 @@ async function loadFixtureEntries(
       const raw: unknown = JSON.parse(serialized)
       return {
         fixturePath,
+        serialized,
         raw,
         parsed: parseContentBookFixture(fixturePath, raw),
       }
@@ -417,9 +419,7 @@ export async function applyPublishedAppendCandidate({
   }
 
   const liveFixture = targetEntry.raw as ContentBookFixtureV1
-  const originalBytes = Buffer.from(
-    await readFile(targetFixturePath),
-  )
+  const originalBytes = Buffer.from(targetEntry.serialized, 'utf8')
   const snapshot = snapshotFromParsedBook(targetEntry.parsed)
   let currentBaseFingerprint: string
   try {
