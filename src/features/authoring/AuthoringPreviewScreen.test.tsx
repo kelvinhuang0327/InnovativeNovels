@@ -9,6 +9,9 @@ import type { AuthoringSessionRepository } from '../../application/authoring/aut
 import type { ClipboardPort } from '../../application/authoring/clipboardPort'
 import type { GeneratedDraft } from '../../domain/authoring/authoringContracts'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import tideArchiveFixture from '../../infrastructure/content/books/book-tide-archive.json'
+import { parseContentBookFixture } from '../../infrastructure/content/catalogContentContract'
+import { loadProductionCatalogContent } from '../../infrastructure/content/catalogContentLoader'
 import { AuthoringPreviewScreen } from './AuthoringPreviewScreen'
 
 const generatedDraft: GeneratedDraft = {
@@ -82,6 +85,29 @@ const continuationJson = JSON.stringify({
       sequence: 5,
       title: '潮水回來以前',
       prose: '第五章第一段。\n\n第五章第二段。',
+    },
+  ],
+})
+
+const liveProduction = loadProductionCatalogContent()
+const extendedPublishedDraftJson = JSON.stringify({
+  title: tideArchiveFixture.title,
+  genre: tideArchiveFixture.categoryLabel,
+  chapters: [
+    ...tideArchiveFixture.chapters.map((chapter) => ({
+      sequence: chapter.sequence,
+      title: chapter.title,
+      prose: chapter.prose?.join('\n\n') ?? '',
+    })),
+    {
+      sequence: 4,
+      title: '鐘下的新頁',
+      prose: '第四章第一段。\n\n第四章第二段。\n\n第四章第三段。\n\n第四章第四段。\n\n第四章第五段。',
+    },
+    {
+      sequence: 5,
+      title: '潮水回來以前',
+      prose: '第五章第一段。\n\n第五章第二段。\n\n第五章第三段。\n\n第五章第四段。\n\n第五章第五段。',
     },
   ],
 })
@@ -423,7 +449,107 @@ describe('AuthoringPreviewScreen', () => {
       'READABLE',
     ])
     expect(screen.queryByLabelText(/chapter access/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Published target book')).toBeInTheDocument()
+  })
+
+  it('prepares, exports, restores, invalidates, and rebuilds a 3→5 published append candidate', async () => {
+    const sessionRepository = createSessionRepository()
+    const writeText = vi.fn(async () => undefined)
+    const productionBefore = JSON.stringify(liveProduction.books)
+    const catalogCountBefore = liveProduction.books.length
+    const renderScreen = () =>
+      render(
+        <AuthoringPreviewScreen
+          clipboardPort={{ writeText }}
+          gatewayClient={createClient()}
+          onBack={vi.fn()}
+          productionBooks={liveProduction.books}
+          productionChapterProse={(chapterId) =>
+            liveProduction.proseByChapterId.get(chapterId)
+          }
+          sessionRepository={sessionRepository}
+          validateProductionFixture={(fixture) =>
+            parseContentBookFixture(`./books/${fixture.bookId}.json`, fixture)
+          }
+        />,
+      )
+
+    const firstRender = renderScreen()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: extendedPublishedDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Published target book'), {
+      target: { value: 'book-tide-archive' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare Chapter Append' }))
+
+    expect(
+      await screen.findByText('Append candidate readiness：READY'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Production validation：PASS')).toBeInTheDocument()
+    expect(screen.getByText('NOT APPLIED TO PRODUCTION')).toBeInTheDocument()
+
+    const exportedCandidate = JSON.parse(
+      (
+        screen.getByRole('textbox', {
+          name: 'Append Candidate JSON',
+        }) as HTMLTextAreaElement
+      ).value,
+    ) as {
+      targetPublishedBookId: string
+      publishedChapterCount: number
+      appendedChapters: Array<{ chapterId: string; access: string }>
+      updatedFixturePreview: { chapters: Array<{ chapterId: string }> }
+    }
+    expect(exportedCandidate.targetPublishedBookId).toBe('book-tide-archive')
+    expect(exportedCandidate.publishedChapterCount).toBe(3)
+    expect(exportedCandidate.appendedChapters.map((chapter) => chapter.chapterId)).toEqual([
+      'chapter-tide-archive-004',
+      'chapter-tide-archive-005',
+    ])
+    expect(exportedCandidate.appendedChapters.map((chapter) => chapter.access)).toEqual([
+      'READABLE',
+      'READABLE',
+    ])
+    expect(exportedCandidate.updatedFixturePreview.chapters.map((chapter) => chapter.chapterId)).toEqual([
+      'chapter-tide-archive-001',
+      'chapter-tide-archive-002',
+      'chapter-tide-archive-003',
+      'chapter-tide-archive-004',
+      'chapter-tide-archive-005',
+    ])
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy Append Candidate JSON' }),
+    )
+    expect(await screen.findByText('Append candidate copied.')).toBeInTheDocument()
+
+    firstRender.unmount()
+    renderScreen()
+    expect(
+      await screen.findByText('Append candidate readiness：READY'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Published target book')).toHaveValue(
+      'book-tide-archive',
+    )
+
+    fireEvent.change(screen.getAllByLabelText('章節標題')[3], {
+      target: { value: '編輯後的新頁' },
+    })
+    expect(screen.queryByLabelText('Append Candidate JSON')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare Chapter Append' }))
+    expect(
+      await screen.findByText('Append candidate readiness：READY'),
+    ).toBeInTheDocument()
+    expect(JSON.stringify(liveProduction.books)).toBe(productionBefore)
+    expect(liveProduction.books).toHaveLength(catalogCountBefore)
   })
 
   it('supports the full local editing, quality, reorder, and export flow', async () => {

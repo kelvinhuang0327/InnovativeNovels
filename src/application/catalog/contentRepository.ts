@@ -3,6 +3,7 @@ import type { Chapter } from '../../domain/catalog/chapter'
 
 export interface ContentBook {
   readonly book: Book
+  readonly catalogSequence?: number
   readonly description: string
   readonly chapters: readonly Chapter[]
 }

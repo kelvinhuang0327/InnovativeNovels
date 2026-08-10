@@ -46,6 +46,7 @@ import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
+import { parseContentBookFixture } from '../infrastructure/content/catalogContentContract'
 import { BrowserClipboardAdapter } from '../infrastructure/authoring/browserClipboardAdapter'
 import { LocalStorageActiveReaderSessionRepository } from '../infrastructure/persistence/localStorageActiveReaderSessionRepository'
 import { LocalStorageAuthoringSessionRepository } from '../infrastructure/persistence/localStorageAuthoringSessionRepository'
@@ -371,6 +372,12 @@ function App({
           }
           onBack={() => setScreen({ name: 'catalog' })}
           productionBooks={dependencies.contentRepository.listBooks()}
+          productionChapterProse={(chapterId) =>
+            dependencies.contentRepository.getChapterProse(chapterId)
+          }
+          validateProductionFixture={(fixture) =>
+            parseContentBookFixture(`./books/${fixture.bookId}.json`, fixture)
+          }
           sessionRepository={authoringSessionRepo}
         />
       )}

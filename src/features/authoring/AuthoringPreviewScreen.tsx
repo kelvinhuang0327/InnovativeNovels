@@ -44,6 +44,15 @@ import {
   buildPublicationCandidate,
   type PublicationPreparationMetadata,
 } from '../../domain/authoring/publicationCandidate'
+import {
+  buildPublishedAppendCandidate,
+  createPublishedBookSnapshot,
+  exportPublishedAppendCandidate,
+  isPublishedAppendCandidateCurrent,
+  type PublishedAppendCandidate,
+  type PublishedAppendCandidateBuildResult,
+  type ProductionFixtureValidator,
+} from '../../domain/authoring/publishedAppendCandidate'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
@@ -51,6 +60,10 @@ interface AuthoringPreviewScreenProps {
   readonly sessionRepository?: AuthoringSessionRepository
   readonly clipboardPort?: ClipboardPort
   readonly productionBooks?: readonly ContentBook[]
+  readonly productionChapterProse?: (
+    chapterId: string,
+  ) => readonly string[] | undefined
+  readonly validateProductionFixture?: ProductionFixtureValidator
 }
 
 const INITIAL_SPEC: AuthoringSpec = {
@@ -82,7 +95,24 @@ type DraftPreviewResult = SuccessfulDraftResult & {
 }
 
 type ClipboardStatus = 'copying' | 'copied' | 'failed'
-type ClipboardTarget = 'prompt' | 'continuation-prompt' | 'draft'
+type ClipboardTarget = 'prompt' | 'continuation-prompt' | 'draft' | 'append-candidate'
+
+function restoredAppendBuildResult(
+  candidate: PublishedAppendCandidate,
+): PublishedAppendCandidateBuildResult {
+  return {
+    readiness: candidate.readiness,
+    targetPublishedBookId: candidate.targetPublishedBookId,
+    baseFixtureFingerprint: candidate.baseFixtureFingerprint,
+    publishedChapterCount: candidate.publishedChapterCount,
+    proposedAppendedChapterCount: candidate.appendedChapters.length,
+    quality: candidate.quality,
+    validation: { status: 'PASS' },
+    issues: [],
+    warnings: candidate.warnings,
+    candidate,
+  }
+}
 
 function hasMeaningfulSession(
   spec: AuthoringSpec,
@@ -90,6 +120,8 @@ function hasMeaningfulSession(
   continuationPrompt: string | undefined,
   draft: Draft | undefined,
   publicationPreparation: PublicationPreparationMetadata,
+  targetPublishedBookId: string | undefined,
+  publishedAppendCandidate: PublishedAppendCandidate | undefined,
 ): boolean {
   return (
     spec.premise.trim().length > 0 ||
@@ -103,7 +135,9 @@ function hasMeaningfulSession(
     Boolean(publicationPreparation.publicationSlug.trim()) ||
     Boolean(publicationPreparation.authorName.trim()) ||
     Boolean(publicationPreparation.description.trim()) ||
-    publicationPreparation.catalogSequence !== undefined
+    publicationPreparation.catalogSequence !== undefined ||
+    Boolean(targetPublishedBookId) ||
+    Boolean(publishedAppendCandidate)
   )
 }
 
@@ -136,6 +170,8 @@ export function AuthoringPreviewScreen({
   sessionRepository,
   clipboardPort,
   productionBooks = [],
+  productionChapterProse,
+  validateProductionFixture,
 }: AuthoringPreviewScreenProps) {
   const [restoredSession] = useState<AuthoringSession | undefined>(() =>
     sessionRepository?.load(),
@@ -157,6 +193,20 @@ export function AuthoringPreviewScreen({
       () =>
         restoredSession?.publicationPreparation ?? INITIAL_PUBLICATION_PREPARATION,
     )
+  const [targetPublishedBookId, setTargetPublishedBookId] = useState<
+    string | undefined
+  >(() => restoredSession?.targetPublishedBookId)
+  const [publishedAppendCandidate, setPublishedAppendCandidate] = useState<
+    PublishedAppendCandidate | undefined
+  >(() => restoredSession?.publishedAppendCandidate)
+  const [appendBuildResult, setAppendBuildResult] = useState<
+    PublishedAppendCandidateBuildResult | undefined
+  >(() =>
+    restoredSession?.publishedAppendCandidate
+      ? restoredAppendBuildResult(restoredSession.publishedAppendCandidate)
+      : undefined,
+  )
+  const [isPreparingAppend, setIsPreparingAppend] = useState(false)
   const [qualityIsStale, setQualityIsStale] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>()
   const [importErrors, setImportErrors] = useState<
@@ -186,6 +236,8 @@ export function AuthoringPreviewScreen({
         continuationPrompt,
         result?.draft,
         publicationPreparation,
+        targetPublishedBookId,
+        publishedAppendCandidate,
       )
     ) {
       sessionRepository.clear()
@@ -198,14 +250,18 @@ export function AuthoringPreviewScreen({
       continuationPrompt,
       draft: result?.draft,
       publicationPreparation,
+      targetPublishedBookId,
+      publishedAppendCandidate,
     })
   }, [
     agentPrompt,
     continuationPrompt,
     publicationPreparation,
+    publishedAppendCandidate,
     result,
     sessionRepository,
     spec,
+    targetPublishedBookId,
   ])
 
   const currentQuality = result
@@ -222,6 +278,81 @@ export function AuthoringPreviewScreen({
         })),
       )
     : undefined
+  const selectedPublishedBook = productionBooks.find(
+    ({ book }) => (book.id as string) === targetPublishedBookId,
+  )
+  const publishedBookSnapshot = selectedPublishedBook
+    ? createPublishedBookSnapshot(
+        {
+          book: {
+            id: selectedPublishedBook.book.id as string,
+            title: selectedPublishedBook.book.title,
+            authorName: selectedPublishedBook.book.authorName,
+            categoryLabel: selectedPublishedBook.book.categoryLabel,
+          },
+          catalogSequence: selectedPublishedBook.catalogSequence,
+          description: selectedPublishedBook.description,
+          chapters: selectedPublishedBook.chapters.map((chapter) => ({
+            chapterId: chapter.id as string,
+            sequence: chapter.sequence,
+            title: chapter.title,
+            access: chapter.access,
+          })),
+        },
+        productionChapterProse ?? (() => undefined),
+      )
+    : undefined
+  const allProductionChapterIds = productionBooks.flatMap(({ chapters }) =>
+    chapters.map((chapter) => chapter.id as string),
+  )
+  const displayedAppendResult =
+    appendBuildResult ??
+    (publishedAppendCandidate
+      ? restoredAppendBuildResult(publishedAppendCandidate)
+      : undefined)
+
+  useEffect(() => {
+    if (
+      !publishedAppendCandidate ||
+      !result ||
+      !targetPublishedBookId ||
+      !publishedBookSnapshot
+    ) {
+      return
+    }
+
+    let cancelled = false
+    void isPublishedAppendCandidateCurrent(
+      publishedAppendCandidate,
+      result.draft,
+      targetPublishedBookId,
+      publishedBookSnapshot,
+    )
+      .then((isCurrent) => {
+        if (!isCurrent && !cancelled) {
+          setPublishedAppendCandidate(undefined)
+          setAppendBuildResult(undefined)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPublishedAppendCandidate(undefined)
+          setAppendBuildResult(undefined)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    productionBooks,
+    productionChapterProse,
+    publishedAppendCandidate,
+    publishedBookSnapshot,
+    result,
+    targetPublishedBookId,
+  ])
+
   const hasPublicationPreparationInput =
     publicationPreparation.publicationSlug.trim().length > 0 ||
     publicationPreparation.authorName.trim().length > 0 ||
@@ -239,6 +370,8 @@ export function AuthoringPreviewScreen({
         draft: withQuality(edit(current.draft), current.draft.quality),
       }
     })
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
     setContinuationPrompt(undefined)
     setContinuationImportErrors([])
     setQualityIsStale(true)
@@ -263,6 +396,8 @@ export function AuthoringPreviewScreen({
       }
 
       setResult({ ...nextResult, source: 'gateway' })
+      setPublishedAppendCandidate(undefined)
+      setAppendBuildResult(undefined)
       setQualityIsStale(false)
     } catch {
       setErrorMessage('創作預覽暫時無法處理。')
@@ -334,6 +469,8 @@ export function AuthoringPreviewScreen({
     setImportErrors([])
     setContinuationImportErrors([])
     setContinuationPrompt(undefined)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
     setResult({
       ok: true,
       draft: imported.draft,
@@ -363,6 +500,8 @@ export function AuthoringPreviewScreen({
 
     setContinuationImportErrors([])
     setContinuationPrompt(undefined)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
     setRawContinuationJson('')
     setResult((current) =>
       current
@@ -383,6 +522,8 @@ export function AuthoringPreviewScreen({
     }
 
     const quality = evaluateDraftQuality(result.draft)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
     setResult((current) =>
       current
         ? {
@@ -402,6 +543,9 @@ export function AuthoringPreviewScreen({
     setContinuationPrompt(undefined)
     setResult(undefined)
     setPublicationPreparation(INITIAL_PUBLICATION_PREPARATION)
+    setTargetPublishedBookId(undefined)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
     setQualityIsStale(false)
     setErrorMessage(undefined)
     setImportErrors([])
@@ -411,6 +555,30 @@ export function AuthoringPreviewScreen({
     setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
+  }
+
+  const handlePrepareAppend = async () => {
+    if (!result) {
+      return
+    }
+
+    setIsPreparingAppend(true)
+    setErrorMessage(undefined)
+    setPublishedAppendCandidate(undefined)
+    setAppendBuildResult(undefined)
+    try {
+      const buildResult = await buildPublishedAppendCandidate({
+        draft: result.draft,
+        targetPublishedBookId,
+        publishedBook: publishedBookSnapshot,
+        allProductionChapterIds,
+        validateProductionFixture,
+      })
+      setAppendBuildResult(buildResult)
+      setPublishedAppendCandidate(buildResult.candidate)
+    } finally {
+      setIsPreparingAppend(false)
+    }
   }
 
   return (
@@ -946,6 +1114,142 @@ export function AuthoringPreviewScreen({
           </section>
 
           <section aria-labelledby="draft-export-heading" className="draft-export-panel">
+            <section
+              aria-labelledby="published-append-candidate-heading"
+              className="draft-export-panel"
+            >
+              <h3 id="published-append-candidate-heading">
+                Prepare Chapter Append
+              </h3>
+              <p>
+                先選擇已發佈的書，再把 Reviewed Extended Draft 的新章節整理成留在本地的 append candidate。
+                這個動作不會修改 production。
+              </p>
+              <label className="authoring-field" htmlFor="target-published-book">
+                Published target book
+                <select
+                  id="target-published-book"
+                  onChange={(event) => {
+                    setTargetPublishedBookId(event.target.value || undefined)
+                    setPublishedAppendCandidate(undefined)
+                    setAppendBuildResult(undefined)
+                  }}
+                  value={targetPublishedBookId ?? ''}
+                >
+                  <option value="">Select a published book</option>
+                  {productionBooks.map(({ book }) => (
+                    <option key={book.id as string} value={book.id as string}>
+                      {book.title} ({book.id as string})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="authoring-quality-status">
+                Published target：
+                {selectedPublishedBook
+                  ? `${selectedPublishedBook.book.title} (${selectedPublishedBook.book.id as string})`
+                  : 'NOT SELECTED'}
+              </p>
+              <p className="authoring-quality-status">
+                Published chapter count：{selectedPublishedBook?.chapters.length ?? 0}
+              </p>
+              <p className="authoring-quality-status">
+                Quality：{qualityIsStale ? 'STALE' : currentQuality.status}
+              </p>
+              <div className="actions">
+                <button
+                  disabled={!targetPublishedBookId || isPreparingAppend}
+                  onClick={() => void handlePrepareAppend()}
+                  type="button"
+                >
+                  {isPreparingAppend ? 'Preparing Chapter Append…' : 'Prepare Chapter Append'}
+                </button>
+              </div>
+              {displayedAppendResult && (
+                <>
+                  <p className="authoring-quality-status" role="status">
+                    Base snapshot：
+                    {displayedAppendResult.baseFixtureFingerprint ?? 'NOT AVAILABLE'}
+                  </p>
+                  <p className="authoring-quality-status">
+                    Proposed appended chapter count：{displayedAppendResult.proposedAppendedChapterCount}
+                  </p>
+                  <p className="authoring-quality-status">
+                    Production validation：{displayedAppendResult.validation.status}
+                  </p>
+                  <p className="authoring-quality-status" role="status">
+                    Append candidate readiness：{displayedAppendResult.readiness}
+                  </p>
+                  {displayedAppendResult.issues.length > 0 && (
+                    <ul className="authoring-error" role="alert">
+                      {displayedAppendResult.issues.map((appendIssue, index) => (
+                        <li key={`${appendIssue.code}-${index}`}>
+                          {appendIssue.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {displayedAppendResult.warnings.length > 0 && (
+                    <ul className="quality-warning-list">
+                      {displayedAppendResult.warnings.map((warning, index) => (
+                        <li key={`${warning.code}-${warning.chapterSequence ?? 'draft'}-${index}`}>
+                          {warning.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {displayedAppendResult.validation.message && (
+                    <p className="authoring-error" role="alert">
+                      {displayedAppendResult.validation.message}
+                    </p>
+                  )}
+                </>
+              )}
+              {publishedAppendCandidate && (
+                <>
+                  <p className="authoring-draft-status">
+                    NOT APPLIED TO PRODUCTION
+                  </p>
+                  <label
+                    className="authoring-field"
+                    htmlFor="published-append-candidate-json"
+                  >
+                    Append Candidate JSON
+                    <textarea
+                      aria-label="Append Candidate JSON"
+                      id="published-append-candidate-json"
+                      readOnly
+                      value={exportPublishedAppendCandidate(publishedAppendCandidate)}
+                    />
+                  </label>
+                  <div className="actions">
+                    <button
+                      disabled={clipboardStatus === 'copying'}
+                      onClick={() =>
+                        void handleCopy(
+                          exportPublishedAppendCandidate(publishedAppendCandidate),
+                          'append-candidate',
+                        )
+                      }
+                      type="button"
+                    >
+                      Copy Append Candidate JSON
+                    </button>
+                    {clipboardStatus === 'copied' && clipboardTarget === 'append-candidate' && (
+                      <p className="authoring-copy-status" role="status">
+                        Append candidate copied.
+                      </p>
+                    )}
+                    {clipboardStatus === 'failed' && clipboardTarget === 'append-candidate' && (
+                      <p className="authoring-error" role="alert">
+                        無法自動複製，請選取下方 append candidate JSON 手動複製。
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
             <section
               aria-labelledby="publication-candidate-heading"
               className="draft-export-panel"

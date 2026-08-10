@@ -4,6 +4,10 @@ import type {
   GeneratedDraft,
 } from '../../domain/authoring/authoringContracts'
 import type { PublicationPreparationMetadata } from '../../domain/authoring/publicationCandidate'
+import {
+  parsePublishedAppendCandidate,
+  type PublishedAppendCandidate,
+} from '../../domain/authoring/publishedAppendCandidate'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
 import type {
   AuthoringSession,
@@ -20,6 +24,8 @@ interface StoredAuthoringSession {
   readonly continuationPrompt?: string
   readonly draft?: GeneratedDraft
   readonly publicationPreparation?: PublicationPreparationMetadata
+  readonly targetPublishedBookId?: string
+  readonly publishedAppendCandidate?: PublishedAppendCandidate
 }
 
 const SESSION_FIELDS = new Set([
@@ -29,6 +35,8 @@ const SESSION_FIELDS = new Set([
   'continuationPrompt',
   'draft',
   'publicationPreparation',
+  'targetPublishedBookId',
+  'publishedAppendCandidate',
 ])
 const SPEC_FIELDS = new Set([
   'premise',
@@ -223,6 +231,30 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       return undefined
     }
 
+    const targetPublishedBookId =
+      candidate.targetPublishedBookId === undefined
+        ? undefined
+        : typeof candidate.targetPublishedBookId === 'string'
+          ? candidate.targetPublishedBookId
+          : undefined
+    if (
+      candidate.targetPublishedBookId !== undefined &&
+      targetPublishedBookId === undefined
+    ) {
+      return undefined
+    }
+
+    const publishedAppendCandidate =
+      candidate.publishedAppendCandidate === undefined
+        ? undefined
+        : parsePublishedAppendCandidate(candidate.publishedAppendCandidate)
+    if (
+      candidate.publishedAppendCandidate !== undefined &&
+      !publishedAppendCandidate
+    ) {
+      return undefined
+    }
+
     let draft: Draft | undefined
     if (generatedDraft) {
       draft = {
@@ -238,6 +270,8 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       continuationPrompt: candidate.continuationPrompt as string | undefined,
       draft,
       publicationPreparation,
+      targetPublishedBookId,
+      publishedAppendCandidate,
     }
   } catch {
     return undefined
@@ -279,8 +313,10 @@ export class LocalStorageAuthoringSessionRepository
               categoryLabel: session.draft.categoryLabel,
               chapters: session.draft.chapters,
             }
-          : undefined,
+        : undefined,
         publicationPreparation: session.publicationPreparation,
+        targetPublishedBookId: session.targetPublishedBookId,
+        publishedAppendCandidate: session.publishedAppendCandidate,
       }
       this.storage.setItem(
         AUTHORING_SESSION_STORAGE_KEY,

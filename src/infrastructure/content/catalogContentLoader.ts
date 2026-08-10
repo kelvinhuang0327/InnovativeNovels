@@ -72,6 +72,7 @@ export function loadCatalogContent(
 
     return {
       book: parsed.book,
+      catalogSequence: parsed.catalogSequence,
       description: parsed.description,
       chapters: parsed.chapters.map(({ chapter }) => chapter),
     }

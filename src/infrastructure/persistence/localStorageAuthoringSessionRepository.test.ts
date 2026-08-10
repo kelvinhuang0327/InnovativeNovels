@@ -40,6 +40,54 @@ const session = {
     description: '潮汐帶回遺失的記憶。',
     catalogSequence: 13,
   },
+  targetPublishedBookId: 'book-tide-archive',
+  publishedAppendCandidate: {
+    schemaVersion: 1 as const,
+    readiness: 'READY' as const,
+    targetPublishedBookId: 'book-tide-archive',
+    bookId: 'book-tide-archive',
+    baseFixtureFingerprint: 'base-fingerprint',
+    draftFingerprint: 'draft-fingerprint',
+    publishedChapterCount: 3,
+    lastPublishedSequence: 3,
+    appendedChapters: [
+      {
+        chapterId: 'chapter-tide-archive-004',
+        sequence: 4,
+        title: '鐘下的新頁',
+        access: 'READABLE' as const,
+        prose: ['第一段', '第二段'],
+      },
+    ],
+    updatedFixturePreview: {
+      schema: 'innovative-novels/content-book/v1' as const,
+      bookId: 'book-tide-archive',
+      catalogSequence: 13,
+      title: '潮汐檔案',
+      authorName: 'InnovativeNovels AI',
+      categoryLabel: '科幻懸疑',
+      description: '潮汐帶回遺失的記憶。',
+      chapters: [
+        {
+          chapterId: 'chapter-tide-archive-004',
+          sequence: 4,
+          title: '鐘下的新頁',
+          access: 'READABLE' as const,
+          prose: ['第一段', '第二段'],
+        },
+      ],
+    },
+    quality: {
+      status: 'PASS' as const,
+      hardFailures: [],
+      warnings: [],
+    },
+    warnings: [],
+    validation: {
+      status: 'PASS' as const,
+      validator: 'production-content-fixture-v1' as const,
+    },
+  },
 }
 
 describe('LocalStorageAuthoringSessionRepository', () => {
@@ -63,6 +111,30 @@ describe('LocalStorageAuthoringSessionRepository', () => {
     expect(restored?.draft?.quality).toBeDefined()
     expect(restored?.publicationPreparation).toEqual(
       session.publicationPreparation,
+    )
+    expect(restored?.targetPublishedBookId).toBe('book-tide-archive')
+    expect(restored?.publishedAppendCandidate?.appendedChapters).toHaveLength(1)
+  })
+
+  it('fails closed on a malformed append candidate without touching unrelated storage', () => {
+    window.localStorage.setItem(
+      AUTHORING_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        spec: session.spec,
+        targetPublishedBookId: 'book-tide-archive',
+        publishedAppendCandidate: { schemaVersion: 99 },
+      }),
+    )
+    window.localStorage.setItem(READING_STATE_STORAGE_KEY, 'reader-state')
+    const repository = new LocalStorageAuthoringSessionRepository(
+      window.localStorage,
+    )
+
+    expect(repository.load()).toBeUndefined()
+    expect(window.localStorage.getItem(AUTHORING_SESSION_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(
+      'reader-state',
     )
   })
 
