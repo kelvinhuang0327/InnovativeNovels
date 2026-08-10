@@ -187,7 +187,9 @@ function parsePublicationPreparation(
   }
 }
 
-function parseStoredSession(serialized: string | null): AuthoringSession | undefined {
+export function parseAuthoringSession(
+  serialized: string | null,
+): AuthoringSession | undefined {
   if (!serialized) {
     return undefined
   }
@@ -310,6 +312,28 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
   }
 }
 
+export function serializeAuthoringSession(session: AuthoringSession): string {
+  const stored: StoredAuthoringSession = {
+    schemaVersion: 1,
+    spec: session.spec,
+    storyBible: session.storyBible,
+    agentPrompt: session.agentPrompt,
+    continuationPrompt: session.continuationPrompt,
+    draft: session.draft
+      ? {
+          title: session.draft.title,
+          categoryLabel: session.draft.categoryLabel,
+          chapters: session.draft.chapters,
+        }
+      : undefined,
+    publicationPreparation: session.publicationPreparation,
+    targetPublishedBookId: session.targetPublishedBookId,
+    basePublishedBookFingerprint: session.basePublishedBookFingerprint,
+    publishedAppendCandidate: session.publishedAppendCandidate,
+  }
+  return JSON.stringify(stored)
+}
+
 export class LocalStorageAuthoringSessionRepository
   implements AuthoringSessionRepository
 {
@@ -322,7 +346,7 @@ export class LocalStorageAuthoringSessionRepository
   load(): AuthoringSession | undefined {
     try {
       const raw = this.storage.getItem(AUTHORING_SESSION_STORAGE_KEY)
-      const session = parseStoredSession(raw)
+      const session = parseAuthoringSession(raw)
       if (!session && raw !== null) {
         this.clear()
       }
@@ -334,27 +358,9 @@ export class LocalStorageAuthoringSessionRepository
 
   save(session: AuthoringSession): void {
     try {
-      const stored: StoredAuthoringSession = {
-        schemaVersion: 1,
-        spec: session.spec,
-        storyBible: session.storyBible,
-        agentPrompt: session.agentPrompt,
-        continuationPrompt: session.continuationPrompt,
-        draft: session.draft
-          ? {
-              title: session.draft.title,
-              categoryLabel: session.draft.categoryLabel,
-              chapters: session.draft.chapters,
-            }
-        : undefined,
-        publicationPreparation: session.publicationPreparation,
-        targetPublishedBookId: session.targetPublishedBookId,
-        basePublishedBookFingerprint: session.basePublishedBookFingerprint,
-        publishedAppendCandidate: session.publishedAppendCandidate,
-      }
       this.storage.setItem(
         AUTHORING_SESSION_STORAGE_KEY,
-        JSON.stringify(stored),
+        serializeAuthoringSession(session),
       )
     } catch {
       // Persistence failures leave authoring usable without session recovery.

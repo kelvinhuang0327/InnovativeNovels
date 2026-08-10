@@ -11,6 +11,21 @@ import { importContinuation } from '../../application/authoring/continuationImpo
 import { buildAgentPrompt } from '../../application/authoring/agentPromptBuilder'
 import { exportDraftJson } from '../../application/authoring/draftExport'
 import type {
+  AuthoringProjectLoadResult,
+  AuthoringProjectRepository,
+  AuthoringProjectStoreV1,
+} from '../../application/authoring/authoringProjectRepository'
+import {
+  getActiveProject,
+  replaceProjectSession,
+  withActiveProject,
+} from '../../application/authoring/authoringProjectRepository'
+import {
+  createEmptyAuthoringSession,
+  INITIAL_PUBLICATION_PREPARATION,
+  INITIAL_SPEC,
+} from '../../application/authoring/authoringSessionDefaults'
+import type {
   AuthoringSession,
   AuthoringSessionRepository,
 } from '../../application/authoring/authoringSessionRepository'
@@ -65,6 +80,7 @@ import { StoryBibleEditor } from './StoryBibleEditor'
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
   readonly onBack: () => void
+  readonly projectRepository?: AuthoringProjectRepository
   readonly sessionRepository?: AuthoringSessionRepository
   readonly clipboardPort?: ClipboardPort
   readonly productionBooks?: readonly ContentBook[]
@@ -72,21 +88,6 @@ interface AuthoringPreviewScreenProps {
     chapterId: string,
   ) => readonly string[] | undefined
   readonly validateProductionFixture?: ProductionFixtureValidator
-}
-
-const INITIAL_SPEC: AuthoringSpec = {
-  premise: '',
-  genre: '懸疑',
-  titleHint: '',
-  instructions: '',
-  requestedChapterCount: 3,
-}
-
-const INITIAL_PUBLICATION_PREPARATION: PublicationPreparationMetadata = {
-  publicationSlug: '',
-  authorName: '',
-  description: '',
-  catalogSequence: undefined,
 }
 
 type SuccessfulDraftResult = Extract<
@@ -223,15 +224,34 @@ function draftsHaveSameContent(left: Draft | undefined, right: Draft): boolean {
 export function AuthoringPreviewScreen({
   gatewayClient,
   onBack,
+  projectRepository,
   sessionRepository,
   clipboardPort,
   productionBooks = [],
   productionChapterProse,
   validateProductionFixture,
 }: AuthoringPreviewScreenProps) {
-  const [restoredSession] = useState<AuthoringSession | undefined>(() =>
-    sessionRepository?.load(),
+  const [projectLoad] = useState<AuthoringProjectLoadResult | undefined>(() =>
+    projectRepository?.load(),
   )
+  const initialProjectStore = projectLoad?.ok ? projectLoad.store : undefined
+  const initialProject = initialProjectStore
+    ? getActiveProject(initialProjectStore)
+    : undefined
+  const projectMode = projectRepository !== undefined
+  const [projectStore, setProjectStore] = useState<
+    AuthoringProjectStoreV1 | undefined
+  >(initialProjectStore)
+  const [projectError, setProjectError] = useState<string | undefined>(() =>
+    projectLoad && !projectLoad.ok ? projectLoad.message : undefined,
+  )
+  const [projectName, setProjectName] = useState(
+    () => initialProject?.name ?? 'Untitled Project',
+  )
+  const [newProjectName, setNewProjectName] = useState('Untitled Project')
+  const restoredSession = projectMode
+    ? initialProject?.session
+    : sessionRepository?.load()
   const [spec, setSpec] = useState<AuthoringSpec>(
     () => restoredSession?.spec ?? INITIAL_SPEC,
   )
@@ -289,6 +309,26 @@ export function AuthoringPreviewScreen({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
+    if (projectRepository && projectStore) {
+      const nextStore = replaceProjectSession(
+        projectStore,
+        projectStore.activeProjectId,
+        {
+          spec,
+          storyBible,
+          agentPrompt,
+          continuationPrompt,
+          draft: result?.draft,
+          publicationPreparation,
+          targetPublishedBookId,
+          basePublishedBookFingerprint,
+          publishedAppendCandidate,
+        },
+      )
+      projectRepository.save(nextStore)
+      return
+    }
+
     if (!sessionRepository) {
       return
     }
@@ -327,12 +367,153 @@ export function AuthoringPreviewScreen({
     publicationPreparation,
     publishedAppendCandidate,
     basePublishedBookFingerprint,
+    projectRepository,
+    projectStore,
     result,
     sessionRepository,
     spec,
     storyBible,
     targetPublishedBookId,
   ])
+
+  const currentSession = (): AuthoringSession => ({
+    spec,
+    storyBible,
+    agentPrompt,
+    continuationPrompt,
+    draft: result?.draft,
+    publicationPreparation,
+    targetPublishedBookId,
+    basePublishedBookFingerprint,
+    publishedAppendCandidate,
+  })
+
+  const restoreProjectSession = (session: AuthoringSession) => {
+    setSpec(session.spec)
+    setStoryBible(session.storyBible)
+    setAgentPrompt(session.agentPrompt)
+    setContinuationPrompt(session.continuationPrompt)
+    setResult(
+      session.draft
+        ? {
+            ok: true,
+            draft: session.draft,
+            quality: session.draft.quality,
+            providerName: 'local-authoring-session',
+            source: 'restored-session',
+          }
+        : undefined,
+    )
+    setPublicationPreparation(
+      session.publicationPreparation ?? INITIAL_PUBLICATION_PREPARATION,
+    )
+    setTargetPublishedBookId(session.targetPublishedBookId)
+    setBasePublishedBookFingerprint(session.basePublishedBookFingerprint)
+    setPublishedBookSelection(session.targetPublishedBookId ?? '')
+    setPublishedAppendCandidate(session.publishedAppendCandidate)
+    setAppendBuildResult(
+      session.publishedAppendCandidate
+        ? restoredAppendBuildResult(session.publishedAppendCandidate)
+        : undefined,
+    )
+    setQualityIsStale(false)
+    setErrorMessage(undefined)
+    setImportErrors([])
+    setContinuationImportErrors([])
+    setRawAgentDraft('')
+    setRawContinuationJson('')
+    setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
+    setClipboardStatus(undefined)
+    setClipboardTarget(undefined)
+  }
+
+  const handleProjectSwitch = (nextProjectId: string) => {
+    if (!projectRepository || !projectStore) {
+      return
+    }
+
+    const currentStore = replaceProjectSession(
+      projectStore,
+      projectStore.activeProjectId,
+      currentSession(),
+    )
+    const targetProject = currentStore.projects.find(
+      (project) => project.projectId === nextProjectId,
+    )
+    if (!targetProject) {
+      setProjectError('選擇的專案不存在，現有專案未變更。')
+      return
+    }
+
+    const nextStore = withActiveProject(currentStore, nextProjectId)
+    if (!projectRepository.save(nextStore)) {
+      setProjectError('專案切換保存失敗，現有內容未變更。')
+      return
+    }
+    setProjectStore(nextStore)
+    setProjectName(targetProject.name)
+    setProjectError(undefined)
+    restoreProjectSession(targetProject.session)
+  }
+
+  const handleRenameProject = () => {
+    if (!projectRepository || !projectStore) {
+      return
+    }
+    const normalizedName = projectName.trim()
+    if (normalizedName.length === 0) {
+      setProjectError('Project name cannot be empty.')
+      return
+    }
+
+    const currentStore = replaceProjectSession(
+      projectStore,
+      projectStore.activeProjectId,
+      currentSession(),
+    )
+    const nextStore: AuthoringProjectStoreV1 = {
+      ...currentStore,
+      projects: currentStore.projects.map((project) =>
+        project.projectId === currentStore.activeProjectId
+          ? { ...project, name: normalizedName }
+          : project,
+      ),
+    }
+    if (!projectRepository.save(nextStore)) {
+      setProjectError('專案重新命名保存失敗。')
+      return
+    }
+    setProjectStore(nextStore)
+    setProjectName(normalizedName)
+    setProjectError(undefined)
+  }
+
+  const handleCreateProject = () => {
+    if (!projectRepository || !projectStore) {
+      return
+    }
+
+    const newSession = createEmptyAuthoringSession()
+    const created = projectRepository.createProject(
+      replaceProjectSession(
+        projectStore,
+        projectStore.activeProjectId,
+        currentSession(),
+      ),
+      newProjectName,
+      newSession,
+    )
+    if (!created.ok) {
+      setProjectError(created.message)
+      return
+    }
+    const newProject = created.store.projects[created.store.projects.length - 1]
+    setProjectStore(created.store)
+    setProjectName(newProject?.name ?? newProjectName.trim())
+    setNewProjectName('Untitled Project')
+    setProjectError(undefined)
+    restoreProjectSession(newSession)
+  }
 
   const currentQuality = result
     ? evaluateDraftQuality(result.draft)
@@ -598,6 +779,22 @@ export function AuthoringPreviewScreen({
   }
 
   const handleClearSession = () => {
+    if (projectRepository && projectStore) {
+      const emptySession = createEmptyAuthoringSession()
+      const nextStore = replaceProjectSession(
+        projectStore,
+        projectStore.activeProjectId,
+        emptySession,
+      )
+      if (!projectRepository.save(nextStore)) {
+        setProjectError('目前專案無法清除，原有內容未變更。')
+        return
+      }
+      setProjectStore(nextStore)
+      restoreProjectSession(emptySession)
+      return
+    }
+
     sessionRepository?.clear()
     setSpec(INITIAL_SPEC)
     setStoryBible(createEmptyStoryBible())
@@ -739,6 +936,22 @@ export function AuthoringPreviewScreen({
     }
   }
 
+  if (projectMode && (!projectLoad?.ok || !projectStore)) {
+    return (
+      <section aria-labelledby="authoring-project-error-heading" className="authoring-screen">
+        <h1 id="authoring-project-error-heading" className="screen-heading">
+          Authoring Projects
+        </h1>
+        <p className="authoring-error" role="alert">
+          {projectError ?? 'Authoring project library could not be loaded safely.'}
+        </p>
+        <button className="button-secondary" onClick={onBack} type="button">
+          返回閱讀目錄
+        </button>
+      </section>
+    )
+  }
+
   return (
     <section aria-labelledby="authoring-heading" className="authoring-screen">
       <div className="actions authoring-navigation">
@@ -753,6 +966,56 @@ export function AuthoringPreviewScreen({
           Clear Draft / Start New
         </button>
       </div>
+
+      {projectMode && projectStore && (
+        <section aria-labelledby="authoring-project-library-heading" className="agent-exchange-panel">
+          <h2 id="authoring-project-library-heading">Authoring Projects</h2>
+          <label className="authoring-field" htmlFor="authoring-current-project">
+            Current Project
+            <select
+              aria-label="Current Project"
+              id="authoring-current-project"
+              onChange={(event) => handleProjectSwitch(event.target.value)}
+              value={projectStore.activeProjectId}
+            >
+              {projectStore.projects.map((project) => (
+                <option key={project.projectId} value={project.projectId}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="authoring-field" htmlFor="authoring-project-name">
+            Project name
+            <input
+              aria-label="Project name"
+              id="authoring-project-name"
+              onChange={(event) => setProjectName(event.target.value)}
+              value={projectName}
+            />
+          </label>
+          <button onClick={handleRenameProject} type="button">
+            Rename Project
+          </button>
+          <label className="authoring-field" htmlFor="authoring-new-project-name">
+            New project name
+            <input
+              aria-label="New project name"
+              id="authoring-new-project-name"
+              onChange={(event) => setNewProjectName(event.target.value)}
+              value={newProjectName}
+            />
+          </label>
+          <button onClick={handleCreateProject} type="button">
+            New Project
+          </button>
+          {projectError && (
+            <p className="authoring-error" role="alert">
+              {projectError}
+            </p>
+          )}
+        </section>
+      )}
 
       <p className="eyebrow">Authoring Foundation</p>
       <h1 className="screen-heading" id="authoring-heading">
