@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { mapAgentDraftExchangeToGeneratedDraft } from './agentDraftImport'
 import { parseAgentDraftExchange } from '../../domain/authoring/agentDraftExchange'
 import type { GeneratedDraft } from '../../domain/authoring/authoringContracts'
 import { exportDraftJson, mapGeneratedDraftToAgentDraftExchange } from './draftExport'
@@ -40,5 +41,20 @@ describe('Draft export', () => {
         ],
       },
     })
+  })
+
+  it('round-trips a Draft through export, strict parse, and the existing Draft mapper', () => {
+    const parsed = parseAgentDraftExchange(exportDraftJson(draft))
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(mapAgentDraftExchangeToGeneratedDraft(parsed.exchange)).toEqual({
+        title: draft.title,
+        categoryLabel: draft.categoryLabel,
+        chapters: [
+          { sequence: 1, title: '第二章', prose: ['第二段。', '第三段。'] },
+          { sequence: 2, title: '第一章', prose: ['第一段。'] },
+        ],
+      })
+    }
   })
 })
