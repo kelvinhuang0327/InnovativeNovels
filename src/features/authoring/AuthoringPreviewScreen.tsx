@@ -4,6 +4,10 @@ import type {
   AuthoringGatewayClientResult,
 } from '../../application/authoring/authoringGatewayClient'
 import { importAgentDraft } from '../../application/authoring/agentDraftImport'
+import {
+  buildContinuationPrompt,
+} from '../../application/authoring/continuationPromptBuilder'
+import { importContinuation } from '../../application/authoring/continuationImport'
 import { buildAgentPrompt } from '../../application/authoring/agentPromptBuilder'
 import { exportDraftJson } from '../../application/authoring/draftExport'
 import type {
@@ -18,6 +22,12 @@ import type {
   GeneratedDraft,
 } from '../../domain/authoring/authoringContracts'
 import type { AgentDraftValidationError } from '../../domain/authoring/agentDraftExchange'
+import {
+  DEFAULT_CONTINUATION_CHAPTER_COUNT,
+  MAX_CONTINUATION_CHAPTER_COUNT,
+  MIN_CONTINUATION_CHAPTER_COUNT,
+  type ContinuationValidationError,
+} from '../../domain/authoring/continuationExchange'
 import {
   addDraftChapter,
   moveDraftChapter,
@@ -64,15 +74,20 @@ type SuccessfulDraftResult = Extract<
 >
 
 type DraftPreviewResult = SuccessfulDraftResult & {
-  readonly source: 'gateway' | 'agent-import' | 'restored-session'
+  readonly source:
+    | 'gateway'
+    | 'agent-import'
+    | 'continuation-import'
+    | 'restored-session'
 }
 
 type ClipboardStatus = 'copying' | 'copied' | 'failed'
-type ClipboardTarget = 'prompt' | 'draft'
+type ClipboardTarget = 'prompt' | 'continuation-prompt' | 'draft'
 
 function hasMeaningfulSession(
   spec: AuthoringSpec,
   agentPrompt: string | undefined,
+  continuationPrompt: string | undefined,
   draft: Draft | undefined,
   publicationPreparation: PublicationPreparationMetadata,
 ): boolean {
@@ -83,6 +98,7 @@ function hasMeaningfulSession(
     Boolean(spec.instructions?.trim()) ||
     spec.requestedChapterCount !== INITIAL_SPEC.requestedChapterCount ||
     Boolean(agentPrompt) ||
+    Boolean(continuationPrompt) ||
     Boolean(draft) ||
     Boolean(publicationPreparation.publicationSlug.trim()) ||
     Boolean(publicationPreparation.authorName.trim()) ||
@@ -130,6 +146,9 @@ export function AuthoringPreviewScreen({
   const [agentPrompt, setAgentPrompt] = useState<string | undefined>(
     () => restoredSession?.agentPrompt,
   )
+  const [continuationPrompt, setContinuationPrompt] = useState<
+    string | undefined
+  >(() => restoredSession?.continuationPrompt)
   const [result, setResult] = useState<DraftPreviewResult | undefined>(() =>
     restoredPreviewResult(restoredSession),
   )
@@ -144,6 +163,13 @@ export function AuthoringPreviewScreen({
     readonly AgentDraftValidationError[]
   >([])
   const [rawAgentDraft, setRawAgentDraft] = useState('')
+  const [continuationChapterCount, setContinuationChapterCount] = useState(
+    DEFAULT_CONTINUATION_CHAPTER_COUNT,
+  )
+  const [rawContinuationJson, setRawContinuationJson] = useState('')
+  const [continuationImportErrors, setContinuationImportErrors] = useState<
+    readonly ContinuationValidationError[]
+  >([])
   const [clipboardStatus, setClipboardStatus] = useState<ClipboardStatus>()
   const [clipboardTarget, setClipboardTarget] = useState<ClipboardTarget>()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -157,6 +183,7 @@ export function AuthoringPreviewScreen({
       !hasMeaningfulSession(
         spec,
         agentPrompt,
+        continuationPrompt,
         result?.draft,
         publicationPreparation,
       )
@@ -168,10 +195,18 @@ export function AuthoringPreviewScreen({
     sessionRepository.save({
       spec,
       agentPrompt,
+      continuationPrompt,
       draft: result?.draft,
       publicationPreparation,
     })
-  }, [agentPrompt, publicationPreparation, result, sessionRepository, spec])
+  }, [
+    agentPrompt,
+    continuationPrompt,
+    publicationPreparation,
+    result,
+    sessionRepository,
+    spec,
+  ])
 
   const currentQuality = result
     ? evaluateDraftQuality(result.draft)
@@ -204,6 +239,8 @@ export function AuthoringPreviewScreen({
         draft: withQuality(edit(current.draft), current.draft.quality),
       }
     })
+    setContinuationPrompt(undefined)
+    setContinuationImportErrors([])
     setQualityIsStale(true)
   }
 
@@ -212,6 +249,8 @@ export function AuthoringPreviewScreen({
     setIsSubmitting(true)
     setErrorMessage(undefined)
     setImportErrors([])
+    setContinuationImportErrors([])
+    setContinuationPrompt(undefined)
 
     try {
       const nextResult = await gatewayClient.generateDraft(spec)
@@ -246,6 +285,28 @@ export function AuthoringPreviewScreen({
     setImportErrors([])
   }
 
+  const handleGenerateContinuationPrompt = () => {
+    if (!result) {
+      return
+    }
+
+    const continuation = buildContinuationPrompt(
+      result.draft,
+      spec,
+      continuationChapterCount,
+    )
+    if (!continuation.ok) {
+      setErrorMessage(continuation.message)
+      return
+    }
+
+    setContinuationPrompt(continuation.prompt)
+    setClipboardStatus(undefined)
+    setClipboardTarget(undefined)
+    setErrorMessage(undefined)
+    setContinuationImportErrors([])
+  }
+
   const handleCopy = async (text: string, target: ClipboardTarget) => {
     setClipboardTarget(target)
     setClipboardStatus('copying')
@@ -271,6 +332,8 @@ export function AuthoringPreviewScreen({
     }
 
     setImportErrors([])
+    setContinuationImportErrors([])
+    setContinuationPrompt(undefined)
     setResult({
       ok: true,
       draft: imported.draft,
@@ -279,6 +342,39 @@ export function AuthoringPreviewScreen({
       source: 'agent-import',
     })
     setQualityIsStale(false)
+  }
+
+  const handleImportContinuation = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!result) {
+      return
+    }
+
+    setErrorMessage(undefined)
+    const imported = importContinuation(
+      result.draft,
+      rawContinuationJson,
+      continuationChapterCount,
+    )
+    if (!imported.ok) {
+      setContinuationImportErrors(imported.errors)
+      return
+    }
+
+    setContinuationImportErrors([])
+    setContinuationPrompt(undefined)
+    setRawContinuationJson('')
+    setResult((current) =>
+      current
+        ? {
+            ...current,
+            draft: imported.draft,
+            quality: imported.draft.quality,
+            source: 'continuation-import',
+          }
+        : current,
+    )
+    setQualityIsStale(true)
   }
 
   const handleRecheckQuality = () => {
@@ -303,12 +399,16 @@ export function AuthoringPreviewScreen({
     sessionRepository?.clear()
     setSpec(INITIAL_SPEC)
     setAgentPrompt(undefined)
+    setContinuationPrompt(undefined)
     setResult(undefined)
     setPublicationPreparation(INITIAL_PUBLICATION_PREPARATION)
     setQualityIsStale(false)
     setErrorMessage(undefined)
     setImportErrors([])
     setRawAgentDraft('')
+    setRawContinuationJson('')
+    setContinuationImportErrors([])
+    setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
   }
@@ -511,6 +611,8 @@ export function AuthoringPreviewScreen({
               <p className="authoring-provider-note">
                 {result.source === 'agent-import'
                   ? '來源：外部 Agent JSON（本地匯入）'
+                  : result.source === 'continuation-import'
+                    ? '來源：外部 Continuation JSON（本地附加）'
                   : result.source === 'restored-session'
                     ? '來源：本地 authoring session restore'
                     : `Provider: ${result.providerName}`}
@@ -577,6 +679,122 @@ export function AuthoringPreviewScreen({
               Re-check Quality
             </button>
           </div>
+
+          <section
+            aria-labelledby="continuation-heading"
+            className="agent-exchange-panel"
+          >
+            <h3 id="continuation-heading">Continue with Agent</h3>
+            <p>
+              只為目前有效 Draft 產生下一段章節提示；這個流程不會呼叫外部模型，也不會改寫既有章節。
+            </p>
+            {currentQuality.hardFailures.length > 0 ? (
+              <p role="status">
+                目前 Draft 有硬性驗證失敗，請先修正後再使用續寫。
+              </p>
+            ) : (
+              <>
+                <label
+                  className="authoring-field"
+                  htmlFor="continuation-chapter-count"
+                >
+                  Requested next chapters（1–5）
+                  <input
+                    id="continuation-chapter-count"
+                    max={MAX_CONTINUATION_CHAPTER_COUNT}
+                    min={MIN_CONTINUATION_CHAPTER_COUNT}
+                    onChange={(event) =>
+                      setContinuationChapterCount(Number(event.target.value))
+                    }
+                    type="number"
+                    value={continuationChapterCount}
+                  />
+                </label>
+                <div className="actions">
+                  <button
+                    onClick={handleGenerateContinuationPrompt}
+                    type="button"
+                  >
+                    Generate Continuation Prompt
+                  </button>
+                </div>
+                {continuationPrompt && (
+                  <>
+                    <label
+                      className="authoring-field"
+                      htmlFor="continuation-prompt-output"
+                    >
+                      Generated Continuation Prompt
+                      <textarea
+                        aria-label="Generated Continuation Prompt"
+                        id="continuation-prompt-output"
+                        readOnly
+                        value={continuationPrompt}
+                      />
+                    </label>
+                    <div className="actions">
+                      <button
+                        disabled={clipboardStatus === 'copying'}
+                        onClick={() =>
+                          void handleCopy(
+                            continuationPrompt,
+                            'continuation-prompt',
+                          )
+                        }
+                        type="button"
+                      >
+                        Copy Continuation Prompt
+                      </button>
+                      {clipboardStatus === 'copied' &&
+                        clipboardTarget === 'continuation-prompt' && (
+                          <p className="authoring-copy-status" role="status">
+                            Continuation prompt copied.
+                          </p>
+                        )}
+                      {clipboardStatus === 'failed' &&
+                        clipboardTarget === 'continuation-prompt' && (
+                          <p className="authoring-error" role="alert">
+                            無法自動複製，請選取下方續寫提示文字手動複製。
+                          </p>
+                        )}
+                    </div>
+                  </>
+                )}
+                <form onSubmit={handleImportContinuation}>
+                  <label
+                    className="authoring-field"
+                    htmlFor="continuation-json"
+                  >
+                    Raw Continuation JSON
+                    <textarea
+                      aria-label="Raw Continuation JSON"
+                      id="continuation-json"
+                      onChange={(event) =>
+                        setRawContinuationJson(event.target.value)
+                      }
+                      placeholder={'{"chapters":[{"sequence":4,"title":"下一章","prose":"正文"}]}' }
+                      value={rawContinuationJson}
+                    />
+                  </label>
+                  <button type="submit">Import Continuation</button>
+                </form>
+                {continuationImportErrors.length > 0 && (
+                  <div className="authoring-error" role="alert">
+                    <p>
+                      Continuation validation failed. The previous accepted Draft was preserved.
+                    </p>
+                    <ul>
+                      {continuationImportErrors.map((error, index) => (
+                        <li key={`${error.code}-${error.path ?? index}`}>
+                          {error.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
 
           <section aria-labelledby="hard-failures-heading">
             <h3 id="hard-failures-heading">HARD_VALIDATION_FAILURE</h3>

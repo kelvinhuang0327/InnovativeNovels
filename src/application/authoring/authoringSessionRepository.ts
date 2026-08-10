@@ -4,6 +4,7 @@ import type { PublicationPreparationMetadata } from '../../domain/authoring/publ
 export interface AuthoringSession {
   readonly spec: AuthoringSpec
   readonly agentPrompt?: string
+  readonly continuationPrompt?: string
   readonly draft?: Draft
   readonly publicationPreparation?: PublicationPreparationMetadata
 }

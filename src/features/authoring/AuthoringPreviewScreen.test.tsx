@@ -71,6 +71,21 @@ const agentDraftJson = JSON.stringify({
   ],
 })
 
+const continuationJson = JSON.stringify({
+  chapters: [
+    {
+      sequence: 4,
+      title: '鐘下的新頁',
+      prose: '第四章第一段。\n\n第四章第二段。',
+    },
+    {
+      sequence: 5,
+      title: '潮水回來以前',
+      prose: '第五章第一段。\n\n第五章第二段。',
+    },
+  ],
+})
+
 function createSessionRepository(): AuthoringSessionRepository {
   let session: Parameters<AuthoringSessionRepository['save']>[0] | undefined
   return {
@@ -220,6 +235,143 @@ describe('AuthoringPreviewScreen', () => {
     expect(screen.getByText('驗證狀態：PASS')).toBeInTheDocument()
     expect(screen.getByText('品質檢查：WARNING')).toBeInTheDocument()
     expect(gatewayClient.generateDraft).not.toHaveBeenCalled()
+  })
+
+  it('continues a valid three-chapter Draft through prompt, append, stale quality, reload, and full export round-trip', async () => {
+    const sessionRepository = createSessionRepository()
+    const writeText = vi.fn(async () => undefined)
+    const firstRender = render(
+      <AuthoringPreviewScreen
+        clipboardPort={{ writeText }}
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        sessionRepository={sessionRepository}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    const originalTitles = screen
+      .getAllByLabelText('章節標題')
+      .map((input) => (input as HTMLInputElement).value)
+    const originalProse = screen
+      .getAllByLabelText('章節正文')
+      .map((input) => (input as HTMLTextAreaElement).value)
+
+    fireEvent.change(screen.getByLabelText(/Requested next chapters/), {
+      target: { value: '2' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Generate Continuation Prompt' }),
+    )
+    const prompt = screen.getByRole('textbox', {
+      name: 'Generated Continuation Prompt',
+    }) as HTMLTextAreaElement
+    expect(prompt.value).toContain('starting at sequence 4')
+    expect(prompt.value).toContain('exactly 2 new chapter(s)')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy Continuation Prompt' }),
+    )
+    expect(await screen.findByText('Continuation prompt copied.')).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith(prompt.value)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Continuation JSON' }), {
+      target: { value: continuationJson },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Import Continuation' }))
+
+    expect(screen.getAllByLabelText('章節標題')).toHaveLength(5)
+    expect(
+      screen.getAllByLabelText('章節標題').slice(0, 3).map(
+        (input) => (input as HTMLInputElement).value,
+      ),
+    ).toEqual(originalTitles)
+    expect(
+      screen.getAllByLabelText('章節正文').slice(0, 3).map(
+        (input) => (input as HTMLTextAreaElement).value,
+      ),
+    ).toEqual(originalProse)
+    fireEvent.change(screen.getAllByLabelText('章節標題')[3], {
+      target: { value: '鐘下的新頁（可編輯）' },
+    })
+    fireEvent.change(screen.getAllByLabelText('章節正文')[3], {
+      target: { value: '第四章已在 Review Workspace 編輯。' },
+    })
+    expect(screen.getByText('第 4 章：鐘下的新頁（可編輯）')).toBeInTheDocument()
+    expect(screen.getByText('第 5 章：潮水回來以前')).toBeInTheDocument()
+    expect(screen.getByText('品質檢查：STALE')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
+    expect(screen.getByText('品質檢查：WARNING')).toBeInTheDocument()
+    expect(screen.getAllByText(/少於 5 段/)).toHaveLength(5)
+    expect(screen.queryByText('品質檢查：STALE')).not.toBeInTheDocument()
+
+    const exportText = screen.getByRole('textbox', {
+      name: 'Draft JSON Export',
+    }) as HTMLTextAreaElement
+    const exported = JSON.parse(exportText.value) as {
+      chapters: Array<{ sequence: number; title: string }>
+    }
+    expect(exported.chapters.map((chapter) => chapter.sequence)).toEqual([
+      1, 2, 3, 4, 5,
+    ])
+    const roundTrip = importAgentDraft(exportText.value)
+    expect(roundTrip.ok).toBe(true)
+    if (roundTrip.ok) {
+      expect(roundTrip.draft.chapters).toHaveLength(5)
+      expect(roundTrip.draft.chapters.slice(0, 3).map((chapter) => chapter.title)).toEqual(
+        originalTitles,
+      )
+    }
+
+    firstRender.unmount()
+    render(
+      <AuthoringPreviewScreen
+        gatewayClient={createClient()}
+        onBack={vi.fn()}
+        sessionRepository={sessionRepository}
+      />,
+    )
+    expect(screen.getAllByLabelText('章節標題')).toHaveLength(5)
+    expect(screen.getByText('潮汐檔案')).toBeInTheDocument()
+  })
+
+  it('preserves the accepted Draft when a continuation response is invalid', async () => {
+    render(
+      <AuthoringPreviewScreen gatewayClient={createClient()} onBack={vi.fn()} />,
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Agent JSON' }), {
+      target: { value: agentDraftJson },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import Structured Draft' }),
+    )
+    expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Raw Continuation JSON' }), {
+      target: {
+        value: JSON.stringify({
+          chapters: [
+            { sequence: 3, title: '重送舊章', prose: '不應附加。' },
+            { sequence: 4, title: '新章', prose: '不應附加。' },
+          ],
+        }),
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Import Continuation' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'previous accepted Draft was preserved',
+    )
+    expect(screen.getAllByLabelText('章節標題')).toHaveLength(3)
+    expect(screen.getByText('第 3 章：第四點整')).toBeInTheDocument()
+    expect(screen.queryByText('第 4 章：新章')).not.toBeInTheDocument()
   })
 
   it('prepares a deterministic production candidate without an authored access selector', async () => {

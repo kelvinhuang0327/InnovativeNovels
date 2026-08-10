@@ -16,6 +16,7 @@ const session = {
     requestedChapterCount: 3,
   },
   agentPrompt: 'Role: Novel Generation Agent',
+  continuationPrompt: 'Role: Novel Continuation Agent',
   draft: {
     title: '潮汐檔案',
     categoryLabel: '科幻懸疑',
@@ -56,6 +57,7 @@ describe('LocalStorageAuthoringSessionRepository', () => {
     const restored = repository.load()
     expect(restored?.spec).toEqual(session.spec)
     expect(restored?.agentPrompt).toBe(session.agentPrompt)
+    expect(restored?.continuationPrompt).toBe(session.continuationPrompt)
     expect(restored?.draft?.title).toBe('潮汐檔案')
     expect(restored?.draft?.status).toBe('DRAFT')
     expect(restored?.draft?.quality).toBeDefined()

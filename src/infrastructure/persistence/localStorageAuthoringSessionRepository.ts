@@ -17,6 +17,7 @@ interface StoredAuthoringSession {
   readonly schemaVersion: 1
   readonly spec: AuthoringSpec
   readonly agentPrompt?: string
+  readonly continuationPrompt?: string
   readonly draft?: GeneratedDraft
   readonly publicationPreparation?: PublicationPreparationMetadata
 }
@@ -25,6 +26,7 @@ const SESSION_FIELDS = new Set([
   'schemaVersion',
   'spec',
   'agentPrompt',
+  'continuationPrompt',
   'draft',
   'publicationPreparation',
 ])
@@ -195,6 +197,13 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
       return undefined
     }
 
+    if (
+      candidate.continuationPrompt !== undefined &&
+      typeof candidate.continuationPrompt !== 'string'
+    ) {
+      return undefined
+    }
+
     const generatedDraft =
       candidate.draft === undefined
         ? undefined
@@ -226,6 +235,7 @@ function parseStoredSession(serialized: string | null): AuthoringSession | undef
     return {
       spec,
       agentPrompt: candidate.agentPrompt as string | undefined,
+      continuationPrompt: candidate.continuationPrompt as string | undefined,
       draft,
       publicationPreparation,
     }
@@ -262,6 +272,7 @@ export class LocalStorageAuthoringSessionRepository
         schemaVersion: 1,
         spec: session.spec,
         agentPrompt: session.agentPrompt,
+        continuationPrompt: session.continuationPrompt,
         draft: session.draft
           ? {
               title: session.draft.title,
