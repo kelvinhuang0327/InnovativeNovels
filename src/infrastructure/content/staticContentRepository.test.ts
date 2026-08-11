@@ -4,7 +4,10 @@ import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import { StaticContentRepository } from './staticContentRepository'
 import emberCrownFixture from './books/book-ember-crown.json'
+import frostImmortalFixture from './books/book-frost-immortal.json'
+import midnightOfficeFixture from './books/book-midnight-office.json'
 import orbitLastLightFixture from './books/book-orbit-last-light.json'
+import tideCityFixture from './books/book-tide-city.json'
 import tideArchiveFixture from './books/book-tide-archive.json'
 
 const EXPECTED_CATALOG_ORDER = [
@@ -168,7 +171,7 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   string,
   { sequence: number; access: string }
 > = {
-  'chapter-sealed-gate': { sequence: 3, access: CHAPTER_ACCESS.LOCKED },
+  'chapter-sealed-gate': { sequence: 3, access: CHAPTER_ACCESS.READABLE },
   'chapter-tide-letter': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
   'chapter-lighthouse-watch': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
   'chapter-picking-up-the-sword': {
@@ -178,14 +181,14 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   'chapter-mountain-gate': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
   'chapter-immortal-tribulation': {
     sequence: 3,
-    access: CHAPTER_ACCESS.LOCKED,
+    access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-reason-for-overtime': {
     sequence: 1,
     access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-elevator-silence': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
-  'chapter-break-room-truth': { sequence: 3, access: CHAPTER_ACCESS.LOCKED },
+  'chapter-break-room-truth': { sequence: 3, access: CHAPTER_ACCESS.READABLE },
   'chapter-decade-late-letter': {
     sequence: 1,
     access: CHAPTER_ACCESS.READABLE,
@@ -194,7 +197,7 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     sequence: 2,
     access: CHAPTER_ACCESS.READABLE,
   },
-  'chapter-after-reunion': { sequence: 3, access: CHAPTER_ACCESS.LOCKED },
+  'chapter-after-reunion': { sequence: 3, access: CHAPTER_ACCESS.READABLE },
   'chapter-ember-city-of-dusk': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
   'chapter-ember-the-old-crown': {
     sequence: 2,
@@ -274,6 +277,20 @@ const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
     '小鎮的雨從不整點下，卻總在她走到轉角書店前，準時落下第一滴。',
     '傘是舊的，撐傘的人也是舊識，只是這一次，他沒有像十年前那樣，把傘留給她一個人走。',
   ],
+  'chapter-after-reunion': [
+    '轉角書店門口的雨勢小了一點，簷下卻還掛著一串串水線。蘇晚把那封信放在兩人之間，沒有收回包裡：「現在可以說了嗎，程遠？」',
+    '程遠看著信封，手指在傘柄上慢慢收緊。他沒有像剛才那樣替她擋住雨，只在對面的椅子坐下：「可以。十年前離開，是我自己選的，不是妳做錯了什麼，也不是誰逼我。」',
+    '那年他拿到外地的工作，明知道只要開口，蘇晚會送他到車站，還是把行李搬走的時間藏到最後。車開之前，他把傘留給她，自己先轉身上車；那不是體貼，只是他當時能想出的、最廉價的補償。',
+    '「你連一句再見都沒有。」蘇晚的聲音很輕，卻沒有給他躲避的餘地。程遠低下眼睛：「我知道。我怕看見妳失望，也怕妳問我什麼時候回來，所以選了最省事的方式，讓妳只能對著一個空位生氣。」',
+    '她指尖壓住信封邊緣：「那這封信呢？」',
+    '「是我離開前一晚寫的。」程遠說，「那時候我寫了很多保證，說等我站穩就回來，說有些話不會拖太久。寫完我沒有寄，因為我知道自己做不到，卻又沒有勇氣把這件事承認給妳看。信一直收在行李底層，直到這次回來整理東西，才又被我找到。」',
+    '「所以十年前的字，是真的；新的郵戳，也是你現在才寄的？」蘇晚問。程遠點頭：「地址雖然舊，房子還有人代收。我只把原信封交給郵局，沒有改掉十年前的字。信沒有穿過十年，是我把它晚了十年才送出去。」',
+    '蘇晚沒有立刻打開信，先問：「你現在有能力了嗎？」程遠沉默了一會兒，才說：「沒有。我只是終於明白，『等我準備好』其實是把責任推給以後。我已經把下週離開的車票退掉了，接下來幾個月會留在鎮上工作。這不是要妳等我，是我自己選擇不再逃。」',
+    '她終於拆開信，讀到那句熟悉的保證，又把紙折了回去：「一封信不能把十年補回來。我也不會因為你終於寄出它，就當作我沒有等過、沒有怨過。」',
+    '「我不要求妳原諒我。」程遠把傘靠在椅邊，像是把決定放回她手裡，「妳想問什麼，我會回答。妳不想見我，我也不會去找妳要答案。」雨聲落在玻璃上，兩人之間安靜了很久，這一次誰也沒有先替沉默下結論。',
+    '蘇晚看著他良久，才說：「明天下午五點，還是在這裡。你把沒說完的話說完，我會問我想問的。」程遠答得很快：「好。」她又補了一句：「但這不是原諒，也不是重新開始。」他點頭：「我知道。對我來說，先準時出現就夠了。」',
+    '她把信收進包裡，沒有把它貼近心口。走到簷下時，她伸手握住傘柄的另一側：「送我到巷口吧，傘我拿一半。」程遠把傘往她那邊移了一點，兩人並肩走進雨裡；十年前的字和今天的新郵戳仍在她包裡，而明天下午五點，已經是一個由他們一起做出的約定。',
+  ],
   'chapter-legacy-book-2-1': [
     '新婚的紅燭還未燃盡，宮牆之外的風聲便已裹著流放的消息撲面而來。',
     '她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。',
@@ -291,11 +308,21 @@ for (const fixtureChapter of tideArchiveFixture.chapters) {
   EXPECTED_ACCESSIBLE_PROSE[fixtureChapter.chapterId] = fixtureChapter.prose
 }
 
+for (const fixture of [
+  tideCityFixture,
+  frostImmortalFixture,
+  midnightOfficeFixture,
+]) {
+  const fixtureChapter = fixture.chapters.find(
+    (chapter) => chapter.sequence === 3,
+  )
+
+  if (fixtureChapter?.access === 'READABLE' && fixtureChapter.prose) {
+    EXPECTED_ACCESSIBLE_PROSE[fixtureChapter.chapterId] = fixtureChapter.prose
+  }
+}
+
 const LOCKED_CHAPTER_IDS = [
-  'chapter-sealed-gate',
-  'chapter-immortal-tribulation',
-  'chapter-break-room-truth',
-  'chapter-after-reunion',
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-3-${index + 11}`),
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-6-${index + 11}`),
   ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-4-${index + 11}`),
@@ -383,7 +410,7 @@ describe('StaticContentRepository parity', () => {
     }
   })
 
-  it('has exactly sixteen LOCKED chapters and no UNAVAILABLE chapters', () => {
+  it('has exactly twelve LOCKED chapters and no UNAVAILABLE chapters', () => {
     const repository = new StaticContentRepository()
     const allChapters = repository
       .listBooks()
@@ -399,11 +426,11 @@ describe('StaticContentRepository parity', () => {
     expect(locked.map((chapter) => chapter.id).sort()).toEqual(
       [...LOCKED_CHAPTER_IDS].sort(),
     )
-    expect(locked).toHaveLength(16)
+    expect(locked).toHaveLength(12)
     expect(unavailable).toHaveLength(0)
   })
 
-  it('returns exact two-paragraph prose for every accessible chapter', () => {
+  it('returns exact prose for every accessible chapter', () => {
     const repository = new StaticContentRepository()
 
     for (const [chapterId, expectedProse] of Object.entries(
@@ -412,7 +439,7 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(15)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(19)
   })
 
   it('lets the reader open the full published first chapter', () => {
