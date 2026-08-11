@@ -112,6 +112,7 @@ button:focus-visible {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: clamp(2.25rem, 8vw, 4.5rem);
   line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 .screen-copy,
@@ -134,11 +135,13 @@ button:focus-visible {
   margin-top: 0;
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.8rem;
+  overflow-wrap: anywhere;
 }
 
 .book-meta {
   color: #8d3f2f;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .book-chapter-preview {
@@ -190,6 +193,7 @@ button:focus-visible {
 
 .book-chapter-action {
   flex: 0 0 auto;
+  white-space: normal;
 }
 
 .actions,
@@ -201,7 +205,11 @@ button:focus-visible {
 }
 
 .reader-prose {
+  max-width: 100%;
+  min-width: 0;
   margin-top: 2rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   touch-action: pan-y;
 }
 
@@ -258,6 +266,7 @@ button:focus-visible {
   min-width: 0;
   font-size: 0.9rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
   text-align: center;
 }
 
@@ -773,6 +782,7 @@ button:focus-visible {
 
 .reader-comfort-controls {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
@@ -780,6 +790,7 @@ button:focus-visible {
 
 .control-group {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
@@ -791,7 +802,7 @@ button:focus-visible {
 }
 
 .comfort-option {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0.25rem 0.65rem;
   font-size: 0.85rem;
   border-radius: 0.5rem;
@@ -807,7 +818,7 @@ button:focus-visible {
 }
 
 .reset-preferences-button {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0.25rem 0.75rem;
   font-size: 0.85rem;
 
@@ -816,9 +827,16 @@ button:focus-visible {
 
 .reader-bookmark-toolbar {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
+}
+
+.reader-bookmark-toolbar button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .button-bookmark {
@@ -951,12 +969,19 @@ button:focus-visible {
 .toc-chapter-button {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   text-align: left;
   color: #713125;
   background: transparent;
+}
+
+.toc-chapter-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
 }
 
 .toc-chapter-button.is-current {
@@ -1012,6 +1037,16 @@ button:focus-visible {
     padding: 0.75rem 0.5rem;
   }
 
+  .reader-bookmark-toolbar {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reader-bookmark-toolbar button {
+    width: 100%;
+  }
+
   .actions button,
   .reader-navigation button {
     width: 100%;
@@ -1055,12 +1090,30 @@ button:focus-visible {
   }
 
   .reader-page-navigation {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.4rem;
   }
 
   .reader-page-navigation button {
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     padding: 0.5rem 0.75rem;
+    width: 100%;
+  }
+
+  .reader-page-status {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .reader-page-navigation button:first-of-type {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .reader-page-navigation button:last-of-type {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .pwa-controls,
@@ -1101,6 +1154,7 @@ button:focus-visible {
   right: 0;
   z-index: 100;
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -1194,13 +1248,15 @@ button:focus-visible {
   }
 
   .reader-persistent-navigation {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 0.4rem;
     padding: 0.5rem;
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
 
   .reader-persistent-navigation button.button-persistent-nav {
-    min-height: 2.25rem;
+    min-height: 2.75rem;
     padding: 0.25rem 0.5rem;
     font-size: 0.8rem;
   }
