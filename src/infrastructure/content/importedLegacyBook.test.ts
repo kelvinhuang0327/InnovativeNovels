@@ -157,7 +157,7 @@ describe('imported legacy book application path', () => {
   })
 
   it.each(NEW_IMPORTED_BOOKS)(
-    'discovers $id through Catalog and opens a readable chapter without exposing locked prose',
+    'discovers $id through Catalog and opens its readable final act',
     ({ id, title, categoryLabel, firstChapterTitle }) => {
       const repository = new StaticContentRepository()
       const readingState = createReadingStateRepository()
@@ -172,7 +172,7 @@ describe('imported legacy book application path', () => {
         Array.from({ length: 13 }, (_, index) => index + 1),
       )
       expect(book?.chapters.slice(0, 10).every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
-      expect(book?.chapters.slice(10).every((chapter) => chapter.access === CHAPTER_ACCESS.LOCKED)).toBe(true)
+      expect(book?.chapters.slice(10).every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
 
       const destination = resolveStartOrContinue(repository, readingState, id)
 
@@ -192,8 +192,8 @@ describe('imported legacy book application path', () => {
       expect(
         repository.getChapterProse(
           `chapter-legacy-${id.replace('book-legacy-', '')}-11`,
-        ),
-      ).toBeUndefined()
+        )?.length,
+      ).toBeGreaterThan(0)
     },
   )
 })

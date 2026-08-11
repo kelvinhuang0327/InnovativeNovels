@@ -239,7 +239,7 @@ for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-b
   for (let sequence = 1; sequence <= 13; sequence += 1) {
     EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS[`chapter-legacy-${legacyBookId}-${sequence}`] = {
       sequence,
-      access: sequence <= 10 ? CHAPTER_ACCESS.READABLE : CHAPTER_ACCESS.LOCKED,
+      access: CHAPTER_ACCESS.READABLE,
     }
   }
 }
@@ -322,12 +322,7 @@ for (const fixture of [
   }
 }
 
-const LOCKED_CHAPTER_IDS = [
-  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-3-${index + 11}`),
-  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-6-${index + 11}`),
-  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-4-${index + 11}`),
-  ...Array.from({ length: 3 }, (_, index) => `chapter-legacy-book-5-${index + 11}`),
-] as const
+const LOCKED_CHAPTER_IDS = [] as const
 
 describe('StaticContentRepository parity', () => {
   it('lists exactly the thirteen books in the expected catalog order', () => {
@@ -410,7 +405,7 @@ describe('StaticContentRepository parity', () => {
     }
   })
 
-  it('has exactly twelve LOCKED chapters and no UNAVAILABLE chapters', () => {
+  it('has no LOCKED chapters and no UNAVAILABLE chapters', () => {
     const repository = new StaticContentRepository()
     const allChapters = repository
       .listBooks()
@@ -426,7 +421,7 @@ describe('StaticContentRepository parity', () => {
     expect(locked.map((chapter) => chapter.id).sort()).toEqual(
       [...LOCKED_CHAPTER_IDS].sort(),
     )
-    expect(locked).toHaveLength(12)
+    expect(locked).toHaveLength(0)
     expect(unavailable).toHaveLength(0)
   })
 
@@ -462,12 +457,10 @@ describe('StaticContentRepository parity', () => {
     expect(opened?.prose).toEqual(tideArchiveFixture.chapters[0].prose)
   })
 
-  it('returns undefined prose for every LOCKED chapter', () => {
+  it('returns undefined prose for an unknown chapter id', () => {
     const repository = new StaticContentRepository()
 
-    for (const chapterId of LOCKED_CHAPTER_IDS) {
-      expect(repository.getChapterProse(chapterId)).toBeUndefined()
-    }
+    expect(repository.getChapterProse('chapter-does-not-exist')).toBeUndefined()
   })
 
   it('returns undefined for an unknown book id', () => {
