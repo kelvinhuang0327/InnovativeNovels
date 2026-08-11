@@ -340,12 +340,17 @@ export function ReaderScreen({
       return
     }
 
-    const restoreTarget =
-      progressChapterIdRef.current === openedChapter.chapter.id
-        ? latestChapterProgressRef.current
-        : openedChapter.initialChapterProgress
+    const startsNewChapter =
+      progressChapterIdRef.current !== openedChapter.chapter.id
+    const restoreTarget = startsNewChapter
+      ? openedChapter.initialChapterProgress
+      : latestChapterProgressRef.current
     progressChapterIdRef.current = openedChapter.chapter.id
     latestChapterProgressRef.current = restoreTarget
+
+    if (startsNewChapter && restoreTarget <= 0) {
+      window.scrollTo(0, 0)
+    }
 
     let framePending = false
     let frameId: number | undefined
@@ -493,6 +498,10 @@ export function ReaderScreen({
       : latestChapterProgressRef.current
     progressChapterIdRef.current = openedChapter.chapter.id
     latestChapterProgressRef.current = restoreTarget
+
+    if (startsNewChapter && restoreTarget <= 0) {
+      window.scrollTo(0, 0)
+    }
 
     let animationFrameId: number | undefined
     let framePending = false

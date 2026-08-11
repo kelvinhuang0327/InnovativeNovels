@@ -1381,9 +1381,13 @@ describe('Wave 5 chapter-progress persistence and restore', () => {
       screen.getByRole('progressbar', { name: '本章閱讀進度' }),
     ).toHaveAttribute('aria-valuenow', '50')
 
-    const scrollToSpy = vi.spyOn(window, 'scrollTo')
-    vi.stubGlobal('scrollY', 0)
-    readerTopRef.current = 0
+    const scrollToSpy = vi
+      .spyOn(window, 'scrollTo')
+      .mockImplementation((_x?: unknown, y?: unknown) => {
+        const targetY = typeof y === 'number' ? y : 0
+        vi.stubGlobal('scrollY', targetY)
+        readerTopRef.current = -targetY
+      })
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
 
     expect(
@@ -1393,7 +1397,7 @@ describe('Wave 5 chapter-progress persistence and restore', () => {
     mockReaderGeometry(readerTopRef)
     flushAnimationFrame()
 
-    expect(scrollToSpy).not.toHaveBeenCalled()
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 0)
     expect(
       screen.getByRole('progressbar', { name: '本章閱讀進度' }),
     ).toHaveAttribute('aria-valuenow', '0')
