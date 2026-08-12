@@ -4,6 +4,7 @@ import {
   ContentImportError,
   parseContentBookFixture,
 } from './catalogContentContract'
+import { loadProductionCatalogContent } from './catalogContentLoader'
 
 function validFixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -34,6 +35,7 @@ function validFixture(overrides: Record<string, unknown> = {}) {
 }
 
 const FIXTURE_PATH = './books/book-example.json'
+const MIN_READABLE_AVERAGE_PROSE_LENGTH = 500
 
 describe('parseContentBookFixture', () => {
   it('parses a valid fixture, preserving chapter array order', () => {
@@ -393,6 +395,22 @@ describe('parseContentBookFixture', () => {
       expect((error as Error).message).not.toContain(secretParagraph)
       expect((error as ContentImportError).fixturePath).toBe(FIXTURE_PATH)
       expect((error as ContentImportError).field).toContain('prose')
+    }
+  })
+
+  it('requires every production book to maintain readable prose density', () => {
+    const { books, proseByChapterId } = loadProductionCatalogContent()
+
+    for (const entry of books) {
+      const lengths = entry.chapters
+        .filter((chapter) => chapter.access === 'READABLE')
+        .map((chapter) => proseByChapterId.get(chapter.id)?.join('').length ?? 0)
+      const total = lengths.reduce((sum, length) => sum + length, 0)
+      const average = total / lengths.length
+
+      expect(average, entry.book.id).toBeGreaterThanOrEqual(
+        MIN_READABLE_AVERAGE_PROSE_LENGTH,
+      )
     }
   })
 })

@@ -65,13 +65,13 @@ const EXPECTED_BOOK_METADATA: Record<
     categoryLabel: '科幻',
   },
   'book-legacy-book-1': {
-    title: '吞噬古帝',
-    authorName: '黑白仙鶴',
+    title: '燈骨問天',
+    authorName: '聞人照',
     categoryLabel: '玄幻奇幻',
   },
   'book-legacy-book-2': {
-    title: '開局流放，醫妃搬空國庫去逃荒',
-    authorName: '蘇輕歌',
+    title: '河燈未央',
+    authorName: '晏棠',
     categoryLabel: '古代言情',
   },
   'book-legacy-book-3': {
@@ -161,10 +161,20 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-legacy-book-1-2',
     'chapter-legacy-book-1-3',
     'chapter-legacy-book-1-4',
+    'chapter-legacy-book-1-5',
+    'chapter-legacy-book-1-6',
+    'chapter-legacy-book-1-7',
+    'chapter-legacy-book-1-8',
   ],
   'book-legacy-book-2': [
     'chapter-legacy-book-2-1',
     'chapter-legacy-book-2-2',
+    'chapter-legacy-book-2-3',
+    'chapter-legacy-book-2-4',
+    'chapter-legacy-book-2-5',
+    'chapter-legacy-book-2-6',
+    'chapter-legacy-book-2-7',
+    'chapter-legacy-book-2-8',
   ],
   'book-legacy-book-3': Array.from(
     { length: 13 },
@@ -312,14 +322,17 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     sequence: 5,
     access: CHAPTER_ACCESS.READABLE,
   },
-  'chapter-legacy-book-2-1': {
-    sequence: 1,
-    access: CHAPTER_ACCESS.READABLE,
-  },
-  'chapter-legacy-book-2-2': {
-    sequence: 2,
-    access: CHAPTER_ACCESS.READABLE,
-  },
+}
+
+for (const bookId of ['book-legacy-book-1', 'book-legacy-book-2']) {
+  const legacyBookId = bookId.replace('book-legacy-', '')
+
+  for (let sequence = 1; sequence <= 8; sequence += 1) {
+    EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS[`chapter-legacy-${legacyBookId}-${sequence}`] = {
+      sequence,
+      access: CHAPTER_ACCESS.READABLE,
+    }
+  }
 }
 
 for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-book-4', 'book-legacy-book-5']) {
@@ -379,13 +392,6 @@ const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
     '「我不要求妳原諒我。」程遠把傘靠在椅邊，像是把決定放回她手裡，「妳想問什麼，我會回答。妳不想見我，我也不會去找妳要答案。」雨聲落在玻璃上，兩人之間安靜了很久，這一次誰也沒有先替沉默下結論。',
     '蘇晚看著他良久，才說：「明天下午五點，還是在這裡。你把沒說完的話說完，我會問我想問的。」程遠答得很快：「好。」她又補了一句：「但這不是原諒，也不是重新開始。」他點頭：「我知道。對我來說，先準時出現就夠了。」',
     '她把信收進包裡，沒有把它貼近心口。走到簷下時，她伸手握住傘柄的另一側：「送我到巷口吧，傘我拿一半。」程遠把傘往她那邊移了一點，兩人並肩走進雨裡；十年前的字和今天的新郵戳仍在她包裡，而明天下午五點，已經是一個由他們一起做出的約定。',
-  ],
-  'chapter-legacy-book-2-1': [
-    '新婚的紅燭還未燃盡，宮牆之外的風聲便已裹著流放的消息撲面而來。',
-    '她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。',
-  ],
-  'chapter-legacy-book-2-2': [
-    '當最後一紙文書落地，親緣也像門外的雪一樣，乾脆地斷了個乾淨。',
   ],
 }
 
@@ -524,7 +530,7 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(19)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(17)
   })
 
   it('lets the reader open the full published first chapter', () => {

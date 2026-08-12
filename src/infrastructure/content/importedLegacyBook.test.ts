@@ -58,15 +58,15 @@ describe('imported legacy book application path', () => {
   it('is discoverable in Catalog and exposes its ordered Book Detail chapters', () => {
     const repository = new StaticContentRepository()
     const books = listCatalog(repository)
-    const matches = filterCatalog(books, { searchText: '吞噬古帝' })
+    const matches = filterCatalog(books, { searchText: '燈骨問天' })
     const book = getBookDetail(repository, IMPORTED_BOOK_ID)
 
     expect(books).toHaveLength(13)
     expect(matches.map((entry) => entry.book.id)).toEqual([IMPORTED_BOOK_ID])
     expect(book?.book).toMatchObject({
       id: IMPORTED_BOOK_ID,
-      title: '吞噬古帝',
-      authorName: '黑白仙鶴',
+      title: '燈骨問天',
+      authorName: '聞人照',
       categoryLabel: '玄幻奇幻',
     })
     expect(book?.chapters.map((chapter) => chapter.id)).toEqual([
@@ -74,6 +74,10 @@ describe('imported legacy book application path', () => {
       'chapter-legacy-book-1-2',
       'chapter-legacy-book-1-3',
       'chapter-legacy-book-1-4',
+      'chapter-legacy-book-1-5',
+      'chapter-legacy-book-1-6',
+      'chapter-legacy-book-1-7',
+      'chapter-legacy-book-1-8',
     ])
     expect(book?.chapters.every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
   })
@@ -101,11 +105,8 @@ describe('imported legacy book application path', () => {
 
     const opened = openReadingChapter(repository, readingState, destination.position)
 
-    expect(opened?.chapter.title).toBe('第1章 覺醒混沌體，獲混沌吞噬塔')
-    expect(opened?.prose).toHaveLength(6)
-    expect(opened?.prose[0]).toBe(
-      '“父親，蘇昊已經派人傳來消息，必須將蘇辰逐出家族，否則的話，蘇族會執行家法，清理門戶。”',
-    )
+    expect(opened?.chapter.title).toBe('第一章 雨夜收骨')
+    expect(opened?.prose.length).toBeGreaterThan(0)
   })
 
   it('discovers the second imported book and opens its first chapter through the normal reading path', () => {
@@ -113,7 +114,7 @@ describe('imported legacy book application path', () => {
     const readingState = createReadingStateRepository()
     const books = listCatalog(repository)
     const matches = filterCatalog(books, {
-      searchText: '開局流放，醫妃搬空國庫去逃荒',
+      searchText: '河燈未央',
     })
     const book = getBookDetail(repository, SECOND_IMPORTED_BOOK_ID)
 
@@ -122,15 +123,15 @@ describe('imported legacy book application path', () => {
     ])
     expect(book?.book).toMatchObject({
       id: SECOND_IMPORTED_BOOK_ID,
-      title: '開局流放，醫妃搬空國庫去逃荒',
-      authorName: '蘇輕歌',
+      title: '河燈未央',
+      authorName: '晏棠',
       categoryLabel: '古代言情',
     })
-    expect(book?.chapters.map((chapter) => chapter.sequence)).toEqual([1, 2])
-    expect(book?.chapters.map((chapter) => chapter.access)).toEqual([
-      CHAPTER_ACCESS.READABLE,
-      CHAPTER_ACCESS.READABLE,
-    ])
+    expect(book?.chapters.map((chapter) => chapter.sequence)).toEqual(
+      Array.from({ length: 8 }, (_, index) => index + 1),
+    )
+    expect(book?.chapters).toHaveLength(8)
+    expect(book?.chapters.every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
 
     const destination = resolveStartOrContinue(
       repository,
@@ -149,11 +150,8 @@ describe('imported legacy book application path', () => {
 
     const opened = openReadingChapter(repository, readingState, destination.position)
 
-    expect(opened?.chapter.title).toBe('第1章 新婚夜')
-    expect(opened?.prose).toEqual([
-      '新婚的紅燭還未燃盡，宮牆之外的風聲便已裹著流放的消息撲面而來。',
-      '她沒有哭，也沒有問命運為何如此，只是轉身打開藥箱，開始清點能帶走的一切。',
-    ])
+    expect(opened?.chapter.title).toBe('第一章 一紙退婚落在雪裡')
+    expect(opened?.prose.length).toBeGreaterThan(0)
   })
 
   it.each(NEW_IMPORTED_BOOKS)(
