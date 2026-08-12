@@ -312,9 +312,9 @@ describe('loadProductionCatalogContent', () => {
       'book-tide-archive',
     ])
     expect(books[0].chapters.map((chapter) => chapter.sequence)).toEqual([
-      3, 1, 2,
+      3, 1, 2, 4, 5, 6, 7, 8,
     ])
-    expect(proseByChapterId.size).toBe(85)
+    expect(proseByChapterId.size).toBe(95)
   })
 
   it('loads the complete owner-reviewed tide archive metadata and paragraphs', () => {

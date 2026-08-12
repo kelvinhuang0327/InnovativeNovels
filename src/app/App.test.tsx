@@ -143,7 +143,7 @@ describe('Wave 1 core reading journey', () => {
     expect(
       screen.getByRole('heading', { name: '潮汐之城' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('共 3 章')).toBeInTheDocument()
+    expect(screen.getByText('共 8 章')).toBeInTheDocument()
   })
 
   it('renders every access status without prose requests and opens exact allowed chapters', () => {
@@ -689,6 +689,11 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
       expect.stringContaining('第一章：潮聲來信'),
       expect.stringContaining('第二章：燈塔守望'),
       expect.stringContaining('第三章：封印之門'),
+      expect.stringContaining('第四章：潮痕上的名字'),
+      expect.stringContaining('第五章：檔案裡的空頁'),
+      expect.stringContaining('第六章：兩盞同夜的燈'),
+      expect.stringContaining('第七章：替誰留下'),
+      expect.stringContaining('第八章：可回頭的潮聲'),
     ])
 
     expect(items[0].querySelector('button')?.getAttribute('aria-current')).toBe(
@@ -757,7 +762,7 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     const liveProgress = () =>
       screen.getByRole('progressbar', { name: '本章閱讀進度' })
 
-    expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(progress()).toHaveTextContent('第 1 / 8 章')
     expect(progress().textContent).not.toMatch(/%|頁|段落/)
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
@@ -765,31 +770,31 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(progress()).toHaveTextContent('第 2 / 8 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 3 / 3 章')
+    expect(progress()).toHaveTextContent('第 3 / 8 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(progress()).toHaveTextContent('第 2 / 8 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
     fireEvent.click(tocButtonFor('第一章：潮聲來信'))
-    expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(progress()).toHaveTextContent('第 1 / 8 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 3 章')
+    expect(progress()).toHaveTextContent('第 2 / 8 章')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
     const bookmarksDialog = screen.getByRole('dialog', { name: '章節書籤' })
     fireEvent.click(
       within(bookmarksDialog).getByRole('button', { name: '移至章節' }),
     )
-    expect(progress()).toHaveTextContent('第 1 / 3 章')
+    expect(progress()).toHaveTextContent('第 1 / 8 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
   })
 })
@@ -966,8 +971,8 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     fireEvent.click(persistentNext)
 
     expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 2 / 3 章')
-    expect(within(persistentNav).getByText('第 2 / 3 章')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 2 / 8 章')
+    expect(within(persistentNav).getByText('第 2 / 8 章')).toBeInTheDocument()
     // Chapter 2 is not bookmarked
     expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeInTheDocument()
 
@@ -989,16 +994,30 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     // Newly readable Chapter 3 is reachable through adjacent navigation.
     fireEvent.click(persistentNext)
     expect(screen.getByRole('heading', { name: '第三章：封印之門' })).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 3 / 3 章')
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 3 / 8 章')
     expect(
       screen.queryByText('本章尚未開放，沒有載入任何內文。'),
     ).not.toBeInTheDocument()
-    expect(persistentNext).toBeDisabled()
+    expect(persistentNext).not.toBeDisabled()
     expect(persistentPrev).not.toBeDisabled()
 
-    // Previous returns to Chapter 2 after the readable Chapter 3 visit.
+    for (const title of [
+      '第四章：潮痕上的名字',
+      '第五章：檔案裡的空頁',
+      '第六章：兩盞同夜的燈',
+      '第七章：替誰留下',
+      '第八章：可回頭的潮聲',
+    ]) {
+      fireEvent.click(persistentNext)
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+    }
+
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 8 / 8 章')
+    expect(persistentNext).toBeDisabled()
+
+    // Previous returns to Chapter 7 after the expanded readable arc.
     fireEvent.click(persistentPrev)
-    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '第七章：替誰留下' })).toBeInTheDocument()
     expect(persistentNext).not.toBeDisabled()
     expect(persistentPrev).not.toBeDisabled()
   })
@@ -1037,7 +1056,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('progressbar', { name: '目前章節位置' }),
-    ).toHaveTextContent('第 2 / 3 章')
+    ).toHaveTextContent('第 2 / 8 章')
 
     swipeLeft()
     expect(

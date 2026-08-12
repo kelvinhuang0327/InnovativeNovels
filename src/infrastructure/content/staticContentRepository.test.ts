@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { openReadingChapter } from '../../application/reading/readingUseCases'
+import {
+  navigateToAdjacentChapter,
+  openReadingChapter,
+} from '../../application/reading/readingUseCases'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import { StaticContentRepository } from './staticContentRepository'
@@ -102,11 +105,21 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-sealed-gate',
     'chapter-tide-letter',
     'chapter-lighthouse-watch',
+    'chapter-tide-city-004',
+    'chapter-tide-city-005',
+    'chapter-tide-city-006',
+    'chapter-tide-city-007',
+    'chapter-tide-city-008',
   ],
   'book-frost-immortal': [
     'chapter-picking-up-the-sword',
     'chapter-mountain-gate',
     'chapter-immortal-tribulation',
+    'chapter-frost-immortal-004',
+    'chapter-frost-immortal-005',
+    'chapter-frost-immortal-006',
+    'chapter-frost-immortal-007',
+    'chapter-frost-immortal-008',
   ],
   'book-midnight-office': [
     'chapter-reason-for-overtime',
@@ -181,6 +194,31 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   'chapter-mountain-gate': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
   'chapter-immortal-tribulation': {
     sequence: 3,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-tide-city-004': { sequence: 4, access: CHAPTER_ACCESS.READABLE },
+  'chapter-tide-city-005': { sequence: 5, access: CHAPTER_ACCESS.READABLE },
+  'chapter-tide-city-006': { sequence: 6, access: CHAPTER_ACCESS.READABLE },
+  'chapter-tide-city-007': { sequence: 7, access: CHAPTER_ACCESS.READABLE },
+  'chapter-tide-city-008': { sequence: 8, access: CHAPTER_ACCESS.READABLE },
+  'chapter-frost-immortal-004': {
+    sequence: 4,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-frost-immortal-005': {
+    sequence: 5,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-frost-immortal-006': {
+    sequence: 6,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-frost-immortal-007': {
+    sequence: 7,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-frost-immortal-008': {
+    sequence: 8,
     access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-reason-for-overtime': {
@@ -379,12 +417,13 @@ describe('StaticContentRepository parity', () => {
     }
   })
 
-  it('retains book-tide-city in authored sequence order 3,1,2', () => {
+  it('retains book-tide-city in authored sequence order 3,1,2,4,5,6,7,8', () => {
     const repository = new StaticContentRepository()
     const entry = repository.getBook('book-tide-city')
 
     expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([
       3, 1, 2,
+      4, 5, 6, 7, 8,
     ])
   })
 
@@ -487,6 +526,78 @@ describe('StaticContentRepository parity', () => {
         expect(prose, fixtureChapter.chapterId).toEqual(fixtureChapter.prose)
         expect(prose?.length).toBeGreaterThan(0)
       }
+    },
+  )
+
+  it.each([
+    ['book-tide-city', tideCityFixture],
+    ['book-frost-immortal', frostImmortalFixture],
+  ])(
+    '%s has exactly eight READABLE chapters with substantive fixture-matching prose',
+    (bookId, fixture) => {
+      const repository = new StaticContentRepository()
+      const entry = repository.getBook(bookId)
+
+      expect(entry?.chapters).toHaveLength(8)
+      expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual(
+        bookId === 'book-tide-city'
+          ? [3, 1, 2, 4, 5, 6, 7, 8]
+          : [1, 2, 3, 4, 5, 6, 7, 8],
+      )
+      expect(entry?.chapters.every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
+
+      for (const fixtureChapter of fixture.chapters) {
+        const prose = repository.getChapterProse(fixtureChapter.chapterId)
+
+        expect(prose, fixtureChapter.chapterId).toEqual(fixtureChapter.prose)
+        expect(prose?.length).toBeGreaterThan(0)
+        if (fixtureChapter.sequence >= 4) {
+          expect(prose?.length).toBeGreaterThanOrEqual(12)
+        }
+      }
+    },
+  )
+
+  it.each([
+    ['book-tide-city', tideCityFixture],
+    ['book-frost-immortal', frostImmortalFixture],
+  ])(
+    '%s opens Chapter 4 and navigates through the new final Chapter 8',
+    (bookIdValue, fixture) => {
+      const repository = new StaticContentRepository()
+      const state = {
+        load: () => undefined,
+        save: () => undefined,
+        listSavedPositions: () => [],
+      }
+      const entry = repository.getBook(bookIdValue)
+      const chapterFour = entry?.chapters.find((chapter) => chapter.sequence === 4)
+
+      const opened = openReadingChapter(repository, state, {
+        bookId: bookId(bookIdValue),
+        chapterId: chapterFour?.id as ReturnType<typeof chapterId>,
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      })
+
+      expect(opened?.prose).toEqual(
+        fixture.chapters.find((chapter) => chapter.sequence === 4)?.prose,
+      )
+      expect(opened?.hasPrevious).toBe(true)
+      expect(opened?.hasNext).toBe(true)
+
+      let current = opened as NonNullable<typeof opened>
+      while (current.hasNext) {
+        const next = navigateToAdjacentChapter(repository, state, current, 1)
+        expect(next).toBeDefined()
+        current = next as NonNullable<typeof next>
+      }
+
+      expect(current.chapter.sequence).toBe(8)
+      expect(current.hasNext).toBe(false)
+      expect(current.prose).toEqual(
+        fixture.chapters.find((chapter) => chapter.sequence === 8)?.prose,
+      )
     },
   )
 })
