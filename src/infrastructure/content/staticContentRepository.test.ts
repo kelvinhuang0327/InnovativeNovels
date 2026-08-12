@@ -10,6 +10,7 @@ import emberCrownFixture from './books/book-ember-crown.json'
 import frostImmortalFixture from './books/book-frost-immortal.json'
 import midnightOfficeFixture from './books/book-midnight-office.json'
 import orbitLastLightFixture from './books/book-orbit-last-light.json'
+import plumRainLetterFixture from './books/book-plum-rain-letter.json'
 import tideCityFixture from './books/book-tide-city.json'
 import tideArchiveFixture from './books/book-tide-archive.json'
 
@@ -125,11 +126,21 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-reason-for-overtime',
     'chapter-elevator-silence',
     'chapter-break-room-truth',
+    'chapter-midnight-office-004',
+    'chapter-midnight-office-005',
+    'chapter-midnight-office-006',
+    'chapter-midnight-office-007',
+    'chapter-midnight-office-008',
   ],
   'book-plum-rain-letter': [
     'chapter-decade-late-letter',
     'chapter-rainy-day-umbrella',
     'chapter-after-reunion',
+    'chapter-plum-rain-letter-004',
+    'chapter-plum-rain-letter-005',
+    'chapter-plum-rain-letter-006',
+    'chapter-plum-rain-letter-007',
+    'chapter-plum-rain-letter-008',
   ],
   'book-ember-crown': [
     'chapter-ember-city-of-dusk',
@@ -227,6 +238,26 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
   },
   'chapter-elevator-silence': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
   'chapter-break-room-truth': { sequence: 3, access: CHAPTER_ACCESS.READABLE },
+  'chapter-midnight-office-004': {
+    sequence: 4,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-midnight-office-005': {
+    sequence: 5,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-midnight-office-006': {
+    sequence: 6,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-midnight-office-007': {
+    sequence: 7,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-midnight-office-008': {
+    sequence: 8,
+    access: CHAPTER_ACCESS.READABLE,
+  },
   'chapter-decade-late-letter': {
     sequence: 1,
     access: CHAPTER_ACCESS.READABLE,
@@ -236,6 +267,26 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-after-reunion': { sequence: 3, access: CHAPTER_ACCESS.READABLE },
+  'chapter-plum-rain-letter-004': {
+    sequence: 4,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-plum-rain-letter-005': {
+    sequence: 5,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-plum-rain-letter-006': {
+    sequence: 6,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-plum-rain-letter-007': {
+    sequence: 7,
+    access: CHAPTER_ACCESS.READABLE,
+  },
+  'chapter-plum-rain-letter-008': {
+    sequence: 8,
+    access: CHAPTER_ACCESS.READABLE,
+  },
   'chapter-ember-city-of-dusk': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
   'chapter-ember-the-old-crown': {
     sequence: 2,
@@ -532,6 +583,8 @@ describe('StaticContentRepository parity', () => {
   it.each([
     ['book-tide-city', tideCityFixture],
     ['book-frost-immortal', frostImmortalFixture],
+    ['book-midnight-office', midnightOfficeFixture],
+    ['book-plum-rain-letter', plumRainLetterFixture],
   ])(
     '%s has exactly eight READABLE chapters with substantive fixture-matching prose',
     (bookId, fixture) => {
@@ -561,6 +614,8 @@ describe('StaticContentRepository parity', () => {
   it.each([
     ['book-tide-city', tideCityFixture],
     ['book-frost-immortal', frostImmortalFixture],
+    ['book-midnight-office', midnightOfficeFixture],
+    ['book-plum-rain-letter', plumRainLetterFixture],
   ])(
     '%s opens Chapter 4 and navigates through the new final Chapter 8',
     (bookIdValue, fixture) => {
