@@ -16,7 +16,7 @@ const rootDir = process.cwd()
 const configPath = path.join(rootDir, 'capacitor.config.ts')
 assert(fs.existsSync(configPath), 'capacitor.config.ts does not exist')
 const configContent = fs.readFileSync(configPath, 'utf8')
-assert(configContent.includes("appId: 'com.innovativenovels.preview'"), 'appId must be com.innovativenovels.preview')
+assert(configContent.includes("appId: 'com.innovativenovels.app'"), 'appId must be com.innovativenovels.app')
 assert(configContent.includes("appName: 'Innovative Novels'"), 'appName must be Innovative Novels')
 assert(configContent.includes("webDir: 'dist'"), 'webDir must be dist')
 

@@ -1,4 +1,4 @@
-package com.innovativenovels.preview;
+package com.innovativenovels.app;
 
 import com.getcapacitor.BridgeActivity;
 
