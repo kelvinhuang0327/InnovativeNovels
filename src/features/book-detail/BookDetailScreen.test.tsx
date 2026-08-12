@@ -79,6 +79,43 @@ describe('BookDetailScreen Exit & Resume Continuity UI', () => {
     expect(readBtn).toBeInTheDocument()
   })
 
+  it('renders an accessible add-to-bookshelf action and toggles it', () => {
+    const onToggleBookshelf = vi.fn()
+    const { rerender } = render(
+      <BookDetailScreen
+        book={mockBook}
+        hasSavedPosition={false}
+        isInBookshelf={false}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+        onToggleBookshelf={onToggleBookshelf}
+      />,
+    )
+
+    const addButton = screen.getByRole('button', { name: '加入書架' })
+    expect(addButton).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(addButton)
+
+    rerender(
+      <BookDetailScreen
+        book={mockBook}
+        hasSavedPosition={false}
+        isInBookshelf={true}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+        onToggleBookshelf={onToggleBookshelf}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '移出書架' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(onToggleBookshelf).toHaveBeenCalledOnce()
+  })
+
   it('renders chapter-aware Continue Reading button copy when valid saved position exists', () => {
     render(
       <BookDetailScreen

@@ -11,9 +11,12 @@ interface BookDetailScreenProps {
   readonly continueChapterId?: string
   readonly continueChapterTitle?: string
   readonly sessionReturnStatus?: string
+  readonly isInBookshelf?: boolean
   readonly onBack: () => void
   readonly onRead: () => void
   readonly onReadChapter: (chapterId: string) => void
+  readonly onToggleBookshelf?: () => void
+  readonly backButtonLabel?: string
 }
 
 const chapterAccessLabels: Record<ChapterAccess, string> = {
@@ -29,9 +32,12 @@ export function BookDetailScreen({
   continueChapterId,
   continueChapterTitle,
   sessionReturnStatus,
+  isInBookshelf = false,
   onBack,
   onRead,
   onReadChapter,
+  onToggleBookshelf,
+  backButtonLabel = '返回書庫',
 }: BookDetailScreenProps) {
   const readButtonText = hasSavedPosition
     ? continueChapterTitle
@@ -62,6 +68,19 @@ export function BookDetailScreen({
       </p>
       <p className="book-description">{book.description}</p>
       <p>共 {book.chapters.length} 章</p>
+
+      {onToggleBookshelf && (
+        <div className="book-detail-shelf-action">
+          <button
+            aria-pressed={isInBookshelf}
+            className="button-secondary"
+            type="button"
+            onClick={onToggleBookshelf}
+          >
+            {isInBookshelf ? '移出書架' : '加入書架'}
+          </button>
+        </div>
+      )}
 
       <section
         className="book-chapter-preview"
@@ -120,7 +139,7 @@ export function BookDetailScreen({
           {readButtonText}
         </button>
         <button className="button-secondary" type="button" onClick={onBack}>
-          返回書庫
+          {backButtonLabel}
         </button>
       </div>
     </section>

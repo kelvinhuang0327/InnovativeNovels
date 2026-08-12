@@ -12,6 +12,7 @@ interface CatalogScreenProps {
   readonly continueReading: readonly ContinueReadingEntry[]
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
+  readonly onOpenLibrary?: () => void
   readonly onOpenAuthoring?: () => void
 }
 
@@ -226,6 +227,7 @@ export function CatalogScreen({
   continueReading,
   onOpenBook,
   onContinueBook,
+  onOpenLibrary,
   onOpenAuthoring,
 }: CatalogScreenProps) {
   const [searchText, setSearchText] = useState('')
@@ -255,6 +257,18 @@ export function CatalogScreen({
       aria-labelledby="catalog-heading"
       className={`bookstore-screen${isFiltering ? ' is-filtering' : ''}`}
     >
+      {onOpenLibrary && (
+        <nav aria-label="書城導覽" className="bookstore-navigation">
+          <button
+            className="button-secondary bookstore-library-entry"
+            onClick={onOpenLibrary}
+            type="button"
+          >
+            我的書架
+          </button>
+        </nav>
+      )}
+
       {isFiltering ? (
         <header className="bookstore-filtered-header">
           <p className="bookstore-kicker">書庫搜尋</p>

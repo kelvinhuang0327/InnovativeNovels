@@ -4,6 +4,7 @@ import authoringSource from '../features/authoring/AuthoringPreviewScreen.tsx?ra
 import bookDetailSource from '../features/book-detail/BookDetailScreen.tsx?raw'
 import catalogSource from '../features/catalog/CatalogScreen.tsx?raw'
 import continueReadingShelfSource from '../features/library/ContinueReadingShelf.tsx?raw'
+import librarySource from '../features/library/LibraryScreen.tsx?raw'
 import pwaControlsSource from '../features/pwa/PwaControls.tsx?raw'
 import bookmarksModalSource from '../features/reader/ChapterBookmarksModal.tsx?raw'
 import comfortControlsSource from '../features/reader/ReaderComfortControls.tsx?raw'
@@ -20,6 +21,7 @@ const featureFiles = [
   ['ChapterBookmarksModal.tsx', bookmarksModalSource],
   ['TableOfContentsModal.tsx', tocModalSource],
   ['ContinueReadingShelf.tsx', continueReadingShelfSource],
+  ['LibraryScreen.tsx', librarySource],
   ['AuthoringPreviewScreen.tsx', authoringSource],
   ['PwaControls.tsx', pwaControlsSource],
 ]

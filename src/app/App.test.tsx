@@ -25,10 +25,12 @@ import {
   LocalStorageChapterBookmarksRepository,
   CHAPTER_BOOKMARKS_STORAGE_KEY,
 } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import { LocalStorageBookShelfRepository } from '../infrastructure/persistence/localStorageBookShelfRepository'
 import {
   LocalStorageReaderPreferencesRepository,
   READER_PREFERENCES_STORAGE_KEY,
 } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
+import { LocalStorageRecentReadingRepository } from '../infrastructure/persistence/localStorageRecentReadingRepository'
 import {
   LocalStorageReadingStateRepository,
   READING_STATE_STORAGE_KEY,
@@ -39,6 +41,12 @@ function createDependencies(): AppDependencies {
   return {
     contentRepository: new StaticContentRepository(),
     readingStateRepository: new LocalStorageReadingStateRepository(
+      window.localStorage,
+    ),
+    bookShelfRepository: new LocalStorageBookShelfRepository(
+      window.localStorage,
+    ),
+    recentReadingRepository: new LocalStorageRecentReadingRepository(
       window.localStorage,
     ),
     readerPreferencesRepository: new LocalStorageReaderPreferencesRepository(
@@ -1715,5 +1723,119 @@ describe('Wave 4 mobile reader session recovery', () => {
     )
 
     expect(source).not.toMatch(/localStorage/)
+  })
+})
+
+describe('Bookshelf and Recent Reading v1', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  function openBookAt(index: number) {
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[index])
+  }
+
+  function openLibrary() {
+    fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
+  }
+
+  it('navigates through Library, records real recent order, persists state, and preserves resume after removal', () => {
+    const firstMount = render(<App dependencies={createDependencies()} />)
+
+    openLibrary()
+    expect(screen.getByRole('heading', { name: '我的書架', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('還沒有收藏小說，從書城挑一本加入書架。')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '前往書城' }))
+    openBookAt(0)
+    fireEvent.click(screen.getByRole('button', { name: '加入書架' }))
+    expect(screen.getByRole('button', { name: '移出書架' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    openLibrary()
+
+    let shelf = screen.getByRole('region', { name: '我的書架' })
+    expect(within(shelf).getByText('潮汐之城')).toBeInTheDocument()
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    expect(screen.getByRole('heading', { name: '潮汐之城' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    shelf = screen.getByRole('region', { name: '我的書架' })
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書城' }))
+
+    openBookAt(1)
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    openLibrary()
+
+    const recent = screen.getByRole('region', { name: '最近閱讀' })
+    expect(
+      within(recent)
+        .getAllByRole('listitem')
+        .map((item) => item.querySelector('h3')?.textContent),
+    ).toEqual(['霜劍仙途', '潮汐之城'])
+
+    firstMount.unmount()
+    render(<App dependencies={createDependencies()} />)
+    openLibrary()
+
+    shelf = screen.getByRole('region', { name: '我的書架' })
+    expect(within(shelf).getByText('潮汐之城')).toBeInTheDocument()
+    const persistedRecent = screen.getByRole('region', { name: '最近閱讀' })
+    expect(
+      within(persistedRecent)
+        .getAllByRole('listitem')
+        .map((item) => item.querySelector('h3')?.textContent),
+    ).toEqual(['霜劍仙途', '潮汐之城'])
+
+    fireEvent.click(within(shelf).getByRole('button', { name: '移出書架' }))
+    expect(within(shelf).queryByText('潮汐之城')).not.toBeInTheDocument()
+    expect(within(persistedRecent).getByText('潮汐之城')).toBeInTheDocument()
+
+    const removedBookRecent = within(persistedRecent)
+      .getByText('潮汐之城')
+      .closest('li') as HTMLElement
+    fireEvent.click(
+      within(removedBookRecent).getByRole('button', { name: '繼續閱讀' }),
+    )
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+  })
+
+  it('records a direct chapter open in Recent Reading without changing shelf membership', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    openBookAt(0)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '閱讀本章：第一章：潮聲來信（可閱讀）',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    openLibrary()
+
+    expect(
+      within(screen.getByRole('region', { name: '最近閱讀' })).getByText(
+        '潮汐之城',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '我的書架' })).queryByText(
+        '潮汐之城',
+      ),
+    ).not.toBeInTheDocument()
   })
 })
