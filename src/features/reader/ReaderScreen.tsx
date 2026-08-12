@@ -16,7 +16,7 @@ import type {
 import { calculateReadingProgress } from '../../domain/reading/readingProgressPolicy'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
-import { ReaderComfortControls } from './ReaderComfortControls'
+import { ReaderAppearanceSheet } from './ReaderAppearanceSheet'
 import { TableOfContentsModal } from './TableOfContentsModal'
 
 const CHAPTER_SWIPE_MIN_DISTANCE_PX = 72
@@ -96,6 +96,7 @@ export function ReaderScreen({
   canNavigateNextChapter = false,
   onProgressChange,
 }: ReaderScreenProps) {
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
   const [isTocOpen, setIsTocOpen] = useState(false)
   const [liveProgress, setLiveProgress] = useState({
@@ -121,6 +122,7 @@ export function ReaderScreen({
   const onProgressChangeRef = useRef(onProgressChange)
   const latestChapterProgressRef = useRef(openedChapter.initialChapterProgress)
   const flushProgressRef = useRef<() => void>(() => {})
+  const appearanceTriggerRef = useRef<HTMLButtonElement>(null)
   const liveProgressPercent =
     liveProgress.chapterId === openedChapter.chapter.id
       ? liveProgress.percent
@@ -609,42 +611,50 @@ export function ReaderScreen({
       aria-label="閱讀器"
     >
       <header className="reader-toolbar">
-        <ReaderComfortControls
-          preferences={preferences}
-          onChangePreferences={onChangePreferences}
-          onResetPreferences={onResetPreferences}
-        />
+        <div className="reader-toolbar-actions">
+          <button
+            ref={appearanceTriggerRef}
+            type="button"
+            className="button-secondary reader-appearance-trigger"
+            aria-label="閱讀設定"
+            aria-haspopup="dialog"
+            aria-expanded={isAppearanceOpen}
+            onClick={() => setIsAppearanceOpen(true)}
+          >
+            閱讀設定
+          </button>
 
-        <div className="reader-bookmark-toolbar">
-          {!openedChapter.isLocked && (
+          <div className="reader-bookmark-toolbar">
+            {!openedChapter.isLocked && (
+              <button
+                type="button"
+                className={`button-bookmark ${isBookmarked ? 'is-active' : ''}`}
+                onClick={onToggleBookmark}
+                aria-label={isBookmarked ? '移除章節書籤' : '加入章節書籤'}
+              >
+                {isBookmarked ? '★ 已加入書籤' : '☆ 加入書籤'}
+              </button>
+            )}
+
             <button
               type="button"
-              className={`button-bookmark ${isBookmarked ? 'is-active' : ''}`}
-              onClick={onToggleBookmark}
-              aria-label={isBookmarked ? '移除章節書籤' : '加入章節書籤'}
+              className="button-secondary button-open-bookmarks"
+              onClick={() => setIsBookmarksOpen(true)}
+              aria-label="開啟書籤列表"
             >
-              {isBookmarked ? '★ 已加入書籤' : '☆ 加入書籤'}
+              書籤列表 ({bookmarks.length})
             </button>
-          )}
 
-          <button
-            type="button"
-            className="button-secondary button-open-bookmarks"
-            onClick={() => setIsBookmarksOpen(true)}
-            aria-label="開啟書籤列表"
-          >
-            書籤列表 ({bookmarks.length})
-          </button>
-
-          <button
-            ref={tocTriggerRef}
-            type="button"
-            className="button-secondary button-open-toc"
-            onClick={() => setIsTocOpen(true)}
-            aria-label="開啟章節目錄"
-          >
-            章節目錄
-          </button>
+            <button
+              ref={tocTriggerRef}
+              type="button"
+              className="button-secondary button-open-toc"
+              onClick={() => setIsTocOpen(true)}
+              aria-label="開啟章節目錄"
+            >
+              章節目錄
+            </button>
+          </div>
         </div>
       </header>
 
@@ -876,6 +886,15 @@ export function ReaderScreen({
       >
         已切換至：{openedChapter.chapter.title}
       </div>
+
+      <ReaderAppearanceSheet
+        isOpen={isAppearanceOpen}
+        preferences={preferences}
+        triggerRef={appearanceTriggerRef}
+        onChangePreferences={onChangePreferences}
+        onResetPreferences={onResetPreferences}
+        onClose={() => setIsAppearanceOpen(false)}
+      />
 
       <ChapterBookmarksModal
         isOpen={isBookmarksOpen}

@@ -85,116 +85,128 @@ export function ReaderComfortControls({
     <div className="reader-comfort-controls" aria-label="閱讀舒適度設定">
       <div className="control-group" role="radiogroup" aria-label="字型大小">
         <span className="control-label">字級：</span>
-        {(['small', 'medium', 'large', 'extra-large'] as const).map((scale) => (
-          <button
-            key={scale}
-            type="button"
-            className={`comfort-option ${
-              preferences.fontScale === scale ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.fontScale === scale}
-            onClick={() => setFontScale(scale)}
-          >
-            {FONT_SCALE_LABELS[scale]}
-          </button>
-        ))}
+        <div className="control-options">
+          {(['small', 'medium', 'large', 'extra-large'] as const).map((scale) => (
+            <button
+              key={scale}
+              type="button"
+              className={`comfort-option ${
+                preferences.fontScale === scale ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.fontScale === scale}
+              onClick={() => setFontScale(scale)}
+            >
+              {FONT_SCALE_LABELS[scale]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="內文字型">
         <span className="control-label">字型：</span>
-        {READER_FONT_FAMILIES.map((fontFamily) => (
-          <button
-            key={fontFamily}
-            type="button"
-            className={`comfort-option ${
-              preferences.fontFamily === fontFamily ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.fontFamily === fontFamily}
-            onClick={() => setFontFamily(fontFamily)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                setFontFamily(fontFamily)
-              }
-            }}
-          >
-            {FONT_FAMILY_LABELS[fontFamily]}
-          </button>
-        ))}
+        <div className="control-options">
+          {READER_FONT_FAMILIES.map((fontFamily) => (
+            <button
+              key={fontFamily}
+              type="button"
+              className={`comfort-option ${
+                preferences.fontFamily === fontFamily ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.fontFamily === fontFamily}
+              onClick={() => setFontFamily(fontFamily)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setFontFamily(fontFamily)
+                }
+              }}
+            >
+              {FONT_FAMILY_LABELS[fontFamily]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="行距">
         <span className="control-label">行距：</span>
-        {(['compact', 'comfortable', 'spacious'] as const).map((spacing) => (
-          <button
-            key={spacing}
-            type="button"
-            className={`comfort-option ${
-              preferences.lineSpacing === spacing ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.lineSpacing === spacing}
-            onClick={() => setLineSpacing(spacing)}
-          >
-            {LINE_SPACING_LABELS[spacing]}
-          </button>
-        ))}
+        <div className="control-options">
+          {(['compact', 'comfortable', 'spacious'] as const).map((spacing) => (
+            <button
+              key={spacing}
+              type="button"
+              className={`comfort-option ${
+                preferences.lineSpacing === spacing ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.lineSpacing === spacing}
+              onClick={() => setLineSpacing(spacing)}
+            >
+              {LINE_SPACING_LABELS[spacing]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="字距">
         <span className="control-label">字距：</span>
-        {READER_LETTER_SPACINGS.map((letterSpacing) => (
-          <button
-            key={letterSpacing}
-            type="button"
-            className={`comfort-option ${
-              preferences.letterSpacing === letterSpacing ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.letterSpacing === letterSpacing}
-            onClick={() => setLetterSpacing(letterSpacing)}
-          >
-            {LETTER_SPACING_LABELS[letterSpacing]}
-          </button>
-        ))}
+        <div className="control-options">
+          {READER_LETTER_SPACINGS.map((letterSpacing) => (
+            <button
+              key={letterSpacing}
+              type="button"
+              className={`comfort-option ${
+                preferences.letterSpacing === letterSpacing ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.letterSpacing === letterSpacing}
+              onClick={() => setLetterSpacing(letterSpacing)}
+            >
+              {LETTER_SPACING_LABELS[letterSpacing]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="閱讀主題">
         <span className="control-label">主題：</span>
-        {(['light', 'sepia', 'dark'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={`comfort-option theme-option-${t} ${
-              preferences.theme === t ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.theme === t}
-            onClick={() => setTheme(t)}
-          >
-            {THEME_LABELS[t]}
-          </button>
-        ))}
+        <div className="control-options">
+          {(['light', 'sepia', 'dark'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`comfort-option theme-option-${t} ${
+                preferences.theme === t ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.theme === t}
+              onClick={() => setTheme(t)}
+            >
+              {THEME_LABELS[t]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="閱讀模式">
         <span className="control-label">模式：</span>
-        {READER_READING_MODES.map((readingMode) => (
-          <button
-            key={readingMode}
-            type="button"
-            className={`comfort-option ${
-              preferences.readingMode === readingMode ? 'active' : ''
-            }`}
-            role="radio"
-            aria-checked={preferences.readingMode === readingMode}
-            onClick={() => setReadingMode(readingMode)}
-          >
-            {READING_MODE_LABELS[readingMode]}
-          </button>
-        ))}
+        <div className="control-options">
+          {READER_READING_MODES.map((readingMode) => (
+            <button
+              key={readingMode}
+              type="button"
+              className={`comfort-option ${
+                preferences.readingMode === readingMode ? 'active' : ''
+              }`}
+              role="radio"
+              aria-checked={preferences.readingMode === readingMode}
+              onClick={() => setReadingMode(readingMode)}
+            >
+              {READING_MODE_LABELS[readingMode]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <button

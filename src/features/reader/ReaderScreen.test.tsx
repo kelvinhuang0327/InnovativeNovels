@@ -129,6 +129,15 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
       />,
     )
 
+    const appearanceTrigger = screen.getByRole('button', { name: '閱讀設定' })
+    expect(
+      screen.queryByRole('dialog', { name: '閱讀設定' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(appearanceTrigger)
+    const appearanceSheet = screen.getByRole('dialog', { name: '閱讀設定' })
+    expect(appearanceTrigger).toHaveAttribute('aria-expanded', 'true')
+
     const darkThemeButton = screen.getByRole('radio', { name: '暗黑' })
     fireEvent.click(darkThemeButton)
     expect(onChangePreferences).toHaveBeenCalledWith({
@@ -139,6 +148,12 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
     const resetButton = screen.getByRole('button', { name: '重設預設值' })
     fireEvent.click(resetButton)
     expect(onResetPreferences).toHaveBeenCalled()
+
+    fireEvent.keyDown(appearanceSheet, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: '閱讀設定' }),
+    ).not.toBeInTheDocument()
+    expect(appearanceTrigger).toHaveFocus()
   })
 
   it('displays bookmark button and handles toggle and modal opening', () => {

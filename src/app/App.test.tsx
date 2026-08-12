@@ -513,6 +513,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
   it('persists and restores reader preferences across remounts and resets to default', () => {
     const firstMount = render(<App dependencies={createDependencies()} />)
     openFirstBookReader()
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
 
     fireEvent.click(screen.getByRole('radio', { name: '大' }))
     fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
@@ -549,6 +550,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     expect(section.getAttribute('data-line-spacing')).toBe('spacious')
     expect(section.getAttribute('data-reading-mode')).toBe('paged')
 
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
     fireEvent.click(screen.getByRole('button', { name: '重設預設值' }))
     expect(section.getAttribute('data-theme')).toBe('light')
     expect(section.getAttribute('data-font-family')).toBe('sans-serif')
@@ -563,6 +565,7 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
     openFirstBookReader()
 
     const initialPos = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
     fireEvent.click(screen.getByRole('radio', { name: '暗黑' }))
     const afterPos = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
 
@@ -1071,6 +1074,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
   it('crosses accessible chapters through paged controls', () => {
     openFirstBookReader()
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
     fireEvent.click(screen.getByRole('radio', { name: '分頁閱讀' }))
 
     fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
@@ -1104,6 +1108,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
   it('preserves reader preferences across persistent navigation', () => {
     openFirstBookReader()
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
 
     // Change theme to sepia (護眼) and font scale to large (大)
     fireEvent.click(screen.getByRole('radio', { name: '護眼' }))
@@ -1189,6 +1194,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
 
       openBookAt(0)
       fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
       fireEvent.click(screen.getByRole('radio', { name: '襯線' }))
       const persistentNav = screen.getByTestId('reader-persistent-navigation')
       fireEvent.click(within(persistentNav).getByRole('button', { name: '下一章' }))
