@@ -1,9 +1,16 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ContentBook } from '../../application/catalog/contentRepository'
+import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
 import { CatalogScreen } from './CatalogScreen'
 
 function makeBook(
@@ -60,6 +67,89 @@ describe('CatalogScreen', () => {
       'true',
     )
     expect(screen.getByText('共 4 本')).toBeInTheDocument()
+  })
+
+  it('opens the deterministic first book from the bookstore hero action', () => {
+    const onOpenBook = vi.fn()
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '閱讀焦點作品' }))
+
+    expect(onOpenBook).toHaveBeenCalledWith('book-a')
+  })
+
+  it('keeps every input book reachable through its card action', () => {
+    const onOpenBook = vi.fn()
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    screen
+      .getAllByRole('button', { name: '查看書籍' })
+      .forEach((button) => fireEvent.click(button))
+
+    expect(onOpenBook.mock.calls).toEqual([
+      ['book-a'],
+      ['book-b'],
+      ['book-c'],
+      ['book-d'],
+    ])
+  })
+
+  it('renders Continue Reading only when entries exist and preserves its action', () => {
+    const onContinueBook = vi.fn()
+    const chapter = books[0].chapters[0]
+    const continueEntry: ContinueReadingEntry = {
+      book: books[0],
+      chapter,
+      position: {
+        bookId: books[0].book.id,
+        chapterId: chapter.id,
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
+    }
+
+    const emptyShelf = render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={onContinueBook}
+        onOpenBook={vi.fn()}
+      />,
+    )
+    expect(
+      screen.queryByRole('heading', { name: '繼續閱讀' }),
+    ).not.toBeInTheDocument()
+    emptyShelf.unmount()
+
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[continueEntry]}
+        onContinueBook={onContinueBook}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const shelf = screen.getByRole('region', { name: '繼續閱讀' })
+    expect(shelf).toHaveTextContent('海邊書店')
+    expect(shelf).toHaveTextContent('第一章')
+    fireEvent.click(within(shelf).getByRole('button', { name: '繼續閱讀' }))
+
+    expect(onContinueBook).toHaveBeenCalledWith('book-a')
   })
 
   it('filters to matching books when a genre is selected', () => {
@@ -284,5 +374,61 @@ describe('CatalogScreen', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[1])
 
     expect(onOpenBook).toHaveBeenCalledWith('book-b')
+  })
+
+  it('hides editorial discovery while filtered so results remain authoritative', () => {
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: '編輯精選' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '劍客' },
+    })
+
+    expect(
+      screen.queryByRole('heading', { name: '編輯精選' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '篩選結果' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps Authoring secondary when supplied and absent when unavailable', () => {
+    const onOpenAuthoring = vi.fn()
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenAuthoring={onOpenAuthoring}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟創作預覽' }))
+    expect(onOpenAuthoring).toHaveBeenCalledOnce()
+    cleanup()
+
+    render(
+      <CatalogScreen
+        books={books}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.queryByRole('button', { name: '開啟創作預覽' }),
+    ).not.toBeInTheDocument()
   })
 })
