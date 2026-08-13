@@ -55,6 +55,7 @@ import { BookDetailScreen } from '../features/book-detail/BookDetailScreen'
 import { AuthoringPreviewScreen } from '../features/authoring/AuthoringPreviewScreen'
 import { CatalogScreen } from '../features/catalog/CatalogScreen'
 import { LibraryScreen } from '../features/library/LibraryScreen'
+import { ConsumerNavigation } from '../features/navigation/ConsumerNavigation'
 import { PwaControls } from '../features/pwa/PwaControls'
 import { ReaderScreen } from '../features/reader/ReaderScreen'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
@@ -492,9 +493,17 @@ function App({
     libraryState.recentBookIds,
     dependencies.readingStateRepository,
   )
+  const consumerDestination =
+    screen.name === 'catalog' || screen.name === 'library'
+      ? screen.name
+      : undefined
 
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell${
+        consumerDestination ? ' app-shell--with-consumer-navigation' : ''
+      }`}
+    >
       <p className="eyebrow">InnovativeNovels</p>
       <PwaControls {...pwa} />
 
@@ -507,7 +516,6 @@ function App({
           )}
           onContinueBook={openReader}
           onOpenBook={openBookDetail}
-          onOpenLibrary={() => setScreen({ name: 'library' })}
           onOpenAuthoring={() => setScreen({ name: 'authoring' })}
         />
       )}
@@ -660,6 +668,19 @@ function App({
             1,
           )}
           onProgressChange={handleProgressChange}
+        />
+      )}
+
+      {consumerDestination && (
+        <ConsumerNavigation
+          currentDestination={consumerDestination}
+          onNavigate={(destination) =>
+            setScreen(
+              destination === 'library'
+                ? { name: 'library' }
+                : { name: 'catalog' },
+            )
+          }
         />
       )}
     </main>

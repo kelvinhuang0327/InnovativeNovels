@@ -122,11 +122,12 @@ describe('LibraryScreen', () => {
     expect(screen.getByRole('region', { name: '繼續閱讀' })).toBeInTheDocument()
   })
 
-  it('returns to Bookstore', () => {
+  it('omits the redundant header-level return to Bookstore', () => {
     render(<LibraryScreen {...baseProps} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '返回書城' }))
-
-    expect(baseProps.onBackToBookstore).toHaveBeenCalledOnce()
+    expect(
+      screen.queryByRole('button', { name: '返回書城' }),
+    ).not.toBeInTheDocument()
+    expect(baseProps.onBackToBookstore).not.toHaveBeenCalled()
   })
 })

@@ -1773,7 +1773,7 @@ describe('Bookshelf and Recent Reading v1', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
     fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
     fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
-    fireEvent.click(screen.getByRole('button', { name: '返回書城' }))
+    fireEvent.click(screen.getByRole('button', { name: '書城' }))
 
     openBookAt(1)
     fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
@@ -1837,5 +1837,131 @@ describe('Bookshelf and Recent Reading v1', () => {
         '潮汐之城',
       ),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('Mobile app shell navigation v1', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('switches between the two app destinations with one current-page state', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    let navigation = screen.getByRole('navigation', { name: '主要導覽' })
+    expect(
+      within(navigation).getByRole('button', { name: '書城' }),
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      within(navigation).getByRole('button', { name: '我的書架' }),
+    ).not.toHaveAttribute('aria-current')
+    expect(
+      screen.getAllByRole('button', { name: '我的書架' }),
+    ).toHaveLength(1)
+
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '我的書架' }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: '我的書架', level: 1 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '返回書城' }),
+    ).not.toBeInTheDocument()
+    navigation = screen.getByRole('navigation', { name: '主要導覽' })
+    expect(
+      within(navigation).getByRole('button', { name: '我的書架' }),
+    ).toHaveAttribute('aria-current', 'page')
+
+    fireEvent.click(within(navigation).getByRole('button', { name: '書城' }))
+
+    expect(
+      screen.getByRole('heading', { name: '探索故事' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '書城' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  it('keeps Book Detail, Reader, and Authoring outside consumer navigation', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    expect(screen.getByLabelText('閱讀器')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    expect(screen.getByRole('button', { name: '書城' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟創作預覽' }))
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('preserves shelf, recent-reading, and Library return context across tab switches', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '加入書架' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
+
+    let shelf = screen.getByRole('region', { name: '我的書架' })
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    expect(
+      screen.queryByRole('navigation', { name: '主要導覽' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    expect(screen.getByRole('button', { name: '我的書架' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(
+      within(screen.getByRole('region', { name: '最近閱讀' })).getByText(
+        '潮汐之城',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '書城' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '霜劍' },
+    })
+    expect(screen.getAllByRole('article')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
+
+    shelf = screen.getByRole('region', { name: '我的書架' })
+    expect(within(shelf).getByText('潮汐之城')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '最近閱讀' })).getByText(
+        '潮汐之城',
+      ),
+    ).toBeInTheDocument()
   })
 })

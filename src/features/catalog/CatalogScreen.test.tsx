@@ -85,21 +85,20 @@ describe('CatalogScreen', () => {
     expect(onOpenBook).toHaveBeenCalledWith('book-a')
   })
 
-  it('exposes a clear Bookstore to Library navigation action', () => {
-    const onOpenLibrary = vi.fn()
+  it('leaves persistent top-level navigation to the App shell', () => {
     render(
       <CatalogScreen
         books={books}
         continueReading={[]}
         onContinueBook={vi.fn()}
         onOpenBook={vi.fn()}
-        onOpenLibrary={onOpenLibrary}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
-
-    expect(onOpenLibrary).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '我的書架' }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps every input book reachable through its card action', () => {

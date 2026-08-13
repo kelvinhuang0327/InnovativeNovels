@@ -127,13 +127,6 @@ export function LibraryScreen({
             把想讀的故事留在身邊，回來就能接著讀。
           </p>
         </div>
-        <button
-          className="button-secondary library-back-button"
-          type="button"
-          onClick={onBackToBookstore}
-        >
-          返回書城
-        </button>
       </header>
 
       {continueReading.length > 0 && (
