@@ -47,12 +47,89 @@ export function BookDetailScreen({
   const orderedChapters = [...book.chapters].sort(
     (left, right) => left.sequence - right.sequence,
   )
+  const chapterCountLabel = `${book.chapters.length} 章`
 
   return (
-    <section aria-labelledby="book-heading">
-      <h1 className="screen-heading" id="book-heading">
-        {book.book.title}
-      </h1>
+    <section
+      aria-labelledby="book-heading"
+      className="book-detail-screen"
+    >
+      <header className="book-detail-hero">
+        <div className="book-detail-hero-topline">
+          <button
+            aria-label={backButtonLabel}
+            className="button-secondary book-detail-back"
+            type="button"
+            onClick={onBack}
+          >
+            <span aria-hidden="true">←</span>
+            {backButtonLabel}
+          </button>
+          <p className="book-detail-kicker">作品詳情</p>
+        </div>
+
+        <div className="book-detail-hero-grid">
+          <div
+            aria-hidden="true"
+            className="book-detail-cover"
+            data-title={book.book.title}
+          >
+            <span>IN · {book.book.categoryLabel}</span>
+          </div>
+
+          <div className="book-detail-intro">
+            <h1 className="book-detail-title" id="book-heading">
+              {book.book.title}
+            </h1>
+
+            <dl className="book-detail-facts">
+              <div>
+                <dt>類型</dt>
+                <dd>{book.book.categoryLabel}</dd>
+              </div>
+              <div>
+                <dt>作者</dt>
+                <dd>{book.book.authorName}</dd>
+              </div>
+              <div>
+                <dt>章節</dt>
+                <dd>{chapterCountLabel}</dd>
+              </div>
+            </dl>
+
+            <div className="book-detail-actions">
+              <button
+                aria-label={readButtonText}
+                className="book-detail-read-action"
+                type="button"
+                onClick={onRead}
+              >
+                {readButtonText}
+              </button>
+              {onToggleBookshelf && (
+                <button
+                  aria-pressed={isInBookshelf}
+                  className="button-secondary book-detail-shelf-action"
+                  type="button"
+                  onClick={onToggleBookshelf}
+                >
+                  {isInBookshelf ? '移出書架' : '加入書架'}
+                </button>
+              )}
+            </div>
+
+            {hasSavedPosition && (
+              <p className="book-detail-progress">
+                <span className="book-detail-progress-label">閱讀進度</span>
+                {continueChapterTitle
+                  ? `目前讀到：${continueChapterTitle}`
+                  : '這本書已有閱讀進度'}
+              </p>
+            )}
+          </div>
+        </div>
+      </header>
+
       {sessionReturnStatus && (
         <div
           className="session-return-status"
@@ -63,32 +140,31 @@ export function BookDetailScreen({
           {sessionReturnStatus}
         </div>
       )}
-      <p className="book-meta">
-        {book.book.categoryLabel} · {book.book.authorName}
-      </p>
-      <p className="book-description">{book.description}</p>
-      <p>共 {book.chapters.length} 章</p>
 
-      {onToggleBookshelf && (
-        <div className="book-detail-shelf-action">
-          <button
-            aria-pressed={isInBookshelf}
-            className="button-secondary"
-            type="button"
-            onClick={onToggleBookshelf}
-          >
-            {isInBookshelf ? '移出書架' : '加入書架'}
-          </button>
-        </div>
-      )}
+      <section
+        aria-labelledby="book-synopsis-heading"
+        className="book-detail-synopsis"
+      >
+        <p className="section-kicker">故事提要</p>
+        <h2 className="section-heading" id="book-synopsis-heading">
+          作品簡介
+        </h2>
+        <p className="book-description">{book.description}</p>
+      </section>
 
       <section
         className="book-chapter-preview"
-        aria-labelledby="chapter-preview-heading"
+        aria-labelledby="chapter-directory-heading"
       >
-        <h2 className="section-heading" id="chapter-preview-heading">
-          章節預覽
-        </h2>
+        <div className="section-heading-row book-detail-section-heading">
+          <div>
+            <p className="section-kicker">沿章節順序閱讀</p>
+            <h2 className="section-heading" id="chapter-directory-heading">
+              章節目錄
+            </h2>
+          </div>
+          <p className="section-heading-note">共 {chapterCountLabel}</p>
+        </div>
         <ol className="book-chapter-list" aria-label="章節預覽列表">
           {orderedChapters.map((chapter) => {
             const access = decideChapterAccess(chapter.access)
@@ -104,6 +180,7 @@ export function BookDetailScreen({
               <li
                 key={chapter.id}
                 className={`book-chapter-item ${isContinueChapter ? 'is-continue' : ''}`}
+                data-access={access.access}
                 aria-current={isContinueChapter ? 'true' : undefined}
               >
                 <div className="book-chapter-copy">
@@ -133,15 +210,6 @@ export function BookDetailScreen({
           })}
         </ol>
       </section>
-
-      <div className="actions">
-        <button type="button" onClick={onRead} aria-label={readButtonText}>
-          {readButtonText}
-        </button>
-        <button className="button-secondary" type="button" onClick={onBack}>
-          {backButtonLabel}
-        </button>
-      </div>
     </section>
   )
 }

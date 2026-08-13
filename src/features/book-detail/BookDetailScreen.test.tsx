@@ -64,6 +64,28 @@ const mockBook: ContentBook = {
 }
 
 describe('BookDetailScreen Exit & Resume Continuity UI', () => {
+  it('renders the factual hero identity and synopsis', () => {
+    render(
+      <BookDetailScreen
+        book={mockBook}
+        hasSavedPosition={false}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: '風雲帝國' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('類型')).toBeInTheDocument()
+    expect(screen.getByText('玄幻', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('張三', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('5 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '作品簡介' })).toBeInTheDocument()
+    expect(screen.getByText('精彩小說內文簡介')).toBeInTheDocument()
+  })
+
   it('renders Start Reading button when no saved position exists', () => {
     render(
       <BookDetailScreen
