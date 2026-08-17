@@ -70,6 +70,11 @@ describe('App PWA integration', () => {
     expect(
       screen.getByRole('heading', { name: '第一章：潮聲來信' }),
     ).toBeInTheDocument()
-    expect(screen.getAllByTestId('chapter-prose')).toHaveLength(2)
+    expect(screen.getAllByTestId('chapter-prose').length).toBeGreaterThan(2)
+    expect(
+      screen.getByText(
+        '清晨的第一道潮聲穿過港口時，澄夏在門縫下發現一封帶著鹽晶的信。',
+      ),
+    ).toBeInTheDocument()
   })
 })

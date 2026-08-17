@@ -413,4 +413,33 @@ describe('parseContentBookFixture', () => {
       )
     }
   })
+
+  it('requires discovery books to have no stub-length readable chapters', () => {
+    const { books, proseByChapterId } = loadProductionCatalogContent()
+    const MIN_DISCOVERY_CHAPTER_PROSE_LENGTH = 800
+
+    for (const entry of books) {
+      if (
+        entry.catalogSequence !== 1 &&
+        entry.catalogSequence !== 2 &&
+        entry.catalogSequence !== 3
+      ) {
+        continue
+      }
+
+      for (const chapter of entry.chapters) {
+        if (chapter.access !== 'READABLE') {
+          continue
+        }
+
+        const length =
+          proseByChapterId.get(chapter.id)?.join('').length ?? 0
+
+        expect(
+          length,
+          `${entry.book.id}:${chapter.id as string}`,
+        ).toBeGreaterThanOrEqual(MIN_DISCOVERY_CHAPTER_PROSE_LENGTH)
+      }
+    }
+  })
 })

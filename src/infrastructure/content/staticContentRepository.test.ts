@@ -347,30 +347,6 @@ for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-b
 }
 
 const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
-  'chapter-tide-letter': [
-    '清晨的第一道潮聲穿過港口時，澄夏在門縫下發現一封帶著鹽晶的信。',
-    '信上沒有署名，只有一行像浪痕般彎曲的字：今晚，請替城市記住燈火。',
-  ],
-  'chapter-lighthouse-watch': [
-    '入夜後，舊燈塔的銅門比記憶裡更沉，門軸發出低低的嘆息。',
-    '澄夏登上頂層，看見遠海有三道不屬於船隻的光，正依序回答她手中的信。',
-  ],
-  'chapter-picking-up-the-sword': [
-    '沈知拾起斷劍時，劍身還殘留著一絲極淡的靈氣，像是誰在很久以前，把一句沒說完的話封進了鐵裡。',
-    '村口的老獵戶說，那是三十年前墜落山谷的仙人所遺，撿到它的人，要嘛飛升，要嘛連骨頭都找不回來。',
-  ],
-  'chapter-mountain-gate': [
-    '青雲山門的石階有九百九十九級，沈知數到第五百階時，才明白山門考較的從來不是腳力。',
-    '守門的老修士只問了他一句話：「劍是你的，還是你是劍的？」他答不出來，山門卻在此時緩緩開啟。',
-  ],
-  'chapter-reason-for-overtime': [
-    '林知遠盯著電腦螢幕上第十七次被打回的簡報，時鐘指向十一點四十分，茶水間的燈還亮著。',
-    '他知道自己不是唯一被留下來的人，只是不知道，這一整層樓的燈火通明，其實都是同一場局的一部分。',
-  ],
-  'chapter-elevator-silence': [
-    '電梯門關上的瞬間，總監按下的樓層不是地下停車場，而是一個林知遠從未見過的數字。',
-    '四十秒的下降，沒有人說話，鏡面反射出所有人臉上同樣不自然的平靜。',
-  ],
   'chapter-decade-late-letter': [
     '郵差把信放進信箱時，特別叮囑了一句：「地址是舊的，但郵戳是新的，妳自己看看。」',
     '蘇晚拆開信封，認出那是十年前，她以為早已隨對方一起消失在雨裡的字跡。',
@@ -408,12 +384,14 @@ for (const fixture of [
   frostImmortalFixture,
   midnightOfficeFixture,
 ]) {
-  const fixtureChapter = fixture.chapters.find(
-    (chapter) => chapter.sequence === 3,
-  )
-
-  if (fixtureChapter?.access === 'READABLE' && fixtureChapter.prose) {
-    EXPECTED_ACCESSIBLE_PROSE[fixtureChapter.chapterId] = fixtureChapter.prose
+  for (const fixtureChapter of fixture.chapters) {
+    if (
+      fixtureChapter.sequence <= 3 &&
+      fixtureChapter.access === 'READABLE' &&
+      fixtureChapter.prose
+    ) {
+      EXPECTED_ACCESSIBLE_PROSE[fixtureChapter.chapterId] = fixtureChapter.prose
+    }
   }
 }
 
