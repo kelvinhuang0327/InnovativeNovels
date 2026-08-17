@@ -4,7 +4,9 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
@@ -21,8 +23,14 @@ import { TableOfContentsModal } from './TableOfContentsModal'
 
 const CHAPTER_SWIPE_MIN_DISTANCE_PX = 72
 const CHAPTER_SWIPE_HORIZONTAL_DOMINANCE_RATIO = 1.5
+const CHROME_HIDE_SCROLL_THRESHOLD_PX = 56
+const CHROME_REVEAL_SCROLL_THRESHOLD_PX = 24
+const CHROME_TAP_MAX_MOVEMENT_PX = 10
+const MOBILE_READER_CHROME_MAX_WIDTH_PX = 768
+const MOBILE_READER_CHROME_MEDIA_QUERY = `(max-width: ${MOBILE_READER_CHROME_MAX_WIDTH_PX}px)`
 const SWIPE_EXCLUDED_TARGETS =
   'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
+const CHROME_TOGGLE_EXCLUDED_TARGETS = `${SWIPE_EXCLUDED_TARGETS}, dialog, [role="menu"], [role="listbox"]`
 
 interface ReaderSwipeGesture {
   readonly pointerId: number
@@ -43,6 +51,39 @@ interface PagedReaderMetrics {
 
 function isSwipeExcludedTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(SWIPE_EXCLUDED_TARGETS) !== null
+}
+
+function isChromeToggleExcludedTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(CHROME_TOGGLE_EXCLUDED_TARGETS) !== null
+  )
+}
+
+function subscribeToMobileReaderChrome(onStoreChange: () => void) {
+  if (typeof window.matchMedia !== 'function') {
+    return () => {}
+  }
+
+  const mediaQueryList = window.matchMedia(MOBILE_READER_CHROME_MEDIA_QUERY)
+
+  if (typeof mediaQueryList.addEventListener === 'function') {
+    mediaQueryList.addEventListener('change', onStoreChange)
+    return () => {
+      mediaQueryList.removeEventListener('change', onStoreChange)
+    }
+  }
+
+  mediaQueryList.addListener(onStoreChange)
+  return () => {
+    mediaQueryList.removeListener(onStoreChange)
+  }
+}
+
+function getMobileReaderChromeSnapshot() {
+  return typeof window.matchMedia === 'function'
+    ? window.matchMedia(MOBILE_READER_CHROME_MEDIA_QUERY).matches
+    : false
 }
 
 function normalizedPageProgress(pageIndex: number, pageCount: number): number {
@@ -99,6 +140,13 @@ export function ReaderScreen({
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
   const [isTocOpen, setIsTocOpen] = useState(false)
+  const [isReaderChromeVisible, setIsReaderChromeVisible] = useState(true)
+  const isMobileReaderChrome = useSyncExternalStore(
+    subscribeToMobileReaderChrome,
+    getMobileReaderChromeSnapshot,
+    () => false,
+  )
+  const isMobileChromeHidden = isMobileReaderChrome && !isReaderChromeVisible
   const [liveProgress, setLiveProgress] = useState({
     chapterId: openedChapter.chapter.id,
     percent: 0,
@@ -113,6 +161,7 @@ export function ReaderScreen({
   const proseRef = useRef<HTMLElement>(null)
   const pagedViewportRef = useRef<HTMLDivElement>(null)
   const readerSwipeGestureRef = useRef<ReaderSwipeGesture | null>(null)
+  const suppressChromeToggleClickRef = useRef(false)
   const pagedReaderMetricsRef = useRef<PagedReaderMetrics>({
     pageCount: 1,
     pageStep: 0,
@@ -254,6 +303,10 @@ export function ReaderScreen({
     const isTouchLikePointer =
       event.pointerType === 'touch' || event.pointerType === 'pen'
 
+    if (event.isPrimary && event.button === 0) {
+      suppressChromeToggleClickRef.current = false
+    }
+
     if (
       !event.isPrimary ||
       event.button !== 0 ||
@@ -287,25 +340,69 @@ export function ReaderScreen({
     const verticalDistance = event.clientY - gesture.startY
     const absoluteHorizontalDistance = Math.abs(horizontalDistance)
     const absoluteVerticalDistance = Math.abs(verticalDistance)
+    const movementDistance = Math.hypot(
+      absoluteHorizontalDistance,
+      absoluteVerticalDistance,
+    )
 
     if (
-      absoluteHorizontalDistance < CHAPTER_SWIPE_MIN_DISTANCE_PX ||
-      absoluteHorizontalDistance <
+      absoluteHorizontalDistance >= CHAPTER_SWIPE_MIN_DISTANCE_PX &&
+      absoluteHorizontalDistance >=
         absoluteVerticalDistance *
           CHAPTER_SWIPE_HORIZONTAL_DOMINANCE_RATIO
     ) {
+      suppressChromeToggleClickRef.current = true
+      const direction = horizontalDistance < 0 ? 1 : -1
+
+      if (preferences.readingMode === 'paged') {
+        turnPagedPage(direction)
+      } else if (direction === 1 && openedChapter.hasNext) {
+        onNext()
+      } else if (direction === -1 && openedChapter.hasPrevious) {
+        onPrevious()
+      }
+
       return
     }
 
-    const direction = horizontalDistance < 0 ? 1 : -1
-
-    if (preferences.readingMode === 'paged') {
-      turnPagedPage(direction)
-    } else if (direction === 1 && openedChapter.hasNext) {
-      onNext()
-    } else if (direction === -1 && openedChapter.hasPrevious) {
-      onPrevious()
+    if (movementDistance > CHROME_TAP_MAX_MOVEMENT_PX) {
+      suppressChromeToggleClickRef.current = true
+      return
     }
+
+    const isTouchLikePointer =
+      event.pointerType === 'touch' || event.pointerType === 'pen'
+
+    if (
+      isMobileReaderChrome &&
+      isTouchLikePointer &&
+      !isChromeToggleExcludedTarget(event.target)
+    ) {
+      suppressChromeToggleClickRef.current = true
+      setIsReaderChromeVisible((visible) => !visible)
+    }
+  }
+
+  const handleProseClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!isMobileReaderChrome) {
+      return
+    }
+
+    if (suppressChromeToggleClickRef.current) {
+      suppressChromeToggleClickRef.current = false
+      return
+    }
+
+    if (isChromeToggleExcludedTarget(event.target)) {
+      return
+    }
+
+    setIsReaderChromeVisible((visible) => !visible)
+  }
+
+  const handleBackToBook = () => {
+    flushProgressRef.current()
+    onBackToBook()
   }
 
   const handlePagedViewportKeyDown = (
@@ -598,6 +695,136 @@ export function ReaderScreen({
     preferences.readingMode,
   ])
 
+  useEffect(() => {
+    if (
+      !isMobileReaderChrome ||
+      preferences.readingMode !== 'continuous' ||
+      openedChapter.isLocked
+    ) {
+      return
+    }
+
+    let lastScrollY = window.scrollY
+    let downwardMovement = 0
+    let upwardMovement = 0
+
+    const handleReadingScroll = () => {
+      const currentScrollY = window.scrollY
+      const deltaY = currentScrollY - lastScrollY
+      lastScrollY = currentScrollY
+
+      if (deltaY > 0) {
+        downwardMovement += deltaY
+        upwardMovement = 0
+
+        if (downwardMovement >= CHROME_HIDE_SCROLL_THRESHOLD_PX) {
+          setIsReaderChromeVisible(false)
+          downwardMovement = 0
+        }
+
+        return
+      }
+
+      if (deltaY < 0) {
+        upwardMovement += -deltaY
+        downwardMovement = 0
+
+        if (upwardMovement >= CHROME_REVEAL_SCROLL_THRESHOLD_PX) {
+          setIsReaderChromeVisible(true)
+          upwardMovement = 0
+        }
+      }
+    }
+
+    window.addEventListener('scroll', handleReadingScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('scroll', handleReadingScroll)
+    }
+  }, [
+    isMobileReaderChrome,
+    openedChapter.isLocked,
+    preferences.readingMode,
+  ])
+
+  const readingProgressIndicator = !openedChapter.isLocked ? (
+    <div
+      className="chapter-reading-progress"
+      role="progressbar"
+      aria-label="本章閱讀進度"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={liveProgressPercent}
+      aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
+    >
+      <span className="chapter-reading-progress-label" aria-hidden="true">
+        本章閱讀進度 {liveProgressPercent}%
+      </span>
+      <span className="chapter-reading-progress-track" aria-hidden="true">
+        <span
+          className="chapter-reading-progress-fill"
+          style={{ width: `${liveProgressPercent}%` }}
+        />
+      </span>
+    </div>
+  ) : null
+
+  const bookmarkToggleButton = !openedChapter.isLocked ? (
+    <button
+      type="button"
+      className={`button-bookmark${isBookmarked ? ' is-active' : ''}${
+        isMobileReaderChrome ? ' reader-chrome-bookmark' : ''
+      }`}
+      onClick={onToggleBookmark}
+      aria-label={isBookmarked ? '移除章節書籤' : '加入章節書籤'}
+    >
+      {isMobileReaderChrome
+        ? isBookmarked
+          ? '★'
+          : '☆'
+        : isBookmarked
+          ? '★ 已加入書籤'
+          : '☆ 加入書籤'}
+    </button>
+  ) : null
+
+  const appearanceTriggerButton = (
+    <button
+      ref={appearanceTriggerRef}
+      type="button"
+      className="button-secondary reader-appearance-trigger"
+      aria-label="閱讀設定"
+      aria-haspopup="dialog"
+      aria-expanded={isAppearanceOpen}
+      onClick={() => setIsAppearanceOpen(true)}
+    >
+      {isMobileReaderChrome ? '設定' : '閱讀設定'}
+    </button>
+  )
+
+  const bookmarksListButton = (
+    <button
+      type="button"
+      className="button-secondary button-open-bookmarks"
+      onClick={() => setIsBookmarksOpen(true)}
+      aria-label="開啟書籤列表"
+    >
+      {isMobileReaderChrome ? '書籤' : `書籤列表 (${bookmarks.length})`}
+    </button>
+  )
+
+  const tocTriggerButton = (
+    <button
+      ref={tocTriggerRef}
+      type="button"
+      className="button-secondary button-open-toc"
+      onClick={() => setIsTocOpen(true)}
+      aria-label="開啟章節目錄"
+    >
+      {isMobileReaderChrome ? '目錄' : '章節目錄'}
+    </button>
+  )
+
   return (
     <section
       ref={readerRef}
@@ -608,54 +835,51 @@ export function ReaderScreen({
       data-letter-spacing={preferences.letterSpacing}
       data-line-spacing={preferences.lineSpacing}
       data-reading-mode={preferences.readingMode}
+      data-reader-chrome={
+        isMobileChromeHidden ? 'hidden' : 'visible'
+      }
+      data-reader-layout={isMobileReaderChrome ? 'mobile' : 'desktop'}
       aria-label="閱讀器"
     >
-      <header className="reader-toolbar">
-        <div className="reader-toolbar-actions">
-          <button
-            ref={appearanceTriggerRef}
-            type="button"
-            className="button-secondary reader-appearance-trigger"
-            aria-label="閱讀設定"
-            aria-haspopup="dialog"
-            aria-expanded={isAppearanceOpen}
-            onClick={() => setIsAppearanceOpen(true)}
-          >
-            閱讀設定
-          </button>
-
-          <div className="reader-bookmark-toolbar">
-            {!openedChapter.isLocked && (
-              <button
-                type="button"
-                className={`button-bookmark ${isBookmarked ? 'is-active' : ''}`}
-                onClick={onToggleBookmark}
-                aria-label={isBookmarked ? '移除章節書籤' : '加入章節書籤'}
-              >
-                {isBookmarked ? '★ 已加入書籤' : '☆ 加入書籤'}
-              </button>
-            )}
-
+      <header
+        className="reader-toolbar reader-chrome-top"
+        data-testid="reader-chrome-top"
+        inert={isMobileChromeHidden}
+        aria-hidden={isMobileChromeHidden || undefined}
+      >
+        {isMobileReaderChrome ? (
+          <>
             <button
               type="button"
-              className="button-secondary button-open-bookmarks"
-              onClick={() => setIsBookmarksOpen(true)}
-              aria-label="開啟書籤列表"
+              className="button-secondary reader-chrome-back"
+              onClick={handleBackToBook}
+              aria-label="返回作品"
             >
-              書籤列表 ({bookmarks.length})
+              返回
             </button>
-
-            <button
-              ref={tocTriggerRef}
-              type="button"
-              className="button-secondary button-open-toc"
-              onClick={() => setIsTocOpen(true)}
-              aria-label="開啟章節目錄"
-            >
-              章節目錄
-            </button>
+            <div className="reader-chrome-context">
+              <span className="reader-chrome-chapter-title">
+                {openedChapter.chapter.title}
+              </span>
+              {chapterPosition && (
+                <span className="reader-chrome-chapter-position">
+                  第 {chapterPosition.currentPosition} /{' '}
+                  {chapterPosition.totalChapters} 章
+                </span>
+              )}
+            </div>
+            {bookmarkToggleButton}
+          </>
+        ) : (
+          <div className="reader-toolbar-actions">
+            {appearanceTriggerButton}
+            <div className="reader-bookmark-toolbar">
+              {bookmarkToggleButton}
+              {bookmarksListButton}
+              {tocTriggerButton}
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       <h1 className="screen-heading">{openedChapter.chapter.title}</h1>
@@ -715,6 +939,7 @@ export function ReaderScreen({
             onPointerUp={handleProsePointerUp}
             onPointerCancel={cancelReaderSwipe}
             onPointerLeave={cancelReaderSwipe}
+            onClick={handleProseClick}
           >
             <article
               ref={proseRef}
@@ -772,6 +997,7 @@ export function ReaderScreen({
           onPointerUp={handleProsePointerUp}
           onPointerCancel={cancelReaderSwipe}
           onPointerLeave={cancelReaderSwipe}
+          onClick={handleProseClick}
         >
           {openedChapter.prose.map((paragraph) => (
             <p data-testid="chapter-prose" key={paragraph}>
@@ -799,20 +1025,25 @@ export function ReaderScreen({
         <button
           className="button-secondary button-back-to-book"
           type="button"
-          onClick={() => {
-            flushProgressRef.current()
-            onBackToBook()
-          }}
+          onClick={handleBackToBook}
           aria-label="返回作品"
         >
           返回作品
         </button>
       </nav>
 
+      {isMobileReaderChrome && (
+        <div className="reader-mobile-reading-progress">
+          {readingProgressIndicator}
+        </div>
+      )}
+
       <nav
-        className="reader-persistent-navigation"
+        className="reader-persistent-navigation reader-chrome-bottom"
         aria-label="章節快捷導覽"
         data-testid="reader-persistent-navigation"
+        inert={isMobileChromeHidden}
+        aria-hidden={isMobileChromeHidden || undefined}
       >
         <button
           type="button"
@@ -822,49 +1053,30 @@ export function ReaderScreen({
           aria-disabled={!openedChapter.hasPrevious}
           aria-label="上一章"
         >
-          上一章
+          {isMobileReaderChrome ? '上章' : '上一章'}
         </button>
 
-        <div className="persistent-reader-context">
-          {chapterPosition ? (
-            <span className="persistent-position-text">
-              第 {chapterPosition.currentPosition} /{' '}
-              {chapterPosition.totalChapters} 章
-            </span>
-          ) : (
-            <span className="persistent-position-text">
-              {openedChapter.chapter.title}
-            </span>
-          )}
-
-          {!openedChapter.isLocked && (
-            <div
-              className="chapter-reading-progress"
-              role="progressbar"
-              aria-label="本章閱讀進度"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={liveProgressPercent}
-              aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
-            >
-              <span
-                className="chapter-reading-progress-label"
-                aria-hidden="true"
-              >
-                本章閱讀進度 {liveProgressPercent}%
+        {isMobileReaderChrome ? (
+          <>
+            {tocTriggerButton}
+            {appearanceTriggerButton}
+            {bookmarksListButton}
+          </>
+        ) : (
+          <div className="persistent-reader-context">
+            {chapterPosition ? (
+              <span className="persistent-position-text">
+                第 {chapterPosition.currentPosition} /{' '}
+                {chapterPosition.totalChapters} 章
               </span>
-              <span
-                className="chapter-reading-progress-track"
-                aria-hidden="true"
-              >
-                <span
-                  className="chapter-reading-progress-fill"
-                  style={{ width: `${liveProgressPercent}%` }}
-                />
+            ) : (
+              <span className="persistent-position-text">
+                {openedChapter.chapter.title}
               </span>
-            </div>
-          )}
-        </div>
+            )}
+            {readingProgressIndicator}
+          </div>
+        )}
 
         <button
           type="button"
@@ -874,7 +1086,7 @@ export function ReaderScreen({
           aria-disabled={!openedChapter.hasNext}
           aria-label="下一章"
         >
-          下一章
+          {isMobileReaderChrome ? '下章' : '下一章'}
         </button>
       </nav>
 

@@ -1500,3 +1500,481 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
     expect(onBackToBook).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ReaderScreen immersive mobile chrome', () => {
+  afterEach(() => {
+    cleanup()
+    Reflect.deleteProperty(window, 'matchMedia')
+    vi.unstubAllGlobals()
+  })
+
+  function installViewportWidth(width: number) {
+    const listeners = new Set<() => void>()
+
+    window.matchMedia = ((query: string) => {
+      const maxWidthMatch = /\(max-width:\s*(\d+)px\)/.exec(query)
+
+      return {
+        get matches() {
+          return maxWidthMatch ? width <= Number(maxWidthMatch[1]) : false
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_event: string, listener: EventListener) => {
+          listeners.add(listener as () => void)
+        },
+        removeEventListener: (_event: string, listener: EventListener) => {
+          listeners.delete(listener as () => void)
+        },
+        addListener: (listener: () => void) => {
+          listeners.add(listener)
+        },
+        removeListener: (listener: () => void) => {
+          listeners.delete(listener)
+        },
+        dispatchEvent: () => false,
+      }
+    }) as typeof window.matchMedia
+
+    return {
+      setWidth(nextWidth: number) {
+        width = nextWidth
+        listeners.forEach((listener) => listener())
+      },
+    }
+  }
+
+  function renderImmersiveReader({
+    openedChapter = {
+      ...mockOpenedChapter,
+      hasPrevious: true,
+      hasNext: true,
+    },
+    preferences = DEFAULT_READER_PREFERENCES,
+    onPrevious = vi.fn(),
+    onNext = vi.fn(),
+    onToggleBookmark = vi.fn(),
+    onBackToBook = vi.fn(),
+    onProgressChange = vi.fn(),
+    canNavigateNextChapter = true,
+  }: {
+    readonly openedChapter?: typeof mockOpenedChapter
+    readonly preferences?: typeof DEFAULT_READER_PREFERENCES
+    readonly onPrevious?: () => void
+    readonly onNext?: () => void
+    readonly onToggleBookmark?: () => void
+    readonly onBackToBook?: () => void
+    readonly onProgressChange?: (chapterProgress: number) => void
+    readonly canNavigateNextChapter?: boolean
+  } = {}) {
+    const result = render(
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={preferences}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={{ currentPosition: 2, totalChapters: 5 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={onToggleBookmark}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={onBackToBook}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        canNavigateNextChapter={canNavigateNextChapter}
+        onProgressChange={onProgressChange}
+      />,
+    )
+
+    return {
+      ...result,
+      onPrevious,
+      onNext,
+      onToggleBookmark,
+      onBackToBook,
+      onProgressChange,
+      reader: screen.getByLabelText('閱讀器'),
+      prose: screen.getByLabelText('章節內文'),
+    }
+  }
+
+  function swipe(
+    target: HTMLElement,
+    startX: number,
+    endX: number,
+    startY = 100,
+    endY = 100,
+  ) {
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: startX,
+      clientY: startY,
+    })
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: 0,
+      clientX: endX,
+      clientY: endY,
+    })
+  }
+
+  it('shows compact chrome on first mobile render with return, chapter context, and reading tools', () => {
+    installViewportWidth(390)
+    renderImmersiveReader()
+
+    const reader = screen.getByLabelText('閱讀器')
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    expect(reader).toHaveAttribute('data-reader-layout', 'mobile')
+
+    const topChrome = screen.getByTestId('reader-chrome-top')
+    expect(
+      within(topChrome).getByRole('button', { name: '返回作品' }),
+    ).toBeInTheDocument()
+    expect(within(topChrome).getByText('Chapter 1')).toBeInTheDocument()
+    expect(within(topChrome).getByText('第 2 / 5 章')).toBeInTheDocument()
+    expect(
+      within(topChrome).getByRole('button', { name: '加入章節書籤' }),
+    ).toBeInTheDocument()
+
+    const bottomChrome = screen.getByTestId('reader-persistent-navigation')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '上一章' }),
+    ).toHaveTextContent('上章')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '開啟章節目錄' }),
+    ).toHaveTextContent('目錄')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '閱讀設定' }),
+    ).toHaveTextContent('設定')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '開啟書籤列表' }),
+    ).toHaveTextContent('書籤')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '下一章' }),
+    ).toHaveTextContent('下章')
+
+    const chapterEnd = screen.getByRole('navigation', { name: '章節導覽' })
+    expect(
+      within(chapterEnd).getByRole('button', { name: '上一章' }),
+    ).toBeInTheDocument()
+    expect(
+      within(chapterEnd).getByRole('button', { name: '下一章' }),
+    ).toBeInTheDocument()
+    expect(
+      within(chapterEnd).getByRole('button', { name: '返回作品' }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides chrome after accumulated downward reading scroll but not after a 1-2px twitch', () => {
+    installViewportWidth(390)
+    vi.stubGlobal('scrollY', 0)
+    const { reader } = renderImmersiveReader()
+
+    vi.stubGlobal('scrollY', 2)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    vi.stubGlobal('scrollY', 30)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    vi.stubGlobal('scrollY', 62)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+  })
+
+  it('reveals chrome after meaningful upward scroll', () => {
+    installViewportWidth(390)
+    vi.stubGlobal('scrollY', 0)
+    const { reader } = renderImmersiveReader()
+
+    vi.stubGlobal('scrollY', 80)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    vi.stubGlobal('scrollY', 50)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+  })
+
+  it('toggles chrome on a non-interactive prose click and ignores interactive controls', () => {
+    installViewportWidth(390)
+    const { reader, prose, onToggleBookmark } = renderImmersiveReader()
+
+    fireEvent.click(prose)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    fireEvent.click(prose)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+    expect(onToggleBookmark).toHaveBeenCalledTimes(1)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
+    expect(screen.getByRole('dialog', { name: '閱讀設定' })).toBeInTheDocument()
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '閱讀設定' }), {
+      key: 'Escape',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    expect(screen.getByRole('dialog', { name: '章節目錄' })).toBeInTheDocument()
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '章節目錄' }), {
+      key: 'Escape',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    expect(screen.getByRole('dialog', { name: '章節書籤' })).toBeInTheDocument()
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+  })
+
+  it('navigates with a qualifying swipe and does not treat the swipe as a chrome toggle', () => {
+    installViewportWidth(390)
+    const { reader, prose, onNext } = renderImmersiveReader()
+
+    swipe(prose, 180, 80)
+    fireEvent.click(prose)
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    fireEvent.click(prose)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    swipe(prose, 180, 80)
+    fireEvent.click(prose)
+    expect(onNext).toHaveBeenCalledTimes(2)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+  })
+
+  it('keeps hidden chrome out of the tab order while chapter-end fallback stays available', () => {
+    installViewportWidth(390)
+    vi.stubGlobal('scrollY', 0)
+    const { reader } = renderImmersiveReader()
+
+    vi.stubGlobal('scrollY', 80)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    expect(screen.getByTestId('reader-chrome-top')).toHaveAttribute('inert')
+    expect(screen.getByTestId('reader-persistent-navigation')).toHaveAttribute(
+      'inert',
+    )
+    expect(
+      screen.queryByRole('button', { name: '閱讀設定' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '開啟章節目錄' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '開啟書籤列表' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '加入章節書籤' }),
+    ).not.toBeInTheDocument()
+
+    const chapterEnd = screen.getByRole('navigation', { name: '章節導覽' })
+    expect(
+      within(chapterEnd).getByRole('button', { name: '上一章' }),
+    ).toBeEnabled()
+    expect(
+      within(chapterEnd).getByRole('button', { name: '下一章' }),
+    ).toBeEnabled()
+    expect(
+      within(chapterEnd).getByRole('button', { name: '返回作品' }),
+    ).toBeEnabled()
+    expect(screen.getByText('已切換至：Chapter 1')).toBeInTheDocument()
+  })
+
+  it('preserves live progress updates while mobile chrome is hidden', () => {
+    installViewportWidth(390)
+    const animationFrames: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback)
+        return animationFrames.length
+      }),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    vi.stubGlobal('innerHeight', 400)
+    vi.stubGlobal('scrollY', 0)
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+
+    const onProgressChange = vi.fn()
+    const { reader } = renderImmersiveReader({ onProgressChange })
+    Object.defineProperty(reader, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+    vi.spyOn(reader, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: 1000,
+      height: 1000,
+      left: 0,
+      right: 390,
+      top: 0,
+      width: 390,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }))
+
+    act(() => {
+      animationFrames.splice(0).forEach((callback) => callback(0))
+    })
+
+    vi.stubGlobal('scrollY', 80)
+    fireEvent.scroll(window)
+    act(() => {
+      animationFrames.splice(0).forEach((callback) => callback(0))
+    })
+
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '0')
+
+    vi.spyOn(reader, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: 700,
+      height: 1000,
+      left: 0,
+      right: 390,
+      top: -300,
+      width: 390,
+      x: 0,
+      y: -300,
+      toJSON: () => ({}),
+    }))
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    act(() => {
+      animationFrames.splice(0).forEach((callback) => callback(0))
+    })
+
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+    expect(onProgressChange).toHaveBeenCalledWith(0.5)
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight')
+  })
+
+  it('keeps paged page and chapter navigation while honoring tap versus swipe', () => {
+    installViewportWidth(390)
+    const animationFrames: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback)
+        return animationFrames.length
+      }),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+    const onNext = vi.fn()
+    const { reader } = renderImmersiveReader({
+      preferences: {
+        ...DEFAULT_READER_PREFERENCES,
+        readingMode: 'paged',
+      },
+      onNext,
+    })
+    const viewport = screen.getByLabelText('分頁閱讀區')
+    const prose = screen.getByLabelText('章節內文')
+    Object.defineProperty(viewport, 'clientWidth', {
+      configurable: true,
+      value: 300,
+    })
+    Object.defineProperty(prose, 'scrollWidth', {
+      configurable: true,
+      value: 900,
+    })
+    act(() => {
+      animationFrames.splice(0).forEach((callback) => callback(0))
+    })
+
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    expect(screen.getByRole('button', { name: '下一頁' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    swipe(viewport, 180, 80)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    fireEvent.click(viewport)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+
+    fireEvent.click(viewport)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    fireEvent.keyDown(viewport, { key: 'ArrowLeft' })
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 2 / 3 頁',
+    )
+
+    swipe(viewport, 180, 80)
+    fireEvent.click(viewport)
+    expect(screen.getByRole('status', { name: '分頁位置' })).toHaveTextContent(
+      '第 3 / 3 頁',
+    )
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    swipe(viewport, 180, 80)
+    expect(onNext).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not hide desktop Reader controls when the viewport is wider than 768px', () => {
+    const viewport = installViewportWidth(1280)
+    const { reader } = renderImmersiveReader()
+
+    expect(reader).toHaveAttribute('data-reader-layout', 'desktop')
+    expect(screen.getByRole('button', { name: '閱讀設定' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '開啟章節目錄' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '開啟書籤列表' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeVisible()
+    expect(screen.getByTestId('reader-persistent-navigation')).toBeVisible()
+    expect(screen.getByRole('button', { name: '返回作品' })).toBeVisible()
+
+    act(() => {
+      viewport.setWidth(390)
+    })
+    expect(reader).toHaveAttribute('data-reader-layout', 'mobile')
+    fireEvent.click(screen.getByLabelText('章節內文'))
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+
+    act(() => {
+      viewport.setWidth(1280)
+    })
+    expect(reader).toHaveAttribute('data-reader-layout', 'desktop')
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    expect(screen.getByRole('button', { name: '閱讀設定' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '開啟章節目錄' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '開啟書籤列表' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeVisible()
+    expect(screen.getByTestId('reader-persistent-navigation')).toBeVisible()
+    expect(
+      screen.queryByTestId('reader-chrome-top')?.getAttribute('inert'),
+    ).toBeNull()
+    expect(
+      screen
+        .queryByTestId('reader-persistent-navigation')
+        ?.getAttribute('inert'),
+    ).toBeNull()
+  })
+})
