@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   act,
   cleanup,
@@ -1506,6 +1508,36 @@ describe('ReaderScreen immersive mobile chrome', () => {
     cleanup()
     Reflect.deleteProperty(window, 'matchMedia')
     vi.unstubAllGlobals()
+  })
+
+  it('keeps the in-flow chapter heading at mobile start and reserves chrome clearance that hide does not collapse', () => {
+    installViewportWidth(390)
+    vi.stubGlobal('scrollY', 0)
+    const { reader } = renderImmersiveReader()
+
+    expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+    expect(reader).toHaveAttribute('data-reader-layout', 'mobile')
+    const heading = screen.getByRole('heading', { name: 'Chapter 1' })
+    expect(heading).toBeVisible()
+    expect(heading).toHaveClass('screen-heading')
+    expect(screen.getByLabelText('章節內文')).toBeVisible()
+
+    vi.stubGlobal('scrollY', 80)
+    fireEvent.scroll(window)
+    expect(reader).toHaveAttribute('data-reader-chrome', 'hidden')
+    expect(screen.getByRole('heading', { name: 'Chapter 1' })).toBeVisible()
+
+    const css = readFileSync(join(process.cwd(), 'src/app/App.css'), 'utf8')
+    const immersiveBlock = css.slice(
+      css.indexOf('/* Immersive mobile Reader chrome'),
+    )
+    expect(immersiveBlock).toContain('--reader-mobile-top-chrome-height')
+    expect(immersiveBlock).toContain(
+      'padding-top: calc(var(--reader-mobile-top-chrome-height)',
+    )
+    expect(immersiveBlock).not.toMatch(
+      /\[data-reader-chrome=['"]hidden['"]\][^{]{0,160}\{[^}]*padding-top\s*:/,
+    )
   })
 
   function installViewportWidth(width: number) {

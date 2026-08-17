@@ -2798,12 +2798,21 @@ button:focus-visible {
 
 /* Immersive mobile Reader chrome (<=768px) */
 @media (max-width: 768px) {
+  .app-shell:has([aria-label='閱讀器']) {
+    padding-top: 0;
+  }
+
   .app-shell:has([aria-label='閱讀器']) > .eyebrow {
     display: none;
   }
 
   .reader-screen-container {
+    /* Keep this inset in document flow; hidden chrome must not collapse it. */
+    --reader-mobile-top-chrome-height: calc(
+      max(0.2rem, env(safe-area-inset-top, 0px)) + 2.75rem + 0.2rem + 1px
+    );
     padding: 0.5rem 0.7rem 1.25rem;
+    padding-top: calc(var(--reader-mobile-top-chrome-height) + 0.35rem);
     border: 0;
     border-radius: 0;
   }
@@ -2834,6 +2843,11 @@ button:focus-visible {
     padding-left: max(0.45rem, env(safe-area-inset-left));
     border-bottom: 1px solid rgba(141, 63, 47, 0.16);
     background: inherit;
+    pointer-events: none;
+  }
+
+  .reader-chrome-top button {
+    pointer-events: auto;
   }
 
   .reader-screen-container[data-theme='light'] .reader-chrome-top,
@@ -2911,6 +2925,13 @@ button:focus-visible {
     border-top: 1px solid rgba(141, 63, 47, 0.16);
     border-radius: 0;
     box-shadow: none;
+    pointer-events: none;
+  }
+
+  .reader-screen-container[data-reader-layout='mobile']
+    .reader-persistent-navigation
+    button {
+    pointer-events: auto;
   }
 
   .reader-screen-container[data-reader-layout='mobile']
