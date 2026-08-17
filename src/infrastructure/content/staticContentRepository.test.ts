@@ -347,14 +347,12 @@ for (const bookId of ['book-legacy-book-3', 'book-legacy-book-6', 'book-legacy-b
 }
 
 const EXPECTED_ACCESSIBLE_PROSE: Record<string, readonly string[]> = {
-  'chapter-decade-late-letter': [
-    '郵差把信放進信箱時，特別叮囑了一句：「地址是舊的，但郵戳是新的，妳自己看看。」',
-    '蘇晚拆開信封，認出那是十年前，她以為早已隨對方一起消失在雨裡的字跡。',
-  ],
-  'chapter-rainy-day-umbrella': [
-    '小鎮的雨從不整點下，卻總在她走到轉角書店前，準時落下第一滴。',
-    '傘是舊的，撐傘的人也是舊識，只是這一次，他沒有像十年前那樣，把傘留給她一個人走。',
-  ],
+  'chapter-decade-late-letter': plumRainLetterFixture.chapters.find(
+    (chapter) => chapter.chapterId === 'chapter-decade-late-letter',
+  )!.prose,
+  'chapter-rainy-day-umbrella': plumRainLetterFixture.chapters.find(
+    (chapter) => chapter.chapterId === 'chapter-rainy-day-umbrella',
+  )!.prose,
   'chapter-after-reunion': [
     '轉角書店門口的雨勢小了一點，簷下卻還掛著一串串水線。蘇晚把那封信放在兩人之間，沒有收回包裡：「現在可以說了嗎，程遠？」',
     '程遠看著信封，手指在傘柄上慢慢收緊。他沒有像剛才那樣替她擋住雨，只在對面的椅子坐下：「可以。十年前離開，是我自己選的，不是妳做錯了什麼，也不是誰逼我。」',

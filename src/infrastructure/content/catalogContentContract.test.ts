@@ -418,17 +418,27 @@ describe('parseContentBookFixture', () => {
     const { books, proseByChapterId } = loadProductionCatalogContent()
     const MIN_DISCOVERY_CHAPTER_PROSE_LENGTH = 800
 
-    for (const entry of books) {
-      if (
-        entry.catalogSequence !== 1 &&
-        entry.catalogSequence !== 2 &&
-        entry.catalogSequence !== 3
-      ) {
-        continue
-      }
+    const additionalDiscoveryChapterIds = new Set([
+      'chapter-tide-archive-001',
+      'chapter-tide-archive-002',
+    ])
 
+    for (const entry of books) {
       for (const chapter of entry.chapters) {
         if (chapter.access !== 'READABLE') {
+          continue
+        }
+
+        const inDiscoveryBook =
+          entry.catalogSequence === 1 ||
+          entry.catalogSequence === 2 ||
+          entry.catalogSequence === 3 ||
+          entry.catalogSequence === 4
+        const isAdditionalOpening = additionalDiscoveryChapterIds.has(
+          chapter.id as string,
+        )
+
+        if (!inDiscoveryBook && !isAdditionalOpening) {
           continue
         }
 
