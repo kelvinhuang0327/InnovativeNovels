@@ -1109,12 +1109,10 @@ describe('Persistent reader chapter navigation integrated journey', () => {
       screen.getByRole('heading', { name: '第二章：燈塔守望' }),
     ).toBeInTheDocument()
 
-    const explicitChapterNavigation = screen.getByRole('navigation', {
-      name: '章節導覽',
-    })
+    const chapterEndSurface = screen.getByTestId('chapter-end-surface')
     expect(
-      within(explicitChapterNavigation).getByRole('button', {
-        name: '下一章',
+      within(chapterEndSurface).getByRole('button', {
+        name: '繼續閱讀：第三章：封印之門',
       }),
     ).toBeInTheDocument()
   })

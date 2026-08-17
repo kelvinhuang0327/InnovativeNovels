@@ -1007,30 +1007,101 @@ export function ReaderScreen({
         </article>
       )}
 
-      <nav className="reader-navigation" aria-label="章節導覽">
-        {openedChapter.hasPrevious && (
-          <button
-            className="button-secondary"
-            type="button"
-            onClick={onPrevious}
+      {(() => {
+        const nextChapterFromToc = tableOfContents.find(
+          (entry) => entry.sequence === openedChapter.chapter.sequence + 1,
+        )
+        const hasNextChapter = openedChapter.hasNext
+        const isNextReadable = hasNextChapter && canNavigateNextChapter
+        const nextChapterTitle =
+          nextChapterFromToc?.title ??
+          (hasNextChapter ? '下一章' : undefined)
+
+        return (
+          <section
+            className="chapter-end-surface"
+            aria-label="本章結束"
+            data-testid="chapter-end-surface"
           >
-            上一章
-          </button>
-        )}
-        {openedChapter.hasNext && (
-          <button type="button" onClick={onNext}>
-            下一章
-          </button>
-        )}
-        <button
-          className="button-secondary button-back-to-book"
-          type="button"
-          onClick={handleBackToBook}
-          aria-label="返回作品"
-        >
-          返回作品
-        </button>
-      </nav>
+            <div className="chapter-end-header">
+              <span className="chapter-end-badge">本章讀完</span>
+              <span className="chapter-end-current-title">
+                {openedChapter.chapter.title}
+              </span>
+            </div>
+
+            {isNextReadable ? (
+              <div className="chapter-end-next-card">
+                <div className="chapter-end-next-meta">
+                  <span className="chapter-end-next-label">下一章</span>
+                  <h2 className="chapter-end-next-title">{nextChapterTitle}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="button-primary chapter-end-continue-button"
+                  onClick={onNext}
+                  aria-label={`繼續閱讀：${nextChapterTitle}`}
+                >
+                  繼續閱讀
+                </button>
+              </div>
+            ) : hasNextChapter ? (
+              <div className="chapter-end-inaccessible-card">
+                <div className="chapter-end-next-meta">
+                  <span className="chapter-end-next-label">下一章</span>
+                  <h2 className="chapter-end-next-title">{nextChapterTitle}</h2>
+                </div>
+                <div
+                  className="chapter-end-status-notice"
+                  role="note"
+                  aria-label="下一章狀態"
+                >
+                  下一章尚未開放
+                </div>
+              </div>
+            ) : (
+              <div className="chapter-end-final-card">
+                <p className="chapter-end-final-message">已讀至目前最後一章</p>
+                <button
+                  type="button"
+                  className="button-primary chapter-end-back-button"
+                  onClick={handleBackToBook}
+                  aria-label="返回作品"
+                >
+                  返回作品
+                </button>
+              </div>
+            )}
+
+            <nav
+              className="chapter-end-secondary-actions"
+              aria-label="章末輔助導覽"
+            >
+              {openedChapter.hasPrevious && (
+                <button
+                  type="button"
+                  className="button-secondary chapter-end-prev-button"
+                  onClick={onPrevious}
+                  aria-label="上一章"
+                >
+                  ← 上一章
+                </button>
+              )}
+              {(!openedChapter.hasPrevious || isNextReadable || hasNextChapter) &&
+                (isNextReadable || hasNextChapter) && (
+                  <button
+                    type="button"
+                    className="button-secondary chapter-end-back-secondary-button"
+                    onClick={handleBackToBook}
+                    aria-label="返回作品"
+                  >
+                    返回作品
+                  </button>
+                )}
+            </nav>
+          </section>
+        )
+      })()}
 
       {isMobileReaderChrome && (
         <div className="reader-mobile-reading-progress">

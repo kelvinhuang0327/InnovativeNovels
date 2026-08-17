@@ -350,7 +350,8 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
     renderReaderWithToc(onSelectChapter)
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
 
-    const lockedItem = screen.getByText('Chapter Three').closest('button')
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    const lockedItem = within(dialog).getByText('Chapter Three').closest('button')
     expect(lockedItem).toBeDisabled()
 
     fireEvent.click(lockedItem as HTMLButtonElement)
@@ -362,7 +363,8 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
     renderReaderWithToc(onSelectChapter)
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
 
-    fireEvent.click(screen.getByText('Chapter Two').closest('button') as HTMLButtonElement)
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    fireEvent.click(within(dialog).getByText('Chapter Two').closest('button') as HTMLButtonElement)
 
     expect(onSelectChapter).toHaveBeenCalledWith('t2')
     expect(screen.queryByRole('dialog', { name: '章節目錄' })).not.toBeInTheDocument()
@@ -1693,12 +1695,12 @@ describe('ReaderScreen immersive mobile chrome', () => {
       within(bottomChrome).getByRole('button', { name: '下一章' }),
     ).toHaveTextContent('下章')
 
-    const chapterEnd = screen.getByRole('navigation', { name: '章節導覽' })
+    const chapterEnd = screen.getByTestId('chapter-end-surface')
     expect(
       within(chapterEnd).getByRole('button', { name: '上一章' }),
     ).toBeInTheDocument()
     expect(
-      within(chapterEnd).getByRole('button', { name: '下一章' }),
+      within(chapterEnd).getByRole('button', { name: '繼續閱讀：下一章' }),
     ).toBeInTheDocument()
     expect(
       within(chapterEnd).getByRole('button', { name: '返回作品' }),
@@ -1814,12 +1816,12 @@ describe('ReaderScreen immersive mobile chrome', () => {
       screen.queryByRole('button', { name: '加入章節書籤' }),
     ).not.toBeInTheDocument()
 
-    const chapterEnd = screen.getByRole('navigation', { name: '章節導覽' })
+    const chapterEnd = screen.getByTestId('chapter-end-surface')
     expect(
       within(chapterEnd).getByRole('button', { name: '上一章' }),
     ).toBeEnabled()
     expect(
-      within(chapterEnd).getByRole('button', { name: '下一章' }),
+      within(chapterEnd).getByRole('button', { name: '繼續閱讀：下一章' }),
     ).toBeEnabled()
     expect(
       within(chapterEnd).getByRole('button', { name: '返回作品' }),
@@ -2008,5 +2010,290 @@ describe('ReaderScreen immersive mobile chrome', () => {
         .queryByTestId('reader-persistent-navigation')
         ?.getAttribute('inert'),
     ).toBeNull()
+  })
+})
+
+describe('ReaderScreen Chapter-End Reading Momentum V1', () => {
+  afterEach(() => {
+    cleanup()
+    Reflect.deleteProperty(window, 'matchMedia')
+    vi.unstubAllGlobals()
+  })
+
+  const momentumBook = {
+    book: {
+      id: bookId('b-momentum'),
+      title: '梅雨與信',
+      authorName: '言雨',
+      categoryLabel: '現代情感',
+    },
+    description: '潮濕的季節裡，那些未寄出的字。',
+    chapters: [
+      {
+        id: chapterId('c-m1'),
+        bookId: bookId('b-momentum'),
+        title: '第一章：雨季開始的那天',
+        sequence: chapterSequence(1),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('c-m2'),
+        bookId: bookId('b-momentum'),
+        title: '第二章：沒有地址的信封',
+        sequence: chapterSequence(2),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('c-m3'),
+        bookId: bookId('b-momentum'),
+        title: '第三章：重逢之後',
+        sequence: chapterSequence(3),
+        access: CHAPTER_ACCESS.LOCKED,
+      },
+    ],
+  }
+
+  const momentumToc = [
+    {
+      chapterId: chapterId('c-m1'),
+      title: '第一章：雨季開始的那天',
+      sequence: 1,
+      isAccessible: true,
+      isCurrent: true,
+    },
+    {
+      chapterId: chapterId('c-m2'),
+      title: '第二章：沒有地址的信封',
+      sequence: 2,
+      isAccessible: true,
+      isCurrent: false,
+    },
+    {
+      chapterId: chapterId('c-m3'),
+      title: '第三章：重逢之後',
+      sequence: 3,
+      isAccessible: false,
+      isCurrent: false,
+    },
+  ]
+
+  it('renders dedicated completion surface with next chapter title and primary continue CTA when readable next chapter exists', () => {
+    const onNext = vi.fn()
+    const onPrevious = vi.fn()
+    const onBackToBook = vi.fn()
+
+    const openedChapter = {
+      book: momentumBook,
+      chapter: momentumBook.chapters[0],
+      prose: ['內文第一段', '內文第二段'],
+      isLocked: false,
+      hasPrevious: false,
+      hasNext: true,
+      initialChapterProgress: 0,
+    }
+
+    render(
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={momentumToc}
+        chapterPosition={{ currentPosition: 1, totalChapters: 3 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={onBackToBook}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        canNavigateNextChapter={true}
+      />,
+    )
+
+    const surface = screen.getByTestId('chapter-end-surface')
+    expect(surface).toBeInTheDocument()
+    expect(within(surface).getByText('本章讀完')).toBeInTheDocument()
+    expect(within(surface).getByText('第一章：雨季開始的那天')).toBeInTheDocument()
+    expect(within(surface).getByText('下一章')).toBeInTheDocument()
+    expect(
+      within(surface).getByRole('heading', {
+        name: '第二章：沒有地址的信封',
+      }),
+    ).toBeInTheDocument()
+
+    const continueBtn = within(surface).getByRole('button', {
+      name: '繼續閱讀：第二章：沒有地址的信封',
+    })
+    expect(continueBtn).toBeInTheDocument()
+    expect(continueBtn).toBeEnabled()
+
+    fireEvent.click(continueBtn)
+    expect(onNext).toHaveBeenCalledTimes(1)
+
+    const backBtn = within(surface).getByRole('button', { name: '返回作品' })
+    expect(backBtn).toBeInTheDocument()
+    fireEvent.click(backBtn)
+    expect(onBackToBook).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders completion state with prominent 返回作品 on the final chapter', () => {
+    const onBackToBook = vi.fn()
+    const onPrevious = vi.fn()
+
+    const finalOpenedChapter = {
+      book: momentumBook,
+      chapter: momentumBook.chapters[2],
+      prose: ['最終章內文'],
+      isLocked: false,
+      hasPrevious: true,
+      hasNext: false,
+      initialChapterProgress: 0,
+    }
+
+    render(
+      <ReaderScreen
+        openedChapter={finalOpenedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={momentumToc}
+        chapterPosition={{ currentPosition: 3, totalChapters: 3 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={onBackToBook}
+        onPrevious={onPrevious}
+        onNext={vi.fn()}
+        canNavigateNextChapter={false}
+      />,
+    )
+
+    const surface = screen.getByTestId('chapter-end-surface')
+    expect(surface).toBeInTheDocument()
+    expect(
+      within(surface).queryByRole('button', { name: /繼續閱讀/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(surface).getByText('已讀至目前最後一章'),
+    ).toBeInTheDocument()
+
+    const backBtn = within(surface).getByRole('button', { name: '返回作品' })
+    expect(backBtn).toBeInTheDocument()
+    fireEvent.click(backBtn)
+    expect(onBackToBook).toHaveBeenCalledTimes(1)
+
+    const prevBtn = within(surface).getByRole('button', { name: '上一章' })
+    expect(prevBtn).toBeInTheDocument()
+    fireEvent.click(prevBtn)
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+  })
+
+  it('communicates unavailable status and provides no continue CTA when next chapter is locked/inaccessible', () => {
+    const onNext = vi.fn()
+    const onPrevious = vi.fn()
+    const onBackToBook = vi.fn()
+
+    const chapter2Opened = {
+      book: momentumBook,
+      chapter: momentumBook.chapters[1],
+      prose: ['第二章內文'],
+      isLocked: false,
+      hasPrevious: true,
+      hasNext: true,
+      initialChapterProgress: 0,
+    }
+
+    render(
+      <ReaderScreen
+        openedChapter={chapter2Opened}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={momentumToc}
+        chapterPosition={{ currentPosition: 2, totalChapters: 3 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={onBackToBook}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        canNavigateNextChapter={false}
+      />,
+    )
+
+    const surface = screen.getByTestId('chapter-end-surface')
+    expect(surface).toBeInTheDocument()
+    expect(
+      within(surface).queryByRole('button', { name: /繼續閱讀/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(surface).getByRole('heading', { name: '第三章：重逢之後' }),
+    ).toBeInTheDocument()
+    expect(within(surface).getByText('下一章尚未開放')).toBeInTheDocument()
+
+    const prevBtn = within(surface).getByRole('button', { name: '上一章' })
+    expect(prevBtn).toBeInTheDocument()
+    fireEvent.click(prevBtn)
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+
+    const backBtn = within(surface).getByRole('button', { name: '返回作品' })
+    expect(backBtn).toBeInTheDocument()
+    fireEvent.click(backBtn)
+    expect(onBackToBook).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders previous navigation as secondary control when previous chapter exists', () => {
+    const onPrevious = vi.fn()
+
+    const chapter2Opened = {
+      book: momentumBook,
+      chapter: momentumBook.chapters[1],
+      prose: ['第二章內文'],
+      isLocked: false,
+      hasPrevious: true,
+      hasNext: true,
+      initialChapterProgress: 0,
+    }
+
+    render(
+      <ReaderScreen
+        openedChapter={chapter2Opened}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={momentumToc}
+        chapterPosition={{ currentPosition: 2, totalChapters: 3 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={onPrevious}
+        onNext={vi.fn()}
+        canNavigateNextChapter={true}
+      />,
+    )
+
+    const surface = screen.getByTestId('chapter-end-surface')
+    const prevBtn = within(surface).getByRole('button', { name: '上一章' })
+    expect(prevBtn).toBeInTheDocument()
+    expect(prevBtn).toHaveClass('button-secondary')
+    expect(prevBtn).toHaveClass('chapter-end-prev-button')
+
+    const continueBtn = within(surface).getByRole('button', {
+      name: '繼續閱讀：第三章：重逢之後',
+    })
+    expect(continueBtn).toHaveClass('button-primary')
   })
 })
