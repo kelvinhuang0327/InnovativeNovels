@@ -19,6 +19,9 @@ target 'App' do
   # Add your Pods here
 end
 
+target 'AppUITests' do
+end
+
 post_install do |installer|
   assertDeploymentTarget(installer)
 end
