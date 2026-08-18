@@ -447,4 +447,94 @@ describe('CatalogScreen', () => {
       screen.queryByRole('button', { name: '開啟創作預覽' }),
     ).not.toBeInTheDocument()
   })
+
+  it('renders accurate readable depth labels for fully openable and partially accessible books', () => {
+    const mixedBooks: readonly ContentBook[] = [
+      {
+        book: {
+          id: bookId('full-book'),
+          title: '全本小說',
+          authorName: '沈墨',
+          categoryLabel: '懸疑',
+        },
+        description: '全本開放閱讀',
+        chapters: [
+          {
+            id: chapterId('f1'),
+            bookId: bookId('full-book'),
+            title: '第一章',
+            sequence: chapterSequence(1),
+            access: CHAPTER_ACCESS.READABLE,
+          },
+          {
+            id: chapterId('f2'),
+            bookId: bookId('full-book'),
+            title: '第二章',
+            sequence: chapterSequence(2),
+            access: CHAPTER_ACCESS.READABLE,
+          },
+        ],
+      },
+      {
+        book: {
+          id: bookId('partial-book'),
+          title: '部分解鎖小說',
+          authorName: '岑海',
+          categoryLabel: '仙俠',
+        },
+        description: '前兩章開放第三章鎖定',
+        chapters: [
+          {
+            id: chapterId('p1'),
+            bookId: bookId('partial-book'),
+            title: '第一章',
+            sequence: chapterSequence(1),
+            access: CHAPTER_ACCESS.READABLE,
+          },
+          {
+            id: chapterId('p2'),
+            bookId: bookId('partial-book'),
+            title: '第二章',
+            sequence: chapterSequence(2),
+            access: CHAPTER_ACCESS.PREVIEW,
+          },
+          {
+            id: chapterId('p3'),
+            bookId: bookId('partial-book'),
+            title: '第三章',
+            sequence: chapterSequence(3),
+            access: CHAPTER_ACCESS.LOCKED,
+          },
+        ],
+      },
+    ]
+
+    render(
+      <CatalogScreen
+        books={mixedBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    // Verify normal book cards
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    const fullCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '全本小說' })
+      .closest('article')
+    const partialCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '部分解鎖小說' })
+      .closest('article')
+
+    expect(fullCard).not.toBeNull()
+    expect(partialCard).not.toBeNull()
+    expect(within(fullCard as HTMLElement).getByText('2 章可讀')).toBeInTheDocument()
+    expect(within(partialCard as HTMLElement).getByText('可讀 2 / 3 章')).toBeInTheDocument()
+
+    // Verify editorial shelf
+    const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
+    expect(within(editorialShelf).getByText('沈墨 · 2 章可讀')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('岑海 · 可讀 2 / 3 章')).toBeInTheDocument()
+  })
 })

@@ -1,6 +1,8 @@
 import { useId, useState } from 'react'
 import {
   filterCatalog,
+  formatCatalogDepthLabel,
+  getReadingDepth,
   listGenres,
 } from '../../application/catalog/catalogUseCases'
 import type { ContentBook } from '../../application/catalog/contentRepository'
@@ -152,35 +154,40 @@ function EditorialShelf({ books, onOpenBook }: EditorialShelfProps) {
       </div>
 
       <ul className="editorial-list">
-        {editorialBooks.map(({ book, chapters, description }) => (
-          <li className="editorial-card" key={book.id}>
-            <div
-              aria-hidden="true"
-              className="editorial-card-cover"
-              data-title={book.title}
-            >
-              <span>{book.categoryLabel}</span>
-            </div>
-            <div className="editorial-card-copy">
-              <p className="book-meta">
-                {book.authorName} · {chapters.length} 章
-              </p>
-              <h3
-                aria-label={book.title}
-                className="editorial-card-title"
+        {editorialBooks.map(({ book, chapters, description }) => {
+          const depth = getReadingDepth(chapters)
+          const depthLabel = formatCatalogDepthLabel(depth)
+
+          return (
+            <li className="editorial-card" key={book.id}>
+              <div
+                aria-hidden="true"
+                className="editorial-card-cover"
                 data-title={book.title}
-              />
-              <p>{description}</p>
-              <button
-                className="button-secondary editorial-card-action"
-                onClick={() => onOpenBook(book.id)}
-                type="button"
               >
-                開啟作品
-              </button>
-            </div>
-          </li>
-        ))}
+                <span>{book.categoryLabel}</span>
+              </div>
+              <div className="editorial-card-copy">
+                <p className="book-meta">
+                  {book.authorName} · {depthLabel}
+                </p>
+                <h3
+                  aria-label={book.title}
+                  className="editorial-card-title"
+                  data-title={book.title}
+                />
+                <p>{description}</p>
+                <button
+                  className="button-secondary editorial-card-action"
+                  onClick={() => onOpenBook(book.id)}
+                  type="button"
+                >
+                  開啟作品
+                </button>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
@@ -192,6 +199,9 @@ function BookCard({
   description,
   onOpenBook,
 }: ContentBook & { readonly onOpenBook: (bookId: string) => void }) {
+  const depth = getReadingDepth(chapters)
+  const depthLabel = formatCatalogDepthLabel(depth)
+
   return (
     <article className="book-card">
       <div
@@ -204,7 +214,7 @@ function BookCard({
       <div className="book-card-body">
         <div className="book-card-topline">
           <p className="book-meta">{book.categoryLabel}</p>
-          <span className="book-chapter-count">{chapters.length} 章</span>
+          <span className="book-chapter-count">{depthLabel}</span>
         </div>
         <h3>{book.title}</h3>
         <p className="book-card-author">{book.authorName}</p>
@@ -220,6 +230,7 @@ function BookCard({
     </article>
   )
 }
+
 
 export function CatalogScreen({
   books,

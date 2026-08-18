@@ -1968,3 +1968,90 @@ describe('Mobile app shell navigation v1', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('Readable Depth Presentation V1 integration', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('displays accurate readable depth on Catalog cards and editorial shelf for live Wave 5 books', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    // Wave 5 books in catalog results region
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    const tideArchiveCard = within(resultsRegion).getByRole('heading', { level: 3, name: '潮汐檔案' }).closest('article')
+    const emberCrownCard = within(resultsRegion).getByRole('heading', { level: 3, name: '餘燼王冠' }).closest('article')
+    const orbitLightCard = within(resultsRegion).getByRole('heading', { level: 3, name: '軌道盡頭的微光' }).closest('article')
+    const tideCityCard = within(resultsRegion).getByRole('heading', { level: 3, name: '潮汐之城' }).closest('article')
+
+    expect(tideArchiveCard).not.toBeNull()
+    expect(emberCrownCard).not.toBeNull()
+    expect(orbitLightCard).not.toBeNull()
+    expect(tideCityCard).not.toBeNull()
+
+    expect(within(tideArchiveCard as HTMLElement).getByText('10 章可讀')).toBeInTheDocument()
+    expect(within(emberCrownCard as HTMLElement).getByText('9 章可讀')).toBeInTheDocument()
+    expect(within(orbitLightCard as HTMLElement).getByText('9 章可讀')).toBeInTheDocument()
+    expect(within(tideCityCard as HTMLElement).getByText('8 章可讀')).toBeInTheDocument()
+
+    // Editorial shelf
+    const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
+    expect(within(editorialShelf).getByText('林澄 · 8 章可讀')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('沈墨白 · 8 章可讀')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('韓亦晴 · 8 章可讀')).toBeInTheDocument()
+  })
+
+
+  it('displays distinct total vs readable chapters and depth summary in Book Detail for Wave 5 book', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    // Filter to 潮汐檔案 and open detail
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '潮汐檔案' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '查看書籍' }))
+
+    expect(screen.getByRole('heading', { level: 1, name: '潮汐檔案' })).toBeInTheDocument()
+    expect(screen.getByText('章節', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getByText('可閱讀', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getAllByText('10 章', { selector: 'dd' })).toHaveLength(2)
+    expect(screen.getByText('目前 10 章皆可閱讀')).toBeInTheDocument()
+
+    // Start reading still works
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    expect(screen.getByRole('heading', { name: '沉入海底的鐘' })).toBeInTheDocument()
+  })
+
+
+  it('displays accurate depth summary and facts for partial-access book in repository', () => {
+    const { repository } = createAccessStatusRepository()
+
+    render(
+      <App
+        dependencies={{
+          contentRepository: repository,
+          readingStateRepository: new LocalStorageReadingStateRepository(
+            window.localStorage,
+          ),
+        }}
+      />,
+    )
+
+    // In access status repository: 4 chapters total, 2 openable (c1 READABLE, c2 PREVIEW, c3 LOCKED, c4 UNAVAILABLE)
+    const card = screen.getByRole('article')
+    expect(within(card).getByText('可讀 2 / 4 章')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看書籍' }))
+
+    expect(screen.getByText('章節', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getByText('4 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('可閱讀', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getByText('2 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('目前可連續閱讀前 2 章')).toBeInTheDocument()
+  })
+})

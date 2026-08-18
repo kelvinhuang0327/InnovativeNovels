@@ -1,3 +1,7 @@
+import {
+  formatBookDetailDepthSummary,
+  getReadingDepth,
+} from '../../application/catalog/catalogUseCases'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import {
   CHAPTER_ACCESS,
@@ -47,7 +51,10 @@ export function BookDetailScreen({
   const orderedChapters = [...book.chapters].sort(
     (left, right) => left.sequence - right.sequence,
   )
-  const chapterCountLabel = `${book.chapters.length} 章`
+  const depth = getReadingDepth(book.chapters)
+  const chapterCountLabel = `${depth.totalChapters} 章`
+  const readableCountLabel = `${depth.openableChapters} 章`
+  const depthSummary = formatBookDetailDepthSummary(depth)
 
   return (
     <section
@@ -95,6 +102,10 @@ export function BookDetailScreen({
                 <dt>章節</dt>
                 <dd>{chapterCountLabel}</dd>
               </div>
+              <div>
+                <dt>可閱讀</dt>
+                <dd>{readableCountLabel}</dd>
+              </div>
             </dl>
 
             <div className="book-detail-actions">
@@ -118,6 +129,8 @@ export function BookDetailScreen({
               )}
             </div>
 
+            <p className="book-detail-depth-summary">{depthSummary}</p>
+
             {hasSavedPosition && (
               <p className="book-detail-progress">
                 <span className="book-detail-progress-label">閱讀進度</span>
@@ -129,6 +142,7 @@ export function BookDetailScreen({
           </div>
         </div>
       </header>
+
 
       {sessionReturnStatus && (
         <div

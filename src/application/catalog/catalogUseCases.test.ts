@@ -3,7 +3,13 @@ import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ContentBook } from './contentRepository'
-import { filterCatalog, listGenres } from './catalogUseCases'
+import {
+  filterCatalog,
+  formatBookDetailDepthSummary,
+  formatCatalogDepthLabel,
+  getReadingDepth,
+  listGenres,
+} from './catalogUseCases'
 
 function makeBook(
   id: string,
@@ -96,5 +102,260 @@ describe('filterCatalog', () => {
   it('preserves the original catalog order among matching results', () => {
     const result = filterCatalog(books, { genre: '仙俠' })
     expect(result.map((entry) => entry.book.id)).toEqual(['book-b', 'book-b2'])
+  })
+})
+
+describe('getReadingDepth', () => {
+  it('Case A — all openable: total = N, openable = N, continuous = N, allOpenable = true', () => {
+    const testBook: ContentBook = {
+      book: {
+        id: bookId('test-book-a'),
+        title: '潮汐檔案',
+        authorName: '沈墨',
+        categoryLabel: '懸疑',
+      },
+      description: '全本可讀',
+      chapters: [
+        {
+          id: chapterId('c1'),
+          bookId: bookId('test-book-a'),
+          title: '第一章',
+          sequence: chapterSequence(1),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c2'),
+          bookId: bookId('test-book-a'),
+          title: '第二章',
+          sequence: chapterSequence(2),
+          access: CHAPTER_ACCESS.PREVIEW,
+        },
+        {
+          id: chapterId('c3'),
+          bookId: bookId('test-book-a'),
+          title: '第三章',
+          sequence: chapterSequence(3),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+      ],
+    }
+
+    const depth = getReadingDepth(testBook)
+    expect(depth).toEqual({
+      totalChapters: 3,
+      openableChapters: 3,
+      continuousOpenableChapters: 3,
+      allOpenable: true,
+    })
+  })
+
+  it('Case B — contiguous partial: openable < total, continuous prefix matches openable', () => {
+    const testBook: ContentBook = {
+      book: {
+        id: bookId('test-book-b'),
+        title: '部分可讀之書',
+        authorName: '作者',
+        categoryLabel: '仙俠',
+      },
+      description: '前三章可讀',
+      chapters: [
+        {
+          id: chapterId('c1'),
+          bookId: bookId('test-book-b'),
+          title: '第一章',
+          sequence: chapterSequence(1),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c2'),
+          bookId: bookId('test-book-b'),
+          title: '第二章',
+          sequence: chapterSequence(2),
+          access: CHAPTER_ACCESS.PREVIEW,
+        },
+        {
+          id: chapterId('c3'),
+          bookId: bookId('test-book-b'),
+          title: '第三章',
+          sequence: chapterSequence(3),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c4'),
+          bookId: bookId('test-book-b'),
+          title: '第四章',
+          sequence: chapterSequence(4),
+          access: CHAPTER_ACCESS.LOCKED,
+        },
+        {
+          id: chapterId('c5'),
+          bookId: bookId('test-book-b'),
+          title: '第五章',
+          sequence: chapterSequence(5),
+          access: CHAPTER_ACCESS.UNAVAILABLE,
+        },
+      ],
+    }
+
+    const depth = getReadingDepth(testBook)
+    expect(depth).toEqual({
+      totalChapters: 5,
+      openableChapters: 3,
+      continuousOpenableChapters: 3,
+      allOpenable: false,
+    })
+  })
+
+  it('Case C — accessibility gap: openable exceeds continuous prefix, allOpenable = false', () => {
+    const testBook: ContentBook = {
+      book: {
+        id: bookId('test-book-c'),
+        title: '跳章解鎖之書',
+        authorName: '作者',
+        categoryLabel: '都市',
+      },
+      description: '第三章鎖定但第四章開放',
+      chapters: [
+        {
+          id: chapterId('c1'),
+          bookId: bookId('test-book-c'),
+          title: '第一章',
+          sequence: chapterSequence(1),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c2'),
+          bookId: bookId('test-book-c'),
+          title: '第二章',
+          sequence: chapterSequence(2),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c3'),
+          bookId: bookId('test-book-c'),
+          title: '第三章',
+          sequence: chapterSequence(3),
+          access: CHAPTER_ACCESS.LOCKED,
+        },
+        {
+          id: chapterId('c4'),
+          bookId: bookId('test-book-c'),
+          title: '第四章',
+          sequence: chapterSequence(4),
+          access: CHAPTER_ACCESS.READABLE,
+        },
+      ],
+    }
+
+    const depth = getReadingDepth(testBook)
+    expect(depth).toEqual({
+      totalChapters: 4,
+      openableChapters: 3,
+      continuousOpenableChapters: 2,
+      allOpenable: false,
+    })
+  })
+
+  it('sorts chapters by sequence before calculating continuous prefix', () => {
+    const chapters = [
+      {
+        id: chapterId('c3'),
+        bookId: bookId('test'),
+        title: '第三章',
+        sequence: chapterSequence(3),
+        access: CHAPTER_ACCESS.LOCKED,
+      },
+      {
+        id: chapterId('c1'),
+        bookId: bookId('test'),
+        title: '第一章',
+        sequence: chapterSequence(1),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+      {
+        id: chapterId('c2'),
+        bookId: bookId('test'),
+        title: '第二章',
+        sequence: chapterSequence(2),
+        access: CHAPTER_ACCESS.READABLE,
+      },
+    ]
+
+    const depth = getReadingDepth(chapters)
+    expect(depth).toEqual({
+      totalChapters: 3,
+      openableChapters: 2,
+      continuousOpenableChapters: 2,
+      allOpenable: false,
+    })
+  })
+
+  it('handles empty chapters gracefully', () => {
+    const depth = getReadingDepth([])
+    expect(depth).toEqual({
+      totalChapters: 0,
+      openableChapters: 0,
+      continuousOpenableChapters: 0,
+      allOpenable: true,
+    })
+  })
+})
+
+describe('formatCatalogDepthLabel', () => {
+  it('formats fully openable books as "N 章可讀"', () => {
+    expect(
+      formatCatalogDepthLabel({
+        totalChapters: 10,
+        openableChapters: 10,
+        continuousOpenableChapters: 10,
+        allOpenable: true,
+      }),
+    ).toBe('10 章可讀')
+  })
+
+  it('formats partial access books as "可讀 M / N 章"', () => {
+    expect(
+      formatCatalogDepthLabel({
+        totalChapters: 5,
+        openableChapters: 3,
+        continuousOpenableChapters: 2,
+        allOpenable: false,
+      }),
+    ).toBe('可讀 3 / 5 章')
+  })
+})
+
+describe('formatBookDetailDepthSummary', () => {
+  it('formats all-openable book as "目前 N 章皆可閱讀"', () => {
+    expect(
+      formatBookDetailDepthSummary({
+        totalChapters: 10,
+        openableChapters: 10,
+        continuousOpenableChapters: 10,
+        allOpenable: true,
+      }),
+    ).toBe('目前 10 章皆可閱讀')
+  })
+
+  it('formats contiguous partial book as "目前可連續閱讀前 N 章"', () => {
+    expect(
+      formatBookDetailDepthSummary({
+        totalChapters: 5,
+        openableChapters: 3,
+        continuousOpenableChapters: 3,
+        allOpenable: false,
+      }),
+    ).toBe('目前可連續閱讀前 3 章')
+  })
+
+  it('formats accessibility gap case as "目前有 N 章可閱讀" without false continuous claim', () => {
+    expect(
+      formatBookDetailDepthSummary({
+        totalChapters: 4,
+        openableChapters: 3,
+        continuousOpenableChapters: 2,
+        allOpenable: false,
+      }),
+    ).toBe('目前有 3 章可閱讀')
   })
 })

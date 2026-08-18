@@ -2681,7 +2681,7 @@ button:focus-visible {
 
 .book-detail-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.65rem;
   margin: 1.1rem 0 0;
 }
@@ -2747,6 +2747,13 @@ button:focus-visible {
   background: var(--book-detail-paper);
 }
 
+.book-detail-depth-summary {
+  margin: 0.75rem 0 0;
+  color: var(--book-detail-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .book-detail-progress {
   margin: 0.95rem 0 0;
   color: var(--book-detail-muted);
@@ -2754,6 +2761,7 @@ button:focus-visible {
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
+
 
 .book-detail-progress-label {
   display: block;

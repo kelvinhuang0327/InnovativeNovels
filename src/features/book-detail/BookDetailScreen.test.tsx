@@ -64,7 +64,7 @@ const mockBook: ContentBook = {
 }
 
 describe('BookDetailScreen Exit & Resume Continuity UI', () => {
-  it('renders the factual hero identity and synopsis', () => {
+  it('renders the factual hero identity and synopsis with readable depth fact and summary', () => {
     render(
       <BookDetailScreen
         book={mockBook}
@@ -82,9 +82,12 @@ describe('BookDetailScreen Exit & Resume Continuity UI', () => {
     expect(screen.getByText('玄幻', { selector: 'dd' })).toBeInTheDocument()
     expect(screen.getByText('張三', { selector: 'dd' })).toBeInTheDocument()
     expect(screen.getByText('5 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('3 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('目前可連續閱讀前 3 章')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '作品簡介' })).toBeInTheDocument()
     expect(screen.getByText('精彩小說內文簡介')).toBeInTheDocument()
   })
+
 
   it('renders Start Reading button when no saved position exists', () => {
     render(
@@ -326,5 +329,150 @@ describe('BookDetailScreen Exit & Resume Continuity UI', () => {
         name: '繼續閱讀：第二章 風起雲湧',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('renders all-openable book depth presentation accurately', () => {
+    const allOpenableBook: ContentBook = {
+      book: {
+        id: bookId('b-full'),
+        title: '潮汐檔案',
+        authorName: '沈墨',
+        categoryLabel: '懸疑',
+      },
+      description: '全書開放閱讀。',
+      chapters: [
+        {
+          id: chapterId('f1'),
+          bookId: bookId('b-full'),
+          sequence: chapterSequence(1),
+          title: '第一章',
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('f2'),
+          bookId: bookId('b-full'),
+          sequence: chapterSequence(2),
+          title: '第二章',
+          access: CHAPTER_ACCESS.READABLE,
+        },
+      ],
+    }
+
+    render(
+      <BookDetailScreen
+        book={allOpenableBook}
+        hasSavedPosition={false}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('章節', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getByText('可閱讀', { selector: 'dt' })).toBeInTheDocument()
+    expect(screen.getAllByText('2 章', { selector: 'dd' })).toHaveLength(2)
+    expect(screen.getByText('目前 2 章皆可閱讀')).toBeInTheDocument()
+  })
+
+
+
+  it('renders contiguous-partial reading depth summary accurately', () => {
+    const contiguousBook: ContentBook = {
+      book: {
+        id: bookId('b-contiguous'),
+        title: '連續部分開放之書',
+        authorName: '岑海',
+        categoryLabel: '仙俠',
+      },
+      description: '前兩章開放第三章鎖定。',
+      chapters: [
+        {
+          id: chapterId('c1'),
+          bookId: bookId('b-contiguous'),
+          sequence: chapterSequence(1),
+          title: '第一章',
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('c2'),
+          bookId: bookId('b-contiguous'),
+          sequence: chapterSequence(2),
+          title: '第二章',
+          access: CHAPTER_ACCESS.PREVIEW,
+        },
+        {
+          id: chapterId('c3'),
+          bookId: bookId('b-contiguous'),
+          sequence: chapterSequence(3),
+          title: '第三章',
+          access: CHAPTER_ACCESS.LOCKED,
+        },
+      ],
+    }
+
+    render(
+      <BookDetailScreen
+        book={contiguousBook}
+        hasSavedPosition={false}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('3 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('2 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('目前可連續閱讀前 2 章')).toBeInTheDocument()
+  })
+
+  it('does not make false continuous depth claim when accessibility gap exists', () => {
+    const gapBook: ContentBook = {
+      book: {
+        id: bookId('b-gap'),
+        title: '跳章開放之書',
+        authorName: '林晚',
+        categoryLabel: '都市',
+      },
+      description: '第一章開放第二章鎖定第三章開放。',
+      chapters: [
+        {
+          id: chapterId('g1'),
+          bookId: bookId('b-gap'),
+          sequence: chapterSequence(1),
+          title: '第一章',
+          access: CHAPTER_ACCESS.READABLE,
+        },
+        {
+          id: chapterId('g2'),
+          bookId: bookId('b-gap'),
+          sequence: chapterSequence(2),
+          title: '第二章',
+          access: CHAPTER_ACCESS.LOCKED,
+        },
+        {
+          id: chapterId('g3'),
+          bookId: bookId('b-gap'),
+          sequence: chapterSequence(3),
+          title: '第三章',
+          access: CHAPTER_ACCESS.READABLE,
+        },
+      ],
+    }
+
+    render(
+      <BookDetailScreen
+        book={gapBook}
+        hasSavedPosition={false}
+        onBack={vi.fn()}
+        onRead={vi.fn()}
+        onReadChapter={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('3 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('2 章', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText('目前有 2 章可閱讀')).toBeInTheDocument()
+    expect(screen.queryByText(/可讀至第 3 章/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/目前可連續閱讀前 3 章/)).not.toBeInTheDocument()
   })
 })
