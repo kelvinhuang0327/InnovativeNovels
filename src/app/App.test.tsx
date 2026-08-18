@@ -151,7 +151,7 @@ describe('Wave 1 core reading journey', () => {
     expect(
       screen.getByRole('heading', { name: '潮汐之城' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('共 8 章')).toBeInTheDocument()
+    expect(screen.getByText('共 13 章')).toBeInTheDocument()
   })
 
   it('renders every access status without prose requests and opens exact allowed chapters', () => {
@@ -710,6 +710,11 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
       expect.stringContaining('第六章：兩盞同夜的燈'),
       expect.stringContaining('第七章：替誰留下'),
       expect.stringContaining('第八章：可回頭的潮聲'),
+      expect.stringContaining('第九章：離岸燈站調查'),
+      expect.stringContaining('第十章：撤照檔案'),
+      expect.stringContaining('第十一章：拒絕的浪'),
+      expect.stringContaining('第十二章：受限可讀'),
+      expect.stringContaining('第十三章：離岸燈的答案'),
     ])
 
     expect(items[0].querySelector('button')?.getAttribute('aria-current')).toBe(
@@ -778,7 +783,7 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     const liveProgress = () =>
       screen.getByRole('progressbar', { name: '本章閱讀進度' })
 
-    expect(progress()).toHaveTextContent('第 1 / 8 章')
+    expect(progress()).toHaveTextContent('第 1 / 13 章')
     expect(progress().textContent).not.toMatch(/%|頁|段落/)
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
@@ -786,31 +791,31 @@ describe('Wave 4 Reader Table of Contents & Chapter Position Progress', () => {
     fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 8 章')
+    expect(progress()).toHaveTextContent('第 2 / 13 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 3 / 8 章')
+    expect(progress()).toHaveTextContent('第 3 / 13 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 8 章')
+    expect(progress()).toHaveTextContent('第 2 / 13 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
     fireEvent.click(tocButtonFor('第一章：潮聲來信'))
-    expect(progress()).toHaveTextContent('第 1 / 8 章')
+    expect(progress()).toHaveTextContent('第 1 / 13 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
-    expect(progress()).toHaveTextContent('第 2 / 8 章')
+    expect(progress()).toHaveTextContent('第 2 / 13 章')
 
     fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
     const bookmarksDialog = screen.getByRole('dialog', { name: '章節書籤' })
     fireEvent.click(
       within(bookmarksDialog).getByRole('button', { name: '移至章節' }),
     )
-    expect(progress()).toHaveTextContent('第 1 / 8 章')
+    expect(progress()).toHaveTextContent('第 1 / 13 章')
     expect(liveProgress()).toHaveAttribute('aria-valuenow', '0')
   })
 })
@@ -987,8 +992,8 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     fireEvent.click(persistentNext)
 
     expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 2 / 8 章')
-    expect(within(persistentNav).getByText('第 2 / 8 章')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 2 / 13 章')
+    expect(within(persistentNav).getByText('第 2 / 13 章')).toBeInTheDocument()
     // Chapter 2 is not bookmarked
     expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeInTheDocument()
 
@@ -1010,7 +1015,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     // Newly readable Chapter 3 is reachable through adjacent navigation.
     fireEvent.click(persistentNext)
     expect(screen.getByRole('heading', { name: '第三章：封印之門' })).toBeInTheDocument()
-    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 3 / 8 章')
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 3 / 13 章')
     expect(
       screen.queryByText('本章尚未開放，沒有載入任何內文。'),
     ).not.toBeInTheDocument()
@@ -1023,17 +1028,22 @@ describe('Persistent reader chapter navigation integrated journey', () => {
       '第六章：兩盞同夜的燈',
       '第七章：替誰留下',
       '第八章：可回頭的潮聲',
+      '第九章：離岸燈站調查',
+      '第十章：撤照檔案',
+      '第十一章：拒絕的浪',
+      '第十二章：受限可讀',
+      '第十三章：離岸燈的答案',
     ]) {
       fireEvent.click(persistentNext)
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
 
-    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 8 / 8 章')
+    expect(screen.getByRole('progressbar', { name: '目前章節位置' })).toHaveTextContent('第 13 / 13 章')
     expect(persistentNext).toBeDisabled()
 
-    // Previous returns to Chapter 7 after the expanded readable arc.
+    // Previous returns to Chapter 12 after the expanded readable arc.
     fireEvent.click(persistentPrev)
-    expect(screen.getByRole('heading', { name: '第七章：替誰留下' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '第十二章：受限可讀' })).toBeInTheDocument()
     expect(persistentNext).not.toBeDisabled()
     expect(persistentPrev).not.toBeDisabled()
   })
@@ -1072,7 +1082,7 @@ describe('Persistent reader chapter navigation integrated journey', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('progressbar', { name: '目前章節位置' }),
-    ).toHaveTextContent('第 2 / 8 章')
+    ).toHaveTextContent('第 2 / 13 章')
 
     swipeLeft()
     expect(
@@ -1996,12 +2006,12 @@ describe('Readable Depth Presentation V1 integration', () => {
     expect(within(tideArchiveCard as HTMLElement).getByText('10 章可讀')).toBeInTheDocument()
     expect(within(emberCrownCard as HTMLElement).getByText('9 章可讀')).toBeInTheDocument()
     expect(within(orbitLightCard as HTMLElement).getByText('9 章可讀')).toBeInTheDocument()
-    expect(within(tideCityCard as HTMLElement).getByText('8 章可讀')).toBeInTheDocument()
+    expect(within(tideCityCard as HTMLElement).getByText('13 章可讀')).toBeInTheDocument()
 
     // Editorial shelf
     const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
-    expect(within(editorialShelf).getByText('林澄 · 8 章可讀')).toBeInTheDocument()
-    expect(within(editorialShelf).getByText('沈墨白 · 8 章可讀')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('林澄 · 13 章可讀')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('沈墨白 · 13 章可讀')).toBeInTheDocument()
     expect(within(editorialShelf).getByText('韓亦晴 · 8 章可讀')).toBeInTheDocument()
   })
 
@@ -2053,5 +2063,59 @@ describe('Readable Depth Presentation V1 integration', () => {
     expect(screen.getByText('可閱讀', { selector: 'dt' })).toBeInTheDocument()
     expect(screen.getByText('2 章', { selector: 'dd' })).toBeInTheDocument()
     expect(screen.getByText('目前可連續閱讀前 2 章')).toBeInTheDocument()
+  })
+
+  it('navigates Wave 6 Tide City mobile reading journey through Ch8 continuation into Ch9 and verifies TOC', () => {
+    render(<App dependencies={createDependencies()} />)
+
+    // Catalog -> locate 《潮汐之城》
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    const tideCityCard = within(resultsRegion).getByRole('heading', { level: 3, name: '潮汐之城' }).closest('article')
+    expect(tideCityCard).not.toBeNull()
+    expect(within(tideCityCard as HTMLElement).getByText('13 章可讀')).toBeInTheDocument()
+
+    // Open Book Detail
+    openBookDetail()
+    expect(screen.getByRole('heading', { level: 1, name: '潮汐之城' })).toBeInTheDocument()
+    expect(screen.getByText('共 13 章')).toBeInTheDocument()
+    expect(screen.getByText('目前 13 章皆可閱讀')).toBeInTheDocument()
+
+    // Open Chapter 8 from chapter list
+    const chapterList = screen.getByRole('list', { name: '章節預覽列表' })
+    const ch8Item = within(chapterList).getByText('第八章：可回頭的潮聲').closest('li')
+    expect(ch8Item).not.toBeNull()
+    fireEvent.click(within(ch8Item as HTMLElement).getByRole('button'))
+
+    // In Reader at Chapter 8
+    expect(screen.getByRole('heading', { name: '第八章：可回頭的潮聲' })).toBeInTheDocument()
+
+    // Chapter-end continuation surface displays real Chapter 9 title
+    const chapterEndSurface = screen.getByTestId('chapter-end-surface')
+    const continueBtn = within(chapterEndSurface).getByRole('button', {
+      name: '繼續閱讀：第九章：離岸燈站調查',
+    })
+    expect(continueBtn).toBeInTheDocument()
+
+    // Continue opens Chapter 9 with substantive prose
+    fireEvent.click(continueBtn)
+    expect(screen.getByRole('heading', { name: '第九章：離岸燈站調查' })).toBeInTheDocument()
+    expect(screen.getByText(/清晨退潮時，遠海那一聲微弱的潮響在澄夏的右耳邊逐漸散開/)).toBeInTheDocument()
+
+    // TOC shows Ch9–13 READABLE
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    for (const title of [
+      '第九章：離岸燈站調查',
+      '第十章：撤照檔案',
+      '第十一章：拒絕的浪',
+      '第十二章：受限可讀',
+      '第十三章：離岸燈的答案',
+    ]) {
+      const btn = within(dialog).getByText(title).closest('button') as HTMLButtonElement
+      expect(btn).not.toBeNull()
+      expect(btn).not.toBeDisabled()
+      expect(within(btn.closest('li') as HTMLElement).queryByText('已鎖定')).not.toBeInTheDocument()
+      expect(within(btn.closest('li') as HTMLElement).queryByText('暫不可用')).not.toBeInTheDocument()
+    }
   })
 })
