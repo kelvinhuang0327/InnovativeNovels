@@ -62,6 +62,11 @@ describe('publication candidate builder', () => {
       'chapter-tide-archive-003',
       'chapter-tide-archive-004',
       'chapter-tide-archive-005',
+      'chapter-tide-archive-006',
+      'chapter-tide-archive-007',
+      'chapter-tide-archive-008',
+      'chapter-tide-archive-009',
+      'chapter-tide-archive-010',
     ])
     expect(first.candidate).toEqual(second.candidate)
   })
@@ -119,6 +124,11 @@ describe('publication candidate builder', () => {
       'chapter-tide-archive-003',
       'chapter-tide-archive-004',
       'chapter-tide-archive-005',
+      'chapter-tide-archive-006',
+      'chapter-tide-archive-007',
+      'chapter-tide-archive-008',
+      'chapter-tide-archive-009',
+      'chapter-tide-archive-010',
     ])
     expect(result.issues.map((item) => item.code)).toContain(
       'CHAPTER_ID_COLLISION',
@@ -161,6 +171,11 @@ describe('publication candidate builder', () => {
       CHAPTER_ACCESS.READABLE,
       CHAPTER_ACCESS.READABLE,
       CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
     ])
 
     const invalid = buildPublicationCandidate(
@@ -190,11 +205,16 @@ describe('publication candidate builder', () => {
       description: metadata.description,
     })
     expect(result.candidate?.chapters.map((chapter) => chapter.prose?.length)).toEqual([
-      9,
-      11,
+      14,
+      16,
       11,
       52,
       61,
+      10,
+      10,
+      12,
+      12,
+      13,
     ])
     expect(() =>
       parseContentBookFixture(

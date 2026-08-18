@@ -242,7 +242,7 @@ describe('Authoring project library UI', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Continue Published Book' }))
     expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
-    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(5)
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(10)
 
     fireEvent.change(screen.getByLabelText('Current Project'), {
       target: { value: 'project-b' },
@@ -258,7 +258,7 @@ describe('Authoring project library UI', () => {
       (screen.getByRole('textbox', {
         name: 'Generated Continuation Prompt',
       }) as HTMLTextAreaElement).value,
-    ).toContain('starting at sequence 6')
+    ).toContain('starting at sequence 11')
 
     const loaded = repository.load()
     expect(loaded.ok).toBe(true)
@@ -266,7 +266,7 @@ describe('Authoring project library UI', () => {
       const projectA = loaded.store.projects.find((project) => project.projectId === 'project-a')
       const projectB = loaded.store.projects.find((project) => project.projectId === 'project-b')
       expect(projectA?.session.targetPublishedBookId).toBe('book-tide-archive')
-      expect(projectA?.session.draft?.chapters).toHaveLength(5)
+      expect(projectA?.session.draft?.chapters).toHaveLength(10)
       expect(projectB?.session.targetPublishedBookId).toBeUndefined()
       expect(projectB?.session.draft).toBeUndefined()
     }

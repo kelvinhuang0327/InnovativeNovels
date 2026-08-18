@@ -354,8 +354,8 @@ describe('AuthoringPreviewScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue Published Book' }))
 
     expect(await screen.findByRole('heading', { name: '潮汐檔案' })).toBeInTheDocument()
-    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(5)
-    expect(screen.getByText('第 5 章：第七口井')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(10)
+    expect(screen.getByText('第 10 章：第十章：未止的鐘聲')).toBeInTheDocument()
     expect(screen.getByText(/Base fingerprint captured/)).toHaveTextContent(baseFingerprint)
     expect(sessionRepository.load()).toEqual(
       expect.objectContaining({
@@ -430,7 +430,7 @@ describe('AuthoringPreviewScreen', () => {
       (screen.getByRole('textbox', {
         name: 'Generated Continuation Prompt',
       }) as HTMLTextAreaElement).value,
-    ).toContain('starting at sequence 6')
+    ).toContain('starting at sequence 11')
     const continuationPrompt = (
       screen.getByRole('textbox', {
         name: 'Generated Continuation Prompt',
@@ -447,14 +447,14 @@ describe('AuthoringPreviewScreen', () => {
     const continuationJson = JSON.stringify({
       chapters: [
         {
-          sequence: 6,
-          title: '第六章',
-          prose: '六之一。\n\n六之二。\n\n六之三。\n\n六之四。\n\n六之五。',
+          sequence: 11,
+          title: '第十一章',
+          prose: '十一之一。\n\n十一之二。\n\n十一之三。\n\n十一之四。\n\n十一之五。',
         },
         {
-          sequence: 7,
-          title: '第七章',
-          prose: '七之一。\n\n七之二。\n\n七之三。\n\n七之四。\n\n七之五。',
+          sequence: 12,
+          title: '第十二章',
+          prose: '十二之一。\n\n十二之二。\n\n十二之三。\n\n十二之四。\n\n十二之五。',
         },
       ],
     })
@@ -463,9 +463,9 @@ describe('AuthoringPreviewScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Import Continuation' }))
     expect(screen.getByText('品質檢查：STALE')).toBeInTheDocument()
-    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(7)
+    expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(12)
     expect(screen.getByText('第 1 章：沉入海底的鐘')).toBeInTheDocument()
-    expect(screen.getByText('第 5 章：第七口井')).toBeInTheDocument()
+    expect(screen.getByText('第 10 章：第十章：未止的鐘聲')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Re-check Quality' }))
     fireEvent.change(screen.getByDisplayValue('下一次低潮前找到第一座鐘。'), {
@@ -483,15 +483,15 @@ describe('AuthoringPreviewScreen', () => {
       appendedChapters: Array<{ sequence: number }>
       updatedFixturePreview: { chapters: unknown[] }
     }
-    expect(candidate.appendedChapters.map(({ sequence }) => sequence)).toEqual([6, 7])
-    expect(candidate.updatedFixturePreview.chapters).toHaveLength(7)
+    expect(candidate.appendedChapters.map(({ sequence }) => sequence)).toEqual([11, 12])
+    expect(candidate.updatedFixturePreview.chapters).toHaveLength(12)
     expect(sessionRepository.load()?.storyBible.openThreads).toEqual([
       '下一次低潮前找到第一座鐘。',
       '確認落後林嶼十一秒的第二個聲音是誰。',
     ])
     expect(JSON.stringify(liveProduction)).toBe(productionBefore)
     expect(liveProduction.books).toHaveLength(catalogCountBefore)
-    expect(productionBook.chapters).toHaveLength(5)
+    expect(productionBook.chapters).toHaveLength(10)
   })
 
   it('preserves the existing session when replacement is cancelled', async () => {

@@ -314,7 +314,7 @@ describe('loadProductionCatalogContent', () => {
     expect(books[0].chapters.map((chapter) => chapter.sequence)).toEqual([
       3, 1, 2, 4, 5, 6, 7, 8,
     ])
-    expect(proseByChapterId.size).toBe(115)
+    expect(proseByChapterId.size).toBe(128)
   })
 
   it('loads the complete owner-reviewed tide archive metadata and paragraphs', () => {
@@ -337,6 +337,11 @@ describe('loadProductionCatalogContent', () => {
       '第四點整',
       '退潮後的灰線',
       '第七口井',
+      '第六章：追尋鐘聲',
+      '第七章：聲音的真相',
+      '第八章：沉降的機關',
+      '第九章：黑點的啟示',
+      '第十章：未止的鐘聲',
     ])
     expect(entry?.chapters.every((chapter) => chapter.access === 'READABLE')).toBe(true)
     expect(entry?.chapters.map((chapter) => chapter.id)).toEqual([
@@ -345,8 +350,15 @@ describe('loadProductionCatalogContent', () => {
       'chapter-tide-archive-003',
       'chapter-tide-archive-004',
       'chapter-tide-archive-005',
+      'chapter-tide-archive-006',
+      'chapter-tide-archive-007',
+      'chapter-tide-archive-008',
+      'chapter-tide-archive-009',
+      'chapter-tide-archive-010',
     ])
-    expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([1, 2, 3, 4, 5])
+    expect(entry?.chapters.map((chapter) => chapter.sequence)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ])
     expect(proseByChapterId.get('chapter-tide-archive-001')).toEqual(
       tideArchiveFixture.chapters[0].prose,
     )

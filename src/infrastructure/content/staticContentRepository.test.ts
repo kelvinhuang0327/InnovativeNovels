@@ -148,6 +148,10 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-ember-dawns-shadow',
     'chapter-ember-the-cold-hour',
     'chapter-ember-crown-relit',
+    'chapter-ember-crown-006',
+    'chapter-ember-crown-007',
+    'chapter-ember-crown-008',
+    'chapter-ember-crown-009',
   ],
   'book-orbit-last-light': [
     'chapter-orbit-final-shift',
@@ -155,6 +159,10 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-orbit-fracture-line',
     'chapter-orbit-last-brace',
     'chapter-orbit-safe-passage',
+    'chapter-orbit-006',
+    'chapter-orbit-007',
+    'chapter-orbit-008',
+    'chapter-orbit-009',
   ],
   'book-legacy-book-1': [
     'chapter-legacy-book-1-1',
@@ -198,6 +206,11 @@ const EXPECTED_AUTHORED_CHAPTER_ORDER: Record<string, readonly string[]> = {
     'chapter-tide-archive-003',
     'chapter-tide-archive-004',
     'chapter-tide-archive-005',
+    'chapter-tide-archive-006',
+    'chapter-tide-archive-007',
+    'chapter-tide-archive-008',
+    'chapter-tide-archive-009',
+    'chapter-tide-archive-010',
   ],
 }
 
@@ -311,6 +324,10 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     access: CHAPTER_ACCESS.READABLE,
   },
   'chapter-ember-crown-relit': { sequence: 5, access: CHAPTER_ACCESS.READABLE },
+  'chapter-ember-crown-006': { sequence: 6, access: CHAPTER_ACCESS.READABLE },
+  'chapter-ember-crown-007': { sequence: 7, access: CHAPTER_ACCESS.READABLE },
+  'chapter-ember-crown-008': { sequence: 8, access: CHAPTER_ACCESS.READABLE },
+  'chapter-ember-crown-009': { sequence: 9, access: CHAPTER_ACCESS.READABLE },
   'chapter-orbit-final-shift': { sequence: 1, access: CHAPTER_ACCESS.READABLE },
   'chapter-orbit-echo-signal': { sequence: 2, access: CHAPTER_ACCESS.READABLE },
   'chapter-orbit-fracture-line': {
@@ -322,6 +339,10 @@ const EXPECTED_CHAPTER_SEQUENCE_AND_ACCESS: Record<
     sequence: 5,
     access: CHAPTER_ACCESS.READABLE,
   },
+  'chapter-orbit-006': { sequence: 6, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-007': { sequence: 7, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-008': { sequence: 8, access: CHAPTER_ACCESS.READABLE },
+  'chapter-orbit-009': { sequence: 9, access: CHAPTER_ACCESS.READABLE },
 }
 
 for (const bookId of ['book-legacy-book-1', 'book-legacy-book-2']) {
@@ -506,7 +527,7 @@ describe('StaticContentRepository parity', () => {
       expect(repository.getChapterProse(chapterId)).toEqual(expectedProse)
     }
 
-    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(17)
+    expect(Object.keys(EXPECTED_ACCESSIBLE_PROSE)).toHaveLength(22)
   })
 
   it('lets the reader open the full published first chapter', () => {
@@ -545,12 +566,12 @@ describe('StaticContentRepository parity', () => {
     ['book-ember-crown', emberCrownFixture],
     ['book-orbit-last-light', orbitLastLightFixture],
   ])(
-    '%s has exactly five READABLE chapters with non-empty fixture-matching prose',
+    '%s has exactly nine READABLE chapters with non-empty fixture-matching prose',
     (bookId, fixture) => {
       const repository = new StaticContentRepository()
       const entry = repository.getBook(bookId)
 
-      expect(entry?.chapters).toHaveLength(5)
+      expect(entry?.chapters).toHaveLength(9)
       expect(entry?.chapters.every((chapter) => chapter.access === CHAPTER_ACCESS.READABLE)).toBe(true)
 
       for (const fixtureChapter of fixture.chapters) {
