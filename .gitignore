@@ -31,6 +31,17 @@ android/.gradle
 android/build
 android/app/build
 
+# iOS Signing & Distribution Credentials (strictly uncommitted)
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.keychain
+*.keychain-db
+*.p8
+*.pem
+ExportOptions.plist
+
 # Fable Nightly Dashboard generated projections
 /tests/fable-nightly/dashboard-data/nightly-data.json
 /tests/fable-nightly/dashboard-data/nightly-data.js
