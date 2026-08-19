@@ -26,7 +26,12 @@ dist-ssr
 # Native generated build outputs
 ios/App/DerivedData
 ios/App/Pods
+ios/build
+android/.gradle
+android/build
+android/app/build
 
 # Fable Nightly Dashboard generated projections
 /tests/fable-nightly/dashboard-data/nightly-data.json
 /tests/fable-nightly/dashboard-data/nightly-data.js
+.gstack/
