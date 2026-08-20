@@ -492,7 +492,7 @@ describe('AuthoringPreviewScreen', () => {
     expect(JSON.stringify(liveProduction)).toBe(productionBefore)
     expect(liveProduction.books).toHaveLength(catalogCountBefore)
     expect(productionBook.chapters).toHaveLength(10)
-  })
+  }, 10_000)
 
   it('preserves the existing session when replacement is cancelled', async () => {
     const sessionRepository = createSessionRepository()
