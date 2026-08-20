@@ -417,8 +417,10 @@ function verifyAab(debugCertificate, expected) {
     return result
   }
 
-  const verification = run(jarsigner, ['-verify', '-strict', '-certs', aabPath])
-  result.signatureVerified = verification.exitCode === 0 && /jar verified\./i.test(verification.output) && !/jar is unsigned|no manifest/i.test(verification.output)
+  // Local upload certificates are intentionally self-signed; identity is enforced by the expected fingerprint below.
+  const verification = run(jarsigner, ['-verify', '-certs', aabPath])
+  const hasFatalSignatureFailure = /jar is unsigned|no manifest|jar verification failed|does not verify|invalid signature|signature[^\n]*(?:failed|invalid|error)|digest[^\n]*error/i.test(verification.output)
+  result.signatureVerified = verification.exitCode === 0 && /jar verified\./i.test(verification.output) && !hasFatalSignatureFailure
   result.signerFingerprint = parseFingerprint(verification.output)
   if (!result.signerFingerprint) {
     const certificate = run(keytool, ['-printcert', '-jarfile', aabPath])
