@@ -42,6 +42,10 @@ android/app/build
 *.pem
 ExportOptions.plist
 
+# Android Signing & Distribution Credentials (strictly uncommitted)
+*.jks
+*.keystore
+
 # Fable Nightly Dashboard generated projections
 /tests/fable-nightly/dashboard-data/nightly-data.json
 /tests/fable-nightly/dashboard-data/nightly-data.js

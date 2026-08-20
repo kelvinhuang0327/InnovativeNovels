@@ -1,8 +1,65 @@
 apply plugin: 'com.android.application'
 
+def androidReleaseSigningValues = [
+    'ANDROID_KEYSTORE_PATH': System.getenv('ANDROID_KEYSTORE_PATH'),
+    'ANDROID_KEYSTORE_PASSWORD': System.getenv('ANDROID_KEYSTORE_PASSWORD'),
+    'ANDROID_KEY_ALIAS': System.getenv('ANDROID_KEY_ALIAS'),
+    'ANDROID_KEY_PASSWORD': System.getenv('ANDROID_KEY_PASSWORD')
+]
+def hasAnyAndroidReleaseSigningInput = androidReleaseSigningValues.values().any { value -> value != null && !value.isEmpty() }
+def hasCompleteAndroidReleaseSigningInput = androidReleaseSigningValues.values().every { value -> value != null && !value.isEmpty() }
+
+if (hasAnyAndroidReleaseSigningInput && !hasCompleteAndroidReleaseSigningInput) {
+    throw new GradleException('Android release signing requires ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD together.')
+}
+
+def androidReleaseKeystorePath = hasCompleteAndroidReleaseSigningInput
+    ? androidReleaseSigningValues['ANDROID_KEYSTORE_PATH']
+    : null
+
+if (hasCompleteAndroidReleaseSigningInput && !new File(androidReleaseKeystorePath).isAbsolute()) {
+    throw new GradleException('ANDROID_KEYSTORE_PATH must be an absolute path outside the repository root.')
+}
+
+def androidReleaseKeystoreFile = hasCompleteAndroidReleaseSigningInput
+    ? project.file(androidReleaseKeystorePath)
+    : null
+
+if (hasCompleteAndroidReleaseSigningInput && !androidReleaseKeystoreFile.isFile()) {
+    throw new GradleException('ANDROID_KEYSTORE_PATH must point to an existing Android release keystore.')
+}
+
+if (hasCompleteAndroidReleaseSigningInput) {
+    def canonicalRepositoryRoot = project.rootProject.projectDir.parentFile.canonicalPath
+    def canonicalKeystorePath = androidReleaseKeystoreFile.canonicalPath
+    def repositoryRootPrefix = canonicalRepositoryRoot.endsWith(File.separator)
+        ? canonicalRepositoryRoot
+        : "${canonicalRepositoryRoot}${File.separator}"
+    if (canonicalKeystorePath == canonicalRepositoryRoot || canonicalKeystorePath.startsWith(repositoryRootPrefix)) {
+        throw new GradleException('ANDROID_KEYSTORE_PATH must point outside the repository root so private material stays untracked.')
+    }
+
+    def defaultDebugKeystoreFile = new File(System.getProperty('user.home'), '.android/debug.keystore')
+    def isDebugKeystore = androidReleaseKeystoreFile.name.equalsIgnoreCase('debug.keystore')
+        || androidReleaseKeystoreFile.canonicalPath == defaultDebugKeystoreFile.canonicalPath
+    if (isDebugKeystore) {
+        throw new GradleException('Refusing to use the Android debug keystore for release signing.')
+    }
+}
+
 android {
     namespace "com.innovativenovels.app"
     compileSdk rootProject.ext.compileSdkVersion
+    if (hasCompleteAndroidReleaseSigningInput) {
+        signingConfigs {
+            release {
+                storeFile androidReleaseKeystoreFile
+                storePassword androidReleaseSigningValues['ANDROID_KEYSTORE_PASSWORD']
+                keyAlias androidReleaseSigningValues['ANDROID_KEY_ALIAS']
+                keyPassword androidReleaseSigningValues['ANDROID_KEY_PASSWORD']
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.innovativenovels.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -20,6 +77,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasCompleteAndroidReleaseSigningInput) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
