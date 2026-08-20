@@ -1,5 +1,55 @@
 apply plugin: 'com.android.application'
 
+def readReleaseSigningIdentity() {
+    def envStoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+    def envStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+    def envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+    def envKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+
+    if (envStoreFile && envStorePassword && envKeyAlias && envKeyPassword) {
+        return [
+            storeFile    : envStoreFile,
+            storePassword: envStorePassword,
+            keyAlias     : envKeyAlias,
+            keyPassword  : envKeyPassword
+        ]
+    }
+
+    def propsFile = rootProject.file("keystore.properties")
+    if (propsFile.exists()) {
+        def props = new Properties()
+        propsFile.withInputStream { stream -> props.load(stream) }
+        def storeFile = props.getProperty("storeFile")
+        def storePassword = props.getProperty("storePassword")
+        def keyAlias = props.getProperty("keyAlias")
+        def keyPassword = props.getProperty("keyPassword")
+        if (storeFile && storePassword && keyAlias && keyPassword) {
+            return [
+                storeFile    : storeFile,
+                storePassword: storePassword,
+                keyAlias     : keyAlias,
+                keyPassword  : keyPassword
+            ]
+        }
+    }
+
+    return null
+}
+
+def isDebugKeystorePath(pathString) {
+    if (pathString == null) {
+        return false
+    }
+    def normalized = pathString.replace("\\", "/").toLowerCase()
+    return normalized.endsWith("/debug.keystore") || normalized == "debug.keystore"
+}
+
+def releaseSigningIdentity = readReleaseSigningIdentity()
+if (releaseSigningIdentity != null && isDebugKeystorePath(releaseSigningIdentity.storeFile)) {
+    logger.warn("Release signing identity rejected: debug.keystore cannot be used as a production/distribution key.")
+    releaseSigningIdentity = null
+}
+
 android {
     namespace "com.innovativenovels.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,10 +66,27 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    if (releaseSigningIdentity != null) {
+        signingConfigs {
+            release {
+                def storeFileRef = new File(releaseSigningIdentity.storeFile)
+                if (!storeFileRef.isAbsolute()) {
+                    storeFileRef = rootProject.file(releaseSigningIdentity.storeFile)
+                }
+                storeFile storeFileRef
+                storePassword releaseSigningIdentity.storePassword
+                keyAlias releaseSigningIdentity.keyAlias
+                keyPassword releaseSigningIdentity.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigningIdentity != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
