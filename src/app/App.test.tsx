@@ -286,6 +286,32 @@ describe('Wave 1 core reading journey', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the saved chapter progress supplied by the App destination', () => {
+    window.localStorage.setItem(
+      READING_STATE_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 2,
+        positions: {
+          'book-tide-city': {
+            bookId: 'book-tide-city',
+            chapterId: 'chapter-tide-letter',
+            paragraphIndex: 0,
+            chapterProgress: 0.456,
+          },
+        },
+      }),
+    )
+
+    render(<App dependencies={createDependencies()} />)
+    openBookDetail()
+
+    expect(screen.getByText('目前讀到：第一章：潮聲來信')).toBeInTheDocument()
+    expect(screen.getByText('本章進度 46%')).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '本章進度 46%' }),
+    ).toHaveAttribute('value', '46')
+  })
+
   it('navigates by explicit sequence and renders the newly readable third chapter', () => {
     const contentRepository = new StaticContentRepository()
     const proseRequest = vi.spyOn(contentRepository, 'getChapterProse')

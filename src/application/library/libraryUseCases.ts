@@ -13,6 +13,23 @@ export interface RecentReadingEntry {
   readonly chapterTitle?: string
 }
 
+export function filterBookshelfBooks(
+  books: readonly ContentBook[],
+  searchText?: string,
+): readonly ContentBook[] {
+  const normalizedQuery = searchText?.trim().toLowerCase() ?? ''
+
+  if (normalizedQuery.length === 0) {
+    return books
+  }
+
+  return books.filter(({ book }) =>
+    [book.title, book.authorName].some((field) =>
+      field.toLowerCase().includes(normalizedQuery),
+    ),
+  )
+}
+
 function uniqueBookIds(bookIds: readonly string[]): readonly string[] {
   const seen = new Set<string>()
   const unique: string[] = []

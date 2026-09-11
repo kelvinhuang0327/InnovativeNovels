@@ -590,6 +590,11 @@ function App({
               hasSavedPosition={destination?.isContinuing ?? false}
               continueChapterId={continueChapterId}
               continueChapterTitle={continueChapterTitle}
+              continueChapterProgress={
+                destination?.isContinuing
+                  ? destination.position.chapterProgress
+                  : undefined
+              }
               isInBookshelf={bookShelfRepo.contains(screen.bookId)}
               sessionReturnStatus={screen.sessionReturnStatus}
               onBack={() =>

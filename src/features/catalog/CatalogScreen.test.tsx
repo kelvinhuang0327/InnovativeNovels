@@ -19,19 +19,20 @@ function makeBook(
   categoryLabel: string,
   description: string,
   authorName = '作者',
+  chapterCount = 1,
 ): ContentBook {
+  const bookIdentifier = bookId(id)
+
   return {
-    book: { id: bookId(id), title, authorName, categoryLabel },
+    book: { id: bookIdentifier, title, authorName, categoryLabel },
     description,
-    chapters: [
-      {
-        id: chapterId(`${id}-c1`),
-        bookId: bookId(id),
-        title: '第一章',
-        sequence: chapterSequence(1),
-        access: CHAPTER_ACCESS.READABLE,
-      },
-    ],
+    chapters: Array.from({ length: chapterCount }, (_, index) => ({
+      id: chapterId(`${id}-c${index + 1}`),
+      bookId: bookIdentifier,
+      title: index === 0 ? '第一章' : `第${index + 1}章`,
+      sequence: chapterSequence(index + 1),
+      access: CHAPTER_ACCESS.READABLE,
+    })),
   }
 }
 
@@ -41,6 +42,21 @@ const books: readonly ContentBook[] = [
   makeBook('book-c', '城市夜歸人', '都市', '深夜的都市告白故事。', '林晚'),
   makeBook('book-d', '雨中告白', '言情', '一段遲來的告白。', 'Wendy Lai'),
 ]
+
+const sortingBooks: readonly ContentBook[] = [
+  makeBook('sort-a', '來源第一本', '懸疑', '排序測試 A', '作者甲', 3),
+  makeBook('sort-b', '來源第二本', '仙俠', '排序測試 B', '作者乙', 1),
+  makeBook('sort-c', '來源第三本', '懸疑', '排序測試 C', '作者丙', 3),
+  makeBook('sort-d', '來源第四本', '仙俠', '排序測試 D', '作者丁', 2),
+]
+
+function getResultTitles(heading = '探索更多故事') {
+  return within(
+    screen.getByRole('region', { name: heading }),
+  )
+    .getAllByRole('heading', { level: 3 })
+    .map((heading) => heading.textContent)
+}
 
 describe('CatalogScreen', () => {
   afterEach(() => {
@@ -67,6 +83,187 @@ describe('CatalogScreen', () => {
       'true',
     )
     expect(screen.getByText('共 4 本')).toBeInTheDocument()
+  })
+
+  it('sorts main results by chapter count stably without mutating the input order', () => {
+    const inputOrder = sortingBooks.map(({ book }) => book.id)
+
+    render(
+      <CatalogScreen
+        books={sortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(sortControl).toHaveValue('bookstore')
+    expect(screen.getByRole('option', { name: '書庫順序' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: '章節較多優先' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: '章節較少優先' }),
+    ).toBeInTheDocument()
+    expect(getResultTitles()).toEqual([
+      '來源第一本',
+      '來源第二本',
+      '來源第三本',
+      '來源第四本',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'chapters-desc' } })
+    expect(getResultTitles()).toEqual([
+      '來源第一本',
+      '來源第三本',
+      '來源第四本',
+      '來源第二本',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'chapters-asc' } })
+    expect(getResultTitles()).toEqual([
+      '來源第二本',
+      '來源第四本',
+      '來源第一本',
+      '來源第三本',
+    ])
+    expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+  })
+
+  it('sorts after title, author, and description search filtering', () => {
+    const searchableBooks: readonly ContentBook[] = [
+      makeBook(
+        'search-title',
+        '排序中的潮聲',
+        '懸疑',
+        '沒有這個搜尋詞',
+        '作者 A',
+        1,
+      ),
+      makeBook(
+        'search-author',
+        '平靜書名',
+        '懸疑',
+        '沒有這個搜尋詞',
+        '排序作者',
+        3,
+      ),
+      makeBook(
+        'search-description',
+        '另一個書名',
+        '懸疑',
+        '描述包含排序詞',
+        '作者 C',
+        2,
+      ),
+      makeBook(
+        'search-no-match',
+        '不相關的書',
+        '懸疑',
+        '普通描述',
+        '作者 D',
+        4,
+      ),
+    ]
+
+    render(
+      <CatalogScreen
+        books={searchableBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '排序' },
+    })
+    fireEvent.change(screen.getByLabelText('排序方式'), {
+      target: { value: 'chapters-desc' },
+    })
+
+    expect(getResultTitles('篩選結果')).toEqual([
+      '平靜書名',
+      '另一個書名',
+      '排序中的潮聲',
+    ])
+    expect(screen.getByText('找到 3 本')).toBeInTheDocument()
+  })
+
+  it('sorts the selected genre subset', () => {
+    render(
+      <CatalogScreen
+        books={sortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('排序方式'), {
+      target: { value: 'chapters-desc' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '仙俠' }))
+
+    expect(getResultTitles('篩選結果')).toEqual(['來源第四本', '來源第二本'])
+    expect(screen.getByText('找到 2 本')).toBeInTheDocument()
+  })
+
+  it('keeps sort-only state outside filtering and preserves callbacks and stable IDs', () => {
+    const onContinueBook = vi.fn()
+    const onOpenAuthoring = vi.fn()
+    const onOpenBook = vi.fn()
+    const chapter = sortingBooks[0].chapters[0]
+    const continueEntry: ContinueReadingEntry = {
+      book: sortingBooks[0],
+      chapter,
+      position: {
+        bookId: sortingBooks[0].book.id,
+        chapterId: chapter.id,
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
+    }
+
+    render(
+      <CatalogScreen
+        books={sortingBooks}
+        continueReading={[continueEntry]}
+        onContinueBook={onContinueBook}
+        onOpenAuthoring={onOpenAuthoring}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('排序方式'), {
+      target: { value: 'chapters-desc' },
+    })
+
+    expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '閱讀焦點作品' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '繼續閱讀' })).toBeInTheDocument()
+    const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
+    expect(
+      within(editorialShelf)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.getAttribute('aria-label')),
+    ).toEqual(['來源第一本', '來源第二本', '來源第三本'])
+    expect(screen.queryByRole('heading', { name: '篩選結果' })).not.toBeInTheDocument()
+    expect(screen.getByText('共 4 本')).toBeInTheDocument()
+    expect(onOpenBook).not.toHaveBeenCalled()
+    expect(onContinueBook).not.toHaveBeenCalled()
+    expect(onOpenAuthoring).not.toHaveBeenCalled()
+
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    fireEvent.click(
+      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+    )
+
+    expect(onOpenBook).toHaveBeenCalledTimes(1)
+    expect(onOpenBook).toHaveBeenCalledWith('sort-a')
+    expect(onContinueBook).not.toHaveBeenCalled()
+    expect(onOpenAuthoring).not.toHaveBeenCalled()
   })
 
   it('opens the deterministic first book from the bookstore hero action', () => {
@@ -342,6 +539,9 @@ describe('CatalogScreen', () => {
       />,
     )
 
+    fireEvent.change(screen.getByLabelText('排序方式'), {
+      target: { value: 'chapters-desc' },
+    })
     fireEvent.change(screen.getByLabelText('搜尋小說'), {
       target: { value: '劍客' },
     })
@@ -355,6 +555,7 @@ describe('CatalogScreen', () => {
       'true',
     )
     expect(screen.getByText('共 4 本')).toBeInTheDocument()
+    expect(screen.getByLabelText('排序方式')).toHaveValue('chapters-desc')
   })
 
   it('resets from the empty state back to the full catalog', () => {

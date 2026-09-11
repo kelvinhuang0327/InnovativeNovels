@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config([
   {
-    ignores: ['dist', 'android'],
+    ignores: ['dist', 'android', 'ios/App/DerivedData', 'ios/build'],
   },
   {
     files: ['**/*.{ts,tsx}'],

@@ -15,6 +15,30 @@ import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import { DEFAULT_READER_PREFERENCES } from '../../domain/reading/readerPreferences'
 import { ReaderScreen } from './ReaderScreen'
 
+const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  'scrollIntoView',
+)
+
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  })
+})
+
+afterEach(() => {
+  if (originalScrollIntoViewDescriptor) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      'scrollIntoView',
+      originalScrollIntoViewDescriptor,
+    )
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+  }
+})
+
 const mockBook = {
   book: {
     id: bookId('b1'),
@@ -188,10 +212,22 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
     const openBookmarksButton = screen.getByRole('button', {
       name: '開啟書籤列表',
     })
+    expect(openBookmarksButton).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(openBookmarksButton).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(openBookmarksButton)
 
-    expect(screen.getByRole('dialog', { name: '章節書籤' })).toBeInTheDocument()
+    const bookmarksDialog = screen.getByRole('dialog', { name: '章節書籤' })
+    expect(bookmarksDialog).toBeInTheDocument()
+    expect(bookmarksDialog).toHaveFocus()
+    expect(openBookmarksButton).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('尚無書籤')).toBeInTheDocument()
+
+    fireEvent.click(
+      within(bookmarksDialog).getByRole('button', { name: '關閉書籤' }),
+    )
+
+    expect(openBookmarksButton).toHaveAttribute('aria-expanded', 'false')
+    expect(openBookmarksButton).toHaveFocus()
   })
 })
 

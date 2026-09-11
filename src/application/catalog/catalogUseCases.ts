@@ -53,6 +53,21 @@ export function filterCatalog(
   })
 }
 
+export function filterChaptersByTitle(
+  chapters: readonly Chapter[],
+  searchText?: string,
+): readonly Chapter[] {
+  const normalizedQuery = searchText?.trim().toLowerCase() ?? ''
+
+  if (normalizedQuery.length === 0) {
+    return chapters
+  }
+
+  return chapters.filter((chapter) =>
+    chapter.title.toLowerCase().includes(normalizedQuery),
+  )
+}
+
 export interface ReadingDepthSummary {
   readonly totalChapters: number
   readonly openableChapters: number

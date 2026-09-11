@@ -156,6 +156,7 @@ export function ReaderScreen({
     pageIndex: 0,
     pageCount: 1,
   })
+  const bookmarksTriggerRef = useRef<HTMLButtonElement>(null)
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
   const proseRef = useRef<HTMLElement>(null)
@@ -804,10 +805,13 @@ export function ReaderScreen({
 
   const bookmarksListButton = (
     <button
+      ref={bookmarksTriggerRef}
       type="button"
       className="button-secondary button-open-bookmarks"
       onClick={() => setIsBookmarksOpen(true)}
       aria-label="開啟書籤列表"
+      aria-haspopup="dialog"
+      aria-expanded={isBookmarksOpen}
     >
       {isMobileReaderChrome ? '書籤' : `書籤列表 (${bookmarks.length})`}
     </button>
@@ -1182,6 +1186,7 @@ export function ReaderScreen({
       <ChapterBookmarksModal
         isOpen={isBookmarksOpen}
         bookmarks={bookmarks}
+        triggerRef={bookmarksTriggerRef}
         onClose={() => setIsBookmarksOpen(false)}
         onSelectBookmark={onSelectBookmark}
         onRemoveBookmark={onRemoveBookmark}

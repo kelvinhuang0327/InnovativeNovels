@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import {
+  filterChaptersByTitle,
   formatBookDetailDepthSummary,
   getReadingDepth,
 } from '../../application/catalog/catalogUseCases'
@@ -14,6 +16,7 @@ interface BookDetailScreenProps {
   readonly hasSavedPosition: boolean
   readonly continueChapterId?: string
   readonly continueChapterTitle?: string
+  readonly continueChapterProgress?: number
   readonly sessionReturnStatus?: string
   readonly isInBookshelf?: boolean
   readonly onBack: () => void
@@ -30,11 +33,20 @@ const chapterAccessLabels: Record<ChapterAccess, string> = {
   [CHAPTER_ACCESS.UNAVAILABLE]: '暫不可用',
 }
 
+function normalizeChapterProgress(chapterProgress: number | undefined): number {
+  if (typeof chapterProgress !== 'number' || !Number.isFinite(chapterProgress)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, Math.round(chapterProgress * 100)))
+}
+
 export function BookDetailScreen({
   book,
   hasSavedPosition,
   continueChapterId,
   continueChapterTitle,
+  continueChapterProgress,
   sessionReturnStatus,
   isInBookshelf = false,
   onBack,
@@ -43,14 +55,20 @@ export function BookDetailScreen({
   onToggleBookshelf,
   backButtonLabel = '返回書庫',
 }: BookDetailScreenProps) {
+  const [chapterQuery, setChapterQuery] = useState('')
+  const hasChapterQuery = chapterQuery.trim().length > 0
   const readButtonText = hasSavedPosition
     ? continueChapterTitle
       ? `繼續閱讀：${continueChapterTitle}`
       : '繼續閱讀'
     : '開始閱讀'
+  const normalizedChapterProgress = normalizeChapterProgress(
+    continueChapterProgress,
+  )
   const orderedChapters = [...book.chapters].sort(
     (left, right) => left.sequence - right.sequence,
   )
+  const visibleChapters = filterChaptersByTitle(orderedChapters, chapterQuery)
   const depth = getReadingDepth(book.chapters)
   const chapterCountLabel = `${depth.totalChapters} 章`
   const readableCountLabel = `${depth.openableChapters} 章`
@@ -134,9 +152,18 @@ export function BookDetailScreen({
             {hasSavedPosition && (
               <p className="book-detail-progress">
                 <span className="book-detail-progress-label">閱讀進度</span>
-                {continueChapterTitle
-                  ? `目前讀到：${continueChapterTitle}`
-                  : '這本書已有閱讀進度'}
+                <span>
+                  {continueChapterTitle
+                    ? `目前讀到：${continueChapterTitle}`
+                    : '這本書已有閱讀進度'}
+                </span>{' '}
+                <span>本章進度 {normalizedChapterProgress}%</span>{' '}
+                <progress
+                  aria-label={`本章進度 ${normalizedChapterProgress}%`}
+                  aria-valuemin={0}
+                  max={100}
+                  value={normalizedChapterProgress}
+                />
               </p>
             )}
           </div>
@@ -179,8 +206,35 @@ export function BookDetailScreen({
           </div>
           <p className="section-heading-note">共 {chapterCountLabel}</p>
         </div>
+        <div className="book-chapter-search">
+          <label className="book-chapter-search-label" htmlFor="book-chapter-search">
+            搜尋章節
+          </label>
+          <div className="book-chapter-search-controls">
+            <input
+              id="book-chapter-search"
+              className="book-chapter-search-input"
+              type="search"
+              placeholder="輸入章節標題"
+              value={chapterQuery}
+              onChange={(event) => setChapterQuery(event.target.value)}
+            />
+            {hasChapterQuery && (
+              <button
+                className="button-secondary book-chapter-search-clear"
+                type="button"
+                onClick={() => setChapterQuery('')}
+              >
+                清除搜尋
+              </button>
+            )}
+          </div>
+        </div>
+        {hasChapterQuery && visibleChapters.length === 0 && (
+          <p role="status">沒有符合的章節</p>
+        )}
         <ol className="book-chapter-list" aria-label="章節預覽列表">
-          {orderedChapters.map((chapter) => {
+          {visibleChapters.map((chapter) => {
             const access = decideChapterAccess(chapter.access)
             const accessLabel = chapterAccessLabels[access.access]
             const isContinueChapter =

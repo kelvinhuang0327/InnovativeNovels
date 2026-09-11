@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
-import type { RecentReadingEntry } from '../../application/library/libraryUseCases'
+import {
+  filterBookshelfBooks,
+  type RecentReadingEntry,
+} from '../../application/library/libraryUseCases'
 import { ContinueReadingShelf } from './ContinueReadingShelf'
 
 interface LibraryScreenProps {
@@ -11,6 +15,14 @@ interface LibraryScreenProps {
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
   readonly onRemoveFromBookshelf: (bookId: string) => void
+}
+
+function chapterProgressPercentage(chapterProgress: number): number {
+  if (!Number.isFinite(chapterProgress)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, Math.round(chapterProgress * 100)))
 }
 
 function LibraryBookCard({
@@ -65,7 +77,10 @@ function RecentReadingCard({
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
 }) {
-  const { book, chapterTitle } = entry
+  const { book, chapterTitle, position } = entry
+  const progressPercentage = position
+    ? chapterProgressPercentage(position.chapterProgress)
+    : undefined
 
   return (
     <li className="library-recent-item">
@@ -83,6 +98,20 @@ function RecentReadingCard({
         <p className="library-recent-chapter">
           {chapterTitle ? `目前章節 · ${chapterTitle}` : '尚未儲存閱讀位置'}
         </p>
+        {progressPercentage !== undefined && (
+          <>
+            <p className="library-recent-progress">
+              本章進度 {progressPercentage}%
+            </p>
+            <progress
+              aria-label={`本章進度 ${progressPercentage}%`}
+              max={100}
+              value={progressPercentage}
+            >
+              {progressPercentage}%
+            </progress>
+          </>
+        )}
         <div className="library-book-actions">
           <button
             type="button"
@@ -112,6 +141,10 @@ export function LibraryScreen({
   onContinueBook,
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
+  const [bookshelfSearch, setBookshelfSearch] = useState('')
+  const hasBookshelfSearch = bookshelfSearch.trim().length > 0
+  const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
+
   return (
     <section
       aria-label="個人閱讀中心"
@@ -147,7 +180,39 @@ export function LibraryScreen({
               我的書架
             </h2>
           </div>
-          <p className="section-heading-note">{books.length} 本</p>
+          <p className="section-heading-note">
+            {!hasBookshelfSearch
+              ? `${books.length} 本`
+              : `${visibleBooks.length} / ${books.length} 本`}
+          </p>
+        </div>
+
+        <div className="library-search">
+          <label
+            className="library-search-label"
+            htmlFor="library-bookshelf-search"
+          >
+            搜尋我的書架
+          </label>
+          <div className="library-search-controls">
+            <input
+              className="library-search-input"
+              id="library-bookshelf-search"
+              placeholder="搜尋書名或作者"
+              type="search"
+              value={bookshelfSearch}
+              onChange={(event) => setBookshelfSearch(event.target.value)}
+            />
+            {hasBookshelfSearch && (
+              <button
+                className="button-secondary library-search-clear"
+                type="button"
+                onClick={() => setBookshelfSearch('')}
+              >
+                清除搜尋
+              </button>
+            )}
+          </div>
         </div>
 
         {books.length === 0 ? (
@@ -157,9 +222,13 @@ export function LibraryScreen({
               前往書城
             </button>
           </div>
+        ) : visibleBooks.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的收藏</p>
+          </div>
         ) : (
           <ul className="library-book-list">
-            {books.map((book) => (
+            {visibleBooks.map((book) => (
               <LibraryBookCard
                 book={book}
                 key={book.book.id}

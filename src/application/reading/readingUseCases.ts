@@ -265,6 +265,21 @@ export interface TableOfContentsEntry {
   readonly isCurrent: boolean
 }
 
+export function filterTableOfContents(
+  entries: readonly TableOfContentsEntry[],
+  searchText?: string,
+): readonly TableOfContentsEntry[] {
+  const normalizedQuery = searchText?.trim().toLowerCase() ?? ''
+
+  if (normalizedQuery.length === 0) {
+    return entries
+  }
+
+  return entries.filter((entry) =>
+    entry.title.toLowerCase().includes(normalizedQuery),
+  )
+}
+
 export function listTableOfContents(
   book: ContentBook,
   currentChapterId: string | undefined,

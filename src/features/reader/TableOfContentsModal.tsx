@@ -1,5 +1,8 @@
-import { useEffect, useRef } from 'react'
-import type { TableOfContentsEntry } from '../../application/reading/readingUseCases'
+import { useEffect, useRef, useState } from 'react'
+import {
+  filterTableOfContents,
+  type TableOfContentsEntry,
+} from '../../application/reading/readingUseCases'
 
 interface TableOfContentsModalProps {
   readonly isOpen: boolean
@@ -17,10 +20,16 @@ export function TableOfContentsModal({
   onSelectChapter,
 }: TableOfContentsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const currentChapterRef = useRef<HTMLButtonElement>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (isOpen) {
       dialogRef.current?.focus()
+      const currentChapter = currentChapterRef.current
+      if (typeof currentChapter?.scrollIntoView === 'function') {
+        currentChapter.scrollIntoView({ block: 'nearest' })
+      }
     }
   }, [isOpen])
 
@@ -29,6 +38,7 @@ export function TableOfContentsModal({
   }
 
   const closeAndRestoreFocus = () => {
+    setSearchQuery('')
     onClose()
     triggerRef.current?.focus()
   }
@@ -47,6 +57,8 @@ export function TableOfContentsModal({
     onSelectChapter(entry.chapterId)
     closeAndRestoreFocus()
   }
+
+  const filteredEntries = filterTableOfContents(entries, searchQuery)
 
   return (
     <div
@@ -76,15 +88,46 @@ export function TableOfContentsModal({
           </button>
         </header>
 
+        <div className="toc-search">
+          <label className="toc-search-label" htmlFor="toc-search-input">
+            搜尋章節
+          </label>
+          <div className="toc-search-controls">
+            <input
+              id="toc-search-input"
+              className="toc-search-input"
+              type="search"
+              value={searchQuery}
+              placeholder="輸入章名關鍵字"
+              onChange={(event) => setSearchQuery(event.currentTarget.value)}
+            />
+            {searchQuery.length > 0 && (
+              <button
+                type="button"
+                className="button-secondary toc-search-clear-button"
+                aria-label="清除搜尋"
+                onClick={() => setSearchQuery('')}
+              >
+                清除
+              </button>
+            )}
+          </div>
+        </div>
+
         {entries.length === 0 ? (
           <div className="toc-empty-state" role="status">
             尚無章節資料
           </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="toc-empty-state" role="status">
+            沒有符合的章節
+          </div>
         ) : (
           <ol className="toc-list" aria-label="章節列表">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <li key={entry.chapterId} className="toc-item">
                 <button
+                  ref={entry.isCurrent ? currentChapterRef : undefined}
                   type="button"
                   className={`toc-chapter-button ${entry.isCurrent ? 'is-current' : ''}`}
                   disabled={!entry.isAccessible}

@@ -1,8 +1,10 @@
+import { useEffect, useRef } from 'react'
 import type { BookmarkEntry } from '../../application/reading/readingUseCases'
 
 interface ChapterBookmarksModalProps {
   readonly isOpen: boolean
   readonly bookmarks: readonly BookmarkEntry[]
+  readonly triggerRef: React.RefObject<HTMLButtonElement | null>
   readonly onClose: () => void
   readonly onSelectBookmark: (bookId: string, chapterId: string) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
@@ -11,22 +13,49 @@ interface ChapterBookmarksModalProps {
 export function ChapterBookmarksModal({
   isOpen,
   bookmarks,
+  triggerRef,
   onClose,
   onSelectBookmark,
   onRemoveBookmark,
 }: ChapterBookmarksModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      dialogRef.current?.focus()
+    }
+  }, [isOpen])
+
   if (!isOpen) {
     return null
   }
 
+  const closeAndRestoreFocus = () => {
+    onClose()
+    triggerRef.current?.focus()
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      closeAndRestoreFocus()
+    }
+  }
+
   return (
-    <div className="modal-backdrop" onClick={onClose} data-testid="bookmarks-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={closeAndRestoreFocus}
+      data-testid="bookmarks-backdrop"
+    >
       <div
+        ref={dialogRef}
         className="modal-content"
         role="dialog"
         aria-modal="true"
         aria-label="章節書籤"
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         <header className="modal-header">
           <h2>章節書籤</h2>
@@ -34,7 +63,7 @@ export function ChapterBookmarksModal({
             type="button"
             className="button-secondary close-button"
             aria-label="關閉書籤"
-            onClick={onClose}
+            onClick={closeAndRestoreFocus}
           >
             關閉
           </button>
@@ -65,7 +94,7 @@ export function ChapterBookmarksModal({
                     className="button-primary"
                     onClick={() => {
                       onSelectBookmark(entry.book.book.id, entry.chapter.id)
-                      onClose()
+                      closeAndRestoreFocus()
                     }}
                   >
                     移至章節

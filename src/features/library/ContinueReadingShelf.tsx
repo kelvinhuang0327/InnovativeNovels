@@ -5,6 +5,14 @@ interface ContinueReadingShelfProps {
   readonly onContinueBook: (bookId: string) => void
 }
 
+function chapterProgressPercentage(chapterProgress: number): number {
+  if (!Number.isFinite(chapterProgress)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, Math.round(chapterProgress * 100)))
+}
+
 export function ContinueReadingShelf({
   entries,
   onContinueBook,
@@ -18,33 +26,49 @@ export function ContinueReadingShelf({
         繼續閱讀
       </h2>
       <ul className="continue-reading-list">
-        {entries.map(({ book, chapter }) => (
-          <li className="continue-reading-item" key={book.book.id}>
-            <div
-              aria-hidden="true"
-              className="continue-reading-cover"
-              data-title={book.book.title}
-            >
-              <span>IN</span>
-            </div>
-            <div className="continue-reading-copy">
-              <p className="book-meta">{book.book.categoryLabel}</p>
-              <p className="continue-reading-title">{book.book.title}</p>
-              <p className="continue-reading-author">{book.book.authorName}</p>
-              <p className="continue-reading-chapter">
-                <span>目前章節 · </span>
-                <span>{chapter.title}</span>
-              </p>
-            </div>
-            <button
-              className="continue-reading-action"
-              onClick={() => onContinueBook(book.book.id)}
-              type="button"
-            >
-              繼續閱讀
-            </button>
-          </li>
-        ))}
+        {entries.map(({ book, chapter, position }) => {
+          const progressPercentage = chapterProgressPercentage(
+            position.chapterProgress,
+          )
+
+          return (
+            <li className="continue-reading-item" key={book.book.id}>
+              <div
+                aria-hidden="true"
+                className="continue-reading-cover"
+                data-title={book.book.title}
+              >
+                <span>IN</span>
+              </div>
+              <div className="continue-reading-copy">
+                <p className="book-meta">{book.book.categoryLabel}</p>
+                <p className="continue-reading-title">{book.book.title}</p>
+                <p className="continue-reading-author">{book.book.authorName}</p>
+                <p className="continue-reading-chapter">
+                  <span>目前章節 · </span>
+                  <span>{chapter.title}</span>
+                </p>
+                <p className="continue-reading-progress">
+                  本章進度 {progressPercentage}%
+                </p>
+                <progress
+                  aria-label={`本章進度 ${progressPercentage}%`}
+                  max={100}
+                  value={progressPercentage}
+                >
+                  {progressPercentage}%
+                </progress>
+              </div>
+              <button
+                className="continue-reading-action"
+                onClick={() => onContinueBook(book.book.id)}
+                type="button"
+              >
+                繼續閱讀
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

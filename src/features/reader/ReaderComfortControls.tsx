@@ -1,3 +1,4 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   READER_FONT_FAMILIES,
   READER_LETTER_SPACINGS,
@@ -52,6 +53,34 @@ const READING_MODE_LABELS: Record<ReadingMode, string> = {
   paged: '分頁閱讀',
 }
 
+function handleRadioKeyDown<Option>(
+  event: ReactKeyboardEvent<HTMLButtonElement>,
+  index: number,
+  options: readonly Option[],
+  onSelect: (option: Option) => void,
+) {
+  const direction =
+    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? 1
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? -1
+        : 0
+
+  if (direction === 0 || options.length === 0) {
+    return
+  }
+
+  event.preventDefault()
+
+  const nextIndex = (index + direction + options.length) % options.length
+  const radioOptions = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+    '[role="radio"]',
+  )
+
+  radioOptions?.[nextIndex]?.focus()
+  onSelect(options[nextIndex])
+}
+
 export function ReaderComfortControls({
   preferences,
   onChangePreferences,
@@ -86,7 +115,8 @@ export function ReaderComfortControls({
       <div className="control-group" role="radiogroup" aria-label="字型大小">
         <span className="control-label">字級：</span>
         <div className="control-options">
-          {(['small', 'medium', 'large', 'extra-large'] as const).map((scale) => (
+          {(['small', 'medium', 'large', 'extra-large'] as const).map(
+            (scale, index, options) => (
             <button
               key={scale}
               type="button"
@@ -95,18 +125,23 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.fontScale === scale}
+              tabIndex={preferences.fontScale === scale ? 0 : -1}
               onClick={() => setFontScale(scale)}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setFontScale)
+              }
             >
               {FONT_SCALE_LABELS[scale]}
             </button>
-          ))}
+            ),
+          )}
         </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="內文字型">
         <span className="control-label">字型：</span>
         <div className="control-options">
-          {READER_FONT_FAMILIES.map((fontFamily) => (
+          {READER_FONT_FAMILIES.map((fontFamily, index, options) => (
             <button
               key={fontFamily}
               type="button"
@@ -115,13 +150,11 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.fontFamily === fontFamily}
+              tabIndex={preferences.fontFamily === fontFamily ? 0 : -1}
               onClick={() => setFontFamily(fontFamily)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  setFontFamily(fontFamily)
-                }
-              }}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setFontFamily)
+              }
             >
               {FONT_FAMILY_LABELS[fontFamily]}
             </button>
@@ -132,7 +165,8 @@ export function ReaderComfortControls({
       <div className="control-group" role="radiogroup" aria-label="行距">
         <span className="control-label">行距：</span>
         <div className="control-options">
-          {(['compact', 'comfortable', 'spacious'] as const).map((spacing) => (
+          {(['compact', 'comfortable', 'spacious'] as const).map(
+            (spacing, index, options) => (
             <button
               key={spacing}
               type="button"
@@ -141,18 +175,23 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.lineSpacing === spacing}
+              tabIndex={preferences.lineSpacing === spacing ? 0 : -1}
               onClick={() => setLineSpacing(spacing)}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setLineSpacing)
+              }
             >
               {LINE_SPACING_LABELS[spacing]}
             </button>
-          ))}
+            ),
+          )}
         </div>
       </div>
 
       <div className="control-group" role="radiogroup" aria-label="字距">
         <span className="control-label">字距：</span>
         <div className="control-options">
-          {READER_LETTER_SPACINGS.map((letterSpacing) => (
+          {READER_LETTER_SPACINGS.map((letterSpacing, index, options) => (
             <button
               key={letterSpacing}
               type="button"
@@ -161,7 +200,11 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.letterSpacing === letterSpacing}
+              tabIndex={preferences.letterSpacing === letterSpacing ? 0 : -1}
               onClick={() => setLetterSpacing(letterSpacing)}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setLetterSpacing)
+              }
             >
               {LETTER_SPACING_LABELS[letterSpacing]}
             </button>
@@ -172,7 +215,7 @@ export function ReaderComfortControls({
       <div className="control-group" role="radiogroup" aria-label="閱讀主題">
         <span className="control-label">主題：</span>
         <div className="control-options">
-          {(['light', 'sepia', 'dark'] as const).map((t) => (
+          {(['light', 'sepia', 'dark'] as const).map((t, index, options) => (
             <button
               key={t}
               type="button"
@@ -181,7 +224,11 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.theme === t}
+              tabIndex={preferences.theme === t ? 0 : -1}
               onClick={() => setTheme(t)}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setTheme)
+              }
             >
               {THEME_LABELS[t]}
             </button>
@@ -192,7 +239,7 @@ export function ReaderComfortControls({
       <div className="control-group" role="radiogroup" aria-label="閱讀模式">
         <span className="control-label">模式：</span>
         <div className="control-options">
-          {READER_READING_MODES.map((readingMode) => (
+          {READER_READING_MODES.map((readingMode, index, options) => (
             <button
               key={readingMode}
               type="button"
@@ -201,7 +248,11 @@ export function ReaderComfortControls({
               }`}
               role="radio"
               aria-checked={preferences.readingMode === readingMode}
+              tabIndex={preferences.readingMode === readingMode ? 0 : -1}
               onClick={() => setReadingMode(readingMode)}
+              onKeyDown={(event) =>
+                handleRadioKeyDown(event, index, options, setReadingMode)
+              }
             >
               {READING_MODE_LABELS[readingMode]}
             </button>

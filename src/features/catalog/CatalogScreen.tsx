@@ -33,6 +33,42 @@ interface EditorialShelfProps {
   readonly onOpenBook: (bookId: string) => void
 }
 
+type CatalogSortMode = 'bookstore' | 'chapters-desc' | 'chapters-asc'
+
+const CATALOG_SORT_OPTIONS: readonly {
+  readonly value: CatalogSortMode
+  readonly label: string
+}[] = [
+  { value: 'bookstore', label: '書庫順序' },
+  { value: 'chapters-desc', label: '章節較多優先' },
+  { value: 'chapters-asc', label: '章節較少優先' },
+]
+
+function sortCatalogResults(
+  entries: readonly ContentBook[],
+  sortMode: CatalogSortMode,
+): readonly ContentBook[] {
+  if (sortMode === 'bookstore') {
+    return entries
+  }
+
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => {
+      const chapterDifference =
+        left.entry.chapters.length - right.entry.chapters.length
+
+      if (chapterDifference === 0) {
+        return left.index - right.index
+      }
+
+      return sortMode === 'chapters-desc'
+        ? -chapterDifference
+        : chapterDifference
+    })
+    .map(({ entry }) => entry)
+}
+
 function BookstoreHero({ featuredBook, onOpenBook }: BookstoreHeroProps) {
   return (
     <header className="bookstore-hero">
@@ -243,13 +279,16 @@ export function CatalogScreen({
   const [selectedGenre, setSelectedGenre] = useState<string | undefined>(
     undefined,
   )
+  const [sortMode, setSortMode] = useState<CatalogSortMode>('bookstore')
   const searchInputId = useId()
+  const sortInputId = useId()
 
   const genres = listGenres(books)
-  const visibleBooks = filterCatalog(books, {
+  const filteredBooks = filterCatalog(books, {
     searchText,
     genre: selectedGenre,
   })
+  const visibleBooks = sortCatalogResults(filteredBooks, sortMode)
   const isFiltering =
     searchText.trim().length > 0 || selectedGenre !== undefined
   const resultSummary = isFiltering
@@ -296,6 +335,26 @@ export function CatalogScreen({
             type="search"
             value={searchText}
           />
+        </div>
+
+        <div className="catalog-sort-block">
+          <label className="catalog-sort-label" htmlFor={sortInputId}>
+            排序方式
+          </label>
+          <select
+            className="catalog-sort-select"
+            id={sortInputId}
+            onChange={(event) =>
+              setSortMode(event.target.value as CatalogSortMode)
+            }
+            value={sortMode}
+          >
+            {CATALOG_SORT_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {isFiltering && (
