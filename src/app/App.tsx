@@ -47,6 +47,7 @@ import type { PwaDependencies } from '../application/pwa/pwaPorts'
 import { usePwaController } from '../application/pwa/usePwaController'
 import { bookId as toBookId, chapterId as toChapterId } from '../domain/catalog/identifiers'
 import type { ChapterBookmark } from '../domain/reading/chapterBookmark'
+import type { ReadingPosition } from '../domain/reading/readingPosition'
 import {
   DEFAULT_READER_PREFERENCES,
   type ReaderPreferences,
@@ -109,6 +110,9 @@ type Screen =
       readonly openedChapter: OpenedChapter
       readonly returnTo?: 'catalog' | 'library'
       readonly recoveryStatus?: string
+      readonly chapterOpenFailure?: {
+        readonly position: ReadingPosition
+      }
     }
 
 const defaultContentRepository = new StaticContentRepository()
@@ -336,6 +340,7 @@ function App({
     } else {
       addChapterBookmark(
         dependencies.contentRepository,
+        dependencies.readingStateRepository,
         bookmarkRepo,
         bookId,
         chapterId,
@@ -385,33 +390,43 @@ function App({
     }
   }
 
+  const showReaderChapterOpenFailure = (position: ReadingPosition) => {
+    if (screen.name !== 'reader') {
+      return
+    }
+
+    setScreen({
+      name: 'reader',
+      openedChapter: screen.openedChapter,
+      returnTo: screen.returnTo,
+      chapterOpenFailure: {
+        position,
+      },
+    })
+  }
+
   const openReaderChapter = (
-    targetBookId: string,
-    targetChapterId: string,
+    position: ReadingPosition,
     returnTo: 'catalog' | 'library' = 'catalog',
   ) => {
     const openedChapter = openReadingChapter(
       dependencies.contentRepository,
       dependencies.readingStateRepository,
-      {
-        bookId: toBookId(targetBookId),
-        chapterId: toChapterId(targetChapterId),
-        paragraphIndex: 0,
-        chapterProgress: 0,
-      },
+      position,
     )
 
     if (openedChapter) {
       activeSessionRepo.save(openedChapter.book.book.id)
       recordRecentReading(openedChapter.book.book.id)
       setScreen({ name: 'reader', openedChapter, returnTo })
+    } else {
+      showReaderChapterOpenFailure(position)
     }
   }
 
-  const handleJumpBookmark = (targetBookId: string, targetChapterId: string) => {
+  const handleJumpBookmark = (position: ReadingPosition) => {
     openReaderChapter(
-      targetBookId,
-      targetChapterId,
+      position,
       screen.name === 'reader' ? screen.returnTo : 'catalog',
     )
   }
@@ -468,6 +483,13 @@ function App({
       return
     }
 
+    const orderedChapters = [...screen.openedChapter.book.chapters].sort(
+      (left, right) => left.sequence - right.sequence,
+    )
+    const currentChapterIndex = orderedChapters.findIndex(
+      (chapter) => chapter.id === screen.openedChapter.chapter.id,
+    )
+    const attemptedChapter = orderedChapters[currentChapterIndex + direction]
     const openedChapter = navigateToAdjacentChapter(
       dependencies.contentRepository,
       dependencies.readingStateRepository,
@@ -480,6 +502,13 @@ function App({
         name: 'reader',
         openedChapter,
         returnTo: screen.returnTo,
+      })
+    } else if (!openedChapter && attemptedChapter) {
+      showReaderChapterOpenFailure({
+        bookId: toBookId(screen.openedChapter.book.book.id),
+        chapterId: toChapterId(attemptedChapter.id),
+        paragraphIndex: 0,
+        chapterProgress: 0,
       })
     }
   }
@@ -607,8 +636,12 @@ function App({
               onRead={() => openReader(screen.bookId, screen.returnTo)}
               onReadChapter={(chapterId) =>
                 openReaderChapter(
-                  screen.bookId,
-                  chapterId,
+                  {
+                    bookId: toBookId(screen.bookId),
+                    chapterId: toChapterId(chapterId),
+                    paragraphIndex: 0,
+                    chapterProgress: 0,
+                  },
                   screen.returnTo,
                 )
               }
@@ -626,6 +659,7 @@ function App({
         <ReaderScreen
           openedChapter={screen.openedChapter}
           recoveryStatus={screen.recoveryStatus}
+          chapterOpenFailed={screen.chapterOpenFailure !== undefined}
           preferences={preferences}
           isBookmarked={isChapterBookmarked(
             bookmarkRepo,
@@ -652,9 +686,14 @@ function App({
           onSelectBookmark={handleJumpBookmark}
           onRemoveBookmark={handleRemoveBookmark}
           onSelectChapter={(targetChapterId) =>
-            handleJumpBookmark(
-              screen.openedChapter.book.book.id,
-              targetChapterId,
+            openReaderChapter(
+              {
+                bookId: toBookId(screen.openedChapter.book.book.id),
+                chapterId: toChapterId(targetChapterId),
+                paragraphIndex: 0,
+                chapterProgress: 0,
+              },
+              screen.returnTo,
             )
           }
           onBackToBook={() => {
@@ -668,6 +707,15 @@ function App({
           }}
           onPrevious={() => navigateReader(-1)}
           onNext={() => navigateReader(1)}
+          onRetryChapterOpen={() => {
+            const failure = screen.chapterOpenFailure
+            if (failure) {
+              openReaderChapter(
+                failure.position,
+                screen.returnTo,
+              )
+            }
+          }}
           canNavigateNextChapter={canNavigateToAdjacentChapter(
             screen.openedChapter,
             1,

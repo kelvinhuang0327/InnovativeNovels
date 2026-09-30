@@ -622,7 +622,12 @@ describe('Wave 4 Reader Comfort Preferences & Chapter Bookmarks Integration', ()
       window.localStorage.getItem(CHAPTER_BOOKMARKS_STORAGE_KEY) ?? '',
     )
     expect(savedBookmarks.bookmarks).toEqual([
-      { bookId: 'book-tide-city', chapterId: 'chapter-tide-letter' },
+      {
+        bookId: 'book-tide-city',
+        chapterId: 'chapter-tide-letter',
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
     ])
 
     // Move to Chapter 2
@@ -1367,6 +1372,152 @@ describe('Wave 5 chapter-progress persistence and restore', () => {
       })
   }
 
+  it('restores a bookmark position after leaving Reader and selecting it from another book', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapters = [...targetBook.chapters].sort(
+      (left, right) => left.sequence - right.sequence,
+    )
+    const otherBook = dependencies.contentRepository.listBooks()[1]
+    const otherPosition = {
+      bookId: otherBook.book.id,
+      chapterId: otherBook.chapters[0].id,
+      paragraphIndex: 0,
+      chapterProgress: 0.73,
+    }
+    dependencies.readingStateRepository.save(otherPosition)
+
+    render(<App dependencies={dependencies} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+
+    const readerTopRef = { current: 0 }
+    mockRealisticScrollTo(readerTopRef)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+      .toHaveAttribute('aria-valuenow', '50')
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+    const savedBookmark = dependencies.chapterBookmarksRepository?.list()[0]
+    expect(savedBookmark).toEqual({
+      bookId: targetBook.book.id,
+      chapterId: targetChapters[1].id,
+      paragraphIndex: 0,
+      chapterProgress: 0.5,
+    })
+    expect(dependencies.readingStateRepository.load(otherBook.book.id)).toEqual(
+      otherPosition,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回書庫' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '查看書籍' })[1])
+    const otherReaderTopRef = { current: 0 }
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)/ }))
+    mockRealisticScrollTo(otherReaderTopRef)
+    mockReaderGeometry(otherReaderTopRef)
+    flushAnimationFrame()
+    expect(dependencies.activeReaderSessionRepository?.load()).toBe(
+      otherBook.book.id,
+    )
+    const otherPositionBeforeJump = dependencies.readingStateRepository.load(
+      otherBook.book.id,
+    )
+    expect(otherPositionBeforeJump).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    const bookmarksDialog = screen.getByRole('dialog', { name: '章節書籤' })
+    fireEvent.click(
+      within(bookmarksDialog).getByRole('button', { name: '移至章節' }),
+    )
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('heading', { name: targetChapters[1].title }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+      .toHaveAttribute('aria-valuenow', '50')
+    expect(dependencies.readingStateRepository.load(targetBook.book.id)).toEqual(
+      savedBookmark,
+    )
+    expect(dependencies.readingStateRepository.load(otherBook.book.id)).toEqual(
+      otherPositionBeforeJump,
+    )
+    expect(dependencies.activeReaderSessionRepository?.load()).toBe(
+      targetBook.book.id,
+    )
+  })
+
+  it('keeps the current Reader state on bookmark prose failure and retries at the saved position', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = [...targetBook.chapters].sort(
+      (left, right) => left.sequence - right.sequence,
+    )[0]
+    const targetPosition = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 0,
+      chapterProgress: 0.5,
+    }
+
+    render(<App dependencies={dependencies} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+    fireEvent.click(screen.getByRole('button', { name: '加入章節書籤' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+
+    const savedState = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    const savedSession = window.localStorage.getItem(
+      ACTIVE_READER_SESSION_STORAGE_KEY,
+    )
+    const save = vi.spyOn(dependencies.readingStateRepository, 'save')
+    vi.spyOn(dependencies.contentRepository, 'getChapterProse')
+      .mockReturnValueOnce(undefined)
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '章節書籤' })).getByRole(
+        'button',
+        { name: '移至章節' },
+      ),
+    )
+
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '章節內容暫時無法載入，已保留目前章節與閱讀進度。請重試或返回作品。',
+    )
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(savedState)
+    expect(window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)).toBe(
+      savedSession,
+    )
+    expect(save).not.toHaveBeenCalled()
+    expect(dependencies.chapterBookmarksRepository?.list()).toEqual([
+      targetPosition,
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: '重試載入章節' }))
+    expect(screen.getByRole('heading', { name: targetChapter.title }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+      .toHaveAttribute('aria-valuenow', '50')
+  })
+
   it('persists live scroll progress and restores it within tolerance through 返回作品 -> Continue', () => {
     render(<App dependencies={createDependencies()} />)
     openBookDetail()
@@ -1477,6 +1628,206 @@ describe('Wave 5 chapter-progress persistence and restore', () => {
     expect(
       screen.getByRole('progressbar', { name: '本章閱讀進度' }),
     ).toHaveAttribute('aria-valuenow', '0')
+  })
+
+  it('keeps next and previous chapter content, progress, session, and resume aligned while preserving another book', () => {
+    const dependencies = createDependencies()
+    const currentBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const chapters = [...currentBook.chapters].sort((a, b) => a.sequence - b.sequence)
+    const otherBook = dependencies.contentRepository.listBooks()[1]
+    const otherPosition = {
+      bookId: otherBook.book.id,
+      chapterId: otherBook.chapters[0].id,
+      paragraphIndex: 0,
+      chapterProgress: 0.73,
+    }
+    dependencies.readingStateRepository.save(otherPosition)
+    let mounted = render(<App dependencies={dependencies} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const readerTopRef = { current: 0 }
+    mockRealisticScrollTo(readerTopRef)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    for (const [buttonName, target] of [
+      ['下一章', chapters[1]],
+      ['上一章', chapters[0]],
+    ] as const) {
+      readerTopRef.current = -300
+      vi.stubGlobal('scrollY', 300)
+      fireEvent.scroll(window)
+      flushAnimationFrame()
+      expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+        .toHaveAttribute('aria-valuenow', '50')
+
+      const navigation = screen.getByTestId('reader-persistent-navigation')
+      fireEvent.click(within(navigation).getByRole('button', { name: buttonName }))
+      mockReaderGeometry(readerTopRef)
+      flushAnimationFrame()
+
+      const expectedProse = dependencies.contentRepository.getChapterProse(target.id)
+      expect(screen.getByRole('heading', { name: target.title })).toBeInTheDocument()
+      expect(
+        Array.from(screen.getByLabelText('章節內文').querySelectorAll('p'), (p) => p.textContent),
+      ).toEqual(expectedProse)
+      expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+        .toHaveAttribute('aria-valuenow', '0')
+      const saved = { bookId: currentBook.book.id, chapterId: target.id, paragraphIndex: 0, chapterProgress: 0 }
+      expect(dependencies.readingStateRepository.load(currentBook.book.id)).toEqual(saved)
+      expect(dependencies.readingStateRepository.load(otherBook.book.id)).toEqual(otherPosition)
+      expect(dependencies.activeReaderSessionRepository?.load()).toBe(currentBook.book.id)
+
+      mounted.unmount()
+      mounted = render(<App dependencies={createDependencies()} />)
+      mockReaderGeometry(readerTopRef)
+      flushAnimationFrame()
+
+      expect(screen.getByRole('heading', { name: target.title })).toBeInTheDocument()
+      expect(
+        Array.from(screen.getByLabelText('章節內文').querySelectorAll('p'), (p) => p.textContent),
+      ).toEqual(expectedProse)
+      expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+        .toHaveAttribute('aria-valuenow', '0')
+      expect(dependencies.readingStateRepository.load(currentBook.book.id)).toEqual(saved)
+      expect(dependencies.readingStateRepository.load(otherBook.book.id)).toEqual(otherPosition)
+      expect(dependencies.activeReaderSessionRepository?.load()).toBe(currentBook.book.id)
+    }
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['invalid', [' \n\t ']],
+  ] as const)('preserves the valid Reader and saved progress when either adjacent chapter has %s prose', (_, prose) => {
+    const dependencies = createDependencies()
+    const otherBook = dependencies.contentRepository.listBooks()[1]
+    const otherPosition = {
+      bookId: otherBook.book.id,
+      chapterId: otherBook.chapters[0].id,
+      paragraphIndex: 0,
+      chapterProgress: 0.73,
+    }
+    dependencies.readingStateRepository.save(otherPosition)
+    const mounted = render(<App dependencies={dependencies} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+
+    const readerTopRef = { current: 0 }
+    mockRealisticScrollTo(readerTopRef)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+    readerTopRef.current = -300
+    vi.stubGlobal('scrollY', 300)
+    fireEvent.scroll(window)
+    flushAnimationFrame()
+
+    const savedState = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    const savedSession = window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)
+    const displayedProse = screen.getByLabelText('章節內文').textContent
+    const save = vi.spyOn(dependencies.readingStateRepository, 'save')
+    const loadProse = vi.spyOn(dependencies.contentRepository, 'getChapterProse')
+      .mockReturnValue(prose)
+
+    for (const buttonName of ['下一章', '上一章']) {
+      const navigation = screen.getByTestId('reader-persistent-navigation')
+      fireEvent.click(within(navigation).getByRole('button', { name: buttonName }))
+      flushAnimationFrame()
+
+      expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+      expect(screen.getByLabelText('章節內文').textContent).toBe(displayedProse)
+      const failure = screen.getByRole('alert')
+      expect(failure).toHaveTextContent(
+        '章節內容暫時無法載入，已保留目前章節與閱讀進度。請重試或返回作品。',
+      )
+      expect(failure).toHaveAttribute('aria-live', 'assertive')
+      expect(
+        screen.getByRole('button', { name: '重試載入章節' }),
+      ).toBeEnabled()
+      expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+        .toHaveAttribute('aria-valuenow', '50')
+      expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(savedState)
+      expect(window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)).toBe(savedSession)
+      expect(dependencies.readingStateRepository.load(otherBook.book.id)).toEqual(
+        otherPosition,
+      )
+      expect(save).not.toHaveBeenCalled()
+    }
+    expect(loadProse).toHaveBeenCalledTimes(2)
+
+    loadProse.mockRestore()
+    mounted.unmount()
+    readerTopRef.current = 0
+    vi.stubGlobal('scrollY', 0)
+    render(<App dependencies={createDependencies()} />)
+    mockReaderGeometry(readerTopRef)
+    flushAnimationFrame()
+
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    expect(screen.getByLabelText('章節內文').textContent).toBe(displayedProse)
+    expect(screen.getByRole('progressbar', { name: '本章閱讀進度' }))
+      .toHaveAttribute('aria-valuenow', '50')
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(savedState)
+    expect(window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)).toBe(savedSession)
+  })
+
+  it('retries a failed chapter open, clears its error, and persists only after success', () => {
+    const dependencies = createDependencies()
+    const currentBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const chapters = [...currentBook.chapters].sort((a, b) => a.sequence - b.sequence)
+    const currentChapter = chapters[0]
+    const nextChapter = chapters[1]
+    const nextProse = dependencies.contentRepository.getChapterProse(nextChapter.id)!
+
+    render(<App dependencies={dependencies} />)
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+
+    const savedBeforeFailure = window.localStorage.getItem(READING_STATE_STORAGE_KEY)
+    const sessionBeforeFailure = window.localStorage.getItem(
+      ACTIVE_READER_SESSION_STORAGE_KEY,
+    )
+    const save = vi.spyOn(dependencies.readingStateRepository, 'save')
+    const getChapterProse = vi
+      .spyOn(dependencies.contentRepository, 'getChapterProse')
+      .mockReturnValueOnce(undefined)
+
+    fireEvent.click(
+      within(screen.getByTestId('reader-persistent-navigation')).getByRole(
+        'button',
+        { name: '下一章' },
+      ),
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '章節內容暫時無法載入，已保留目前章節與閱讀進度。請重試或返回作品。',
+    )
+    expect(screen.getByRole('heading', { name: currentChapter.title })).toBeInTheDocument()
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(
+      savedBeforeFailure,
+    )
+    expect(
+      window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY),
+    ).toBe(sessionBeforeFailure)
+    expect(save).not.toHaveBeenCalled()
+
+    getChapterProse.mockReturnValueOnce(nextProse)
+    fireEvent.click(screen.getByRole('button', { name: '重試載入章節' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: nextChapter.title })).toBeInTheDocument()
+    expect(
+      Array.from(screen.getByLabelText('章節內文').querySelectorAll('p'), (p) => p.textContent),
+    ).toEqual(nextProse)
+    expect(dependencies.readingStateRepository.load(currentBook.book.id)).toEqual({
+      bookId: currentBook.book.id,
+      chapterId: nextChapter.id,
+      paragraphIndex: 0,
+      chapterProgress: 0,
+    })
+    expect(save).toHaveBeenCalledTimes(1)
   })
 
   it('keeps adjacent-chapter progress semantics unchanged when navigation begins with a prose swipe', () => {

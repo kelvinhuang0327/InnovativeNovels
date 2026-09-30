@@ -8,6 +8,8 @@ export const CHAPTER_BOOKMARKS_STORAGE_KEY =
 interface StoredBookmark {
   readonly bookId: string
   readonly chapterId: string
+  readonly paragraphIndex: number
+  readonly chapterProgress: number
 }
 
 interface ChapterBookmarksEnvelope {
@@ -50,9 +52,28 @@ function parseBookmarksEnvelope(
         continue
       }
 
+      const paragraphIndex =
+        item.paragraphIndex === undefined ? 0 : item.paragraphIndex
+      const chapterProgress =
+        item.chapterProgress === undefined ? 0 : item.chapterProgress
+
+      if (
+        typeof paragraphIndex !== 'number' ||
+        !Number.isInteger(paragraphIndex) ||
+        paragraphIndex < 0 ||
+        typeof chapterProgress !== 'number' ||
+        !Number.isFinite(chapterProgress) ||
+        chapterProgress < 0 ||
+        chapterProgress > 1
+      ) {
+        continue
+      }
+
       bookmarks.push({
         bookId: item.bookId,
         chapterId: item.chapterId,
+        paragraphIndex,
+        chapterProgress,
       })
     }
 
@@ -84,6 +105,8 @@ export class LocalStorageChapterBookmarksRepository
       return envelope.bookmarks.map((entry) => ({
         bookId: bookId(entry.bookId),
         chapterId: chapterId(entry.chapterId),
+        paragraphIndex: entry.paragraphIndex,
+        chapterProgress: entry.chapterProgress,
       }))
     } catch {
       return []
@@ -105,7 +128,12 @@ export class LocalStorageChapterBookmarksRepository
 
       const updated = [
         ...current,
-        { bookId: bookmark.bookId, chapterId: bookmark.chapterId },
+        {
+          bookId: bookmark.bookId,
+          chapterId: bookmark.chapterId,
+          paragraphIndex: bookmark.paragraphIndex,
+          chapterProgress: bookmark.chapterProgress,
+        },
       ]
 
       this.saveList(updated)
@@ -137,6 +165,8 @@ export class LocalStorageChapterBookmarksRepository
       bookmarks: bookmarks.map((b) => ({
         bookId: b.bookId,
         chapterId: b.chapterId,
+        paragraphIndex: b.paragraphIndex,
+        chapterProgress: b.chapterProgress,
       })),
     }
 

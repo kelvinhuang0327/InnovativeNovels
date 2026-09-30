@@ -63,8 +63,12 @@ class FakeContentRepository implements ContentRepository {
     return this.books.find((entry) => entry.book.id === requestedBookId)
   }
 
-  getChapterProse(): readonly string[] | undefined {
-    return undefined
+  getChapterProse(requestedChapterId: string): readonly string[] | undefined {
+    return this.books.some((book) =>
+      book.chapters.some((chapter) => chapter.id === requestedChapterId),
+    )
+      ? ['test prose']
+      : undefined
   }
 }
 
@@ -226,9 +230,23 @@ describe('Chapter Bookmarks Use Cases', () => {
 
   it('can bookmark accessible chapters and remove bookmarks', () => {
     const bookmarksRepo = new FakeBookmarksRepository()
+    const savedPosition = {
+      ...position('book-a', 'a-1'),
+      chapterProgress: 0.42,
+    }
+    const readingStateRepo = new FakeReadingStateRepository([savedPosition])
 
-    expect(addChapterBookmark(repo, bookmarksRepo, 'book-a', 'a-1')).toBe(true)
+    expect(
+      addChapterBookmark(
+        repo,
+        readingStateRepo,
+        bookmarksRepo,
+        'book-a',
+        'a-1',
+      ),
+    ).toBe(true)
     expect(isChapterBookmarked(bookmarksRepo, 'book-a', 'a-1')).toBe(true)
+    expect(bookmarksRepo.list()).toEqual([savedPosition])
 
     removeChapterBookmark(bookmarksRepo, 'book-a', 'a-1')
     expect(isChapterBookmarked(bookmarksRepo, 'book-a', 'a-1')).toBe(false)
@@ -237,21 +255,30 @@ describe('Chapter Bookmarks Use Cases', () => {
   it('prevents bookmarking locked chapters', () => {
     const bookmarksRepo = new FakeBookmarksRepository()
 
-    expect(addChapterBookmark(repo, bookmarksRepo, 'book-b', 'b-2')).toBe(false)
+    expect(
+      addChapterBookmark(
+        repo,
+        new FakeReadingStateRepository([]),
+        bookmarksRepo,
+        'book-b',
+        'b-2',
+      ),
+    ).toBe(false)
     expect(isChapterBookmarked(bookmarksRepo, 'book-b', 'b-2')).toBe(false)
   })
 
   it('lists bookmarks in catalog and explicit chapter order', () => {
     const bookmarksRepo = new FakeBookmarksRepository([
-      { bookId: bookId('book-b'), chapterId: chapterId('b-1') },
-      { bookId: bookId('book-a'), chapterId: chapterId('a-2') },
-      { bookId: bookId('book-a'), chapterId: chapterId('a-1') },
+      position('book-b', 'b-1'),
+      position('book-a', 'a-2'),
+      position('book-a', 'a-1'),
     ])
 
     const list = listChapterBookmarks(repo, bookmarksRepo)
     expect(list).toHaveLength(3)
     expect(list[0].book.book.id).toBe('book-a')
     expect(list[0].chapter.id).toBe('a-1')
+    expect(list[0].position).toEqual(position('book-a', 'a-1'))
     expect(list[1].book.book.id).toBe('book-a')
     expect(list[1].chapter.id).toBe('a-2')
     expect(list[2].book.book.id).toBe('book-b')
@@ -260,9 +287,9 @@ describe('Chapter Bookmarks Use Cases', () => {
 
   it('ignores stale book and chapter IDs and locked bookmarks', () => {
     const bookmarksRepo = new FakeBookmarksRepository([
-      { bookId: bookId('stale-book'), chapterId: chapterId('a-1') },
-      { bookId: bookId('book-a'), chapterId: chapterId('stale-chapter') },
-      { bookId: bookId('book-b'), chapterId: chapterId('b-2') }, // locked
+      position('stale-book', 'a-1'),
+      position('book-a', 'stale-chapter'),
+      position('book-b', 'b-2'), // locked
     ])
 
     const list = listChapterBookmarks(repo, bookmarksRepo)
@@ -454,6 +481,41 @@ describe('recoverActiveReaderSession', () => {
   })
 })
 
+describe('openReadingChapter missing prose fallback', () => {
+  const book = makeBook('book-a', [
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+  ])
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+  ] as const)('does not open or overwrite state when prose is %s', (_, prose) => {
+    const contentRepository: ContentRepository = {
+      listBooks: () => [book],
+      getBook: (requestedBookId) =>
+        requestedBookId === 'book-a' ? book : undefined,
+      getChapterProse: () => prose,
+    }
+    const existingPosition = {
+      ...position('book-a', 'a-1'),
+      chapterProgress: 0.66,
+    }
+    const readingStateRepository = new MutableReadingStateRepository([
+      existingPosition,
+    ])
+
+    expect(
+      openReadingChapter(contentRepository, readingStateRepository, {
+        bookId: bookId('book-a'),
+        chapterId: chapterId('a-1'),
+        paragraphIndex: 0,
+        chapterProgress: 0.42,
+      }),
+    ).toBeUndefined()
+    expect(readingStateRepository.load('book-a')).toEqual(existingPosition)
+  })
+})
+
 describe('openReadingChapter chapter-progress restore', () => {
   const bookA = makeBook('book-a', [
     chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
@@ -479,6 +541,28 @@ describe('openReadingChapter chapter-progress restore', () => {
       paragraphIndex: 0,
       chapterProgress: 0.42,
     })
+  })
+
+  it.each([
+    ['paragraph index', { ...position('book-a', 'a-2'), paragraphIndex: 1 }],
+    ['chapter progress', { ...position('book-a', 'a-2'), chapterProgress: 1.1 }],
+  ] as const)('rejects an invalid bookmarked %s without replacing current state', (_, invalidPosition) => {
+    const existingPosition = {
+      ...position('book-a', 'a-1'),
+      chapterProgress: 0.66,
+    }
+    const readingStateRepository = new MutableReadingStateRepository([
+      existingPosition,
+    ])
+
+    expect(
+      openReadingChapter(
+        contentRepository,
+        readingStateRepository,
+        invalidPosition,
+      ),
+    ).toBeUndefined()
+    expect(readingStateRepository.load('book-a')).toEqual(existingPosition)
   })
 
   it('does not restore progress or request prose for a locked chapter', () => {
@@ -553,6 +637,98 @@ describe('openReadingChapter chapter-progress restore', () => {
         -1,
       ),
     ).toBe(false)
+  })
+})
+
+describe('cross-chapter navigation correctness', () => {
+  const bookA = makeBook('book-a', [
+    chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.READABLE),
+  ])
+  const bookB = makeBook('book-b', [
+    chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+  ])
+
+  it.each([
+    ['missing', undefined],
+    ['empty array', []],
+    ['empty paragraph', ['']],
+    ['blank paragraph', [' \n\t ']],
+    ['invalid paragraph after valid prose', ['valid prose', '']],
+    ['non-string paragraph', [null] as unknown as readonly string[]],
+    ['non-array prose', 'invalid prose' as unknown as readonly string[]],
+  ] as const)(
+    'preserves the current position in both directions for %s',
+    (_, prose) => {
+      const contentRepository = new FakeContentRepository([bookA, bookB])
+      const otherPosition = { ...position('book-b', 'b-1'), chapterProgress: 0.73 }
+      const readingStateRepository = new MutableReadingStateRepository([
+        otherPosition,
+      ])
+      const currentPosition = { ...position('book-a', 'a-2'), chapterProgress: 0.66 }
+      const current = openReadingChapter(
+        contentRepository,
+        readingStateRepository,
+        currentPosition,
+      )!
+      const savedPositions = readingStateRepository.listSavedPositions()
+      const save = vi.spyOn(readingStateRepository, 'save')
+      const loadProse = vi
+        .spyOn(contentRepository, 'getChapterProse')
+        .mockReturnValue(prose)
+
+      for (const direction of [-1, 1] as const) {
+        expect(
+          navigateToAdjacentChapter(
+            contentRepository,
+            readingStateRepository,
+            current,
+            direction,
+          ),
+        ).toBeUndefined()
+        expect(loadProse).toHaveBeenLastCalledWith(direction === -1 ? 'a-1' : 'a-3')
+        expect(save).not.toHaveBeenCalled()
+        expect(readingStateRepository.listSavedPositions()).toEqual(savedPositions)
+        expect(current.chapter.id).toBe('a-2')
+        expect(current.prose).toEqual(['test prose'])
+      }
+    },
+  )
+
+  it.each([
+    ['a-1', -1],
+    ['a-3', 1],
+  ] as const)('preserves %s at its outer boundary', (currentId, direction) => {
+    const contentRepository = new FakeContentRepository([bookA, bookB])
+    const readingStateRepository = new MutableReadingStateRepository()
+    const saved = { ...position('book-a', currentId), chapterProgress: 0.66 }
+    const current = openReadingChapter(contentRepository, readingStateRepository, saved)!
+    const save = vi.spyOn(readingStateRepository, 'save')
+    const loadProse = vi.spyOn(contentRepository, 'getChapterProse')
+
+    expect(canNavigateToAdjacentChapter(current, direction)).toBe(false)
+    expect(
+      navigateToAdjacentChapter(contentRepository, readingStateRepository, current, direction),
+    ).toBeUndefined()
+    expect(save).not.toHaveBeenCalled()
+    expect(loadProse).not.toHaveBeenCalled()
+    expect(readingStateRepository.load('book-a')).toEqual(saved)
+  })
+
+  it('rejects a target chapter belonging to another book before loading or saving it', () => {
+    const contentRepository = new FakeContentRepository([bookA, bookB])
+    const saved = { ...position('book-a', 'a-2'), chapterProgress: 0.66 }
+    const readingStateRepository = new MutableReadingStateRepository([saved])
+    const save = vi.spyOn(readingStateRepository, 'save')
+    const loadProse = vi.spyOn(contentRepository, 'getChapterProse')
+
+    expect(
+      openReadingChapter(contentRepository, readingStateRepository, position('book-a', 'b-1')),
+    ).toBeUndefined()
+    expect(save).not.toHaveBeenCalled()
+    expect(loadProse).not.toHaveBeenCalled()
+    expect(readingStateRepository.listSavedPositions()).toEqual([saved])
   })
 })
 

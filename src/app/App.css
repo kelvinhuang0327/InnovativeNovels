@@ -188,6 +188,23 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.reader-chapter-open-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border-left: 0.35rem solid #8d3f2f;
+  border-radius: 0.5rem;
+  background: rgba(141, 63, 47, 0.08);
+}
+
+.reader-chapter-open-error p {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .screen-copy,
 .book-description,
 .reader-prose p,

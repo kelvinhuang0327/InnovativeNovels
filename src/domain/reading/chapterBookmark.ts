@@ -1,6 +1,3 @@
-import type { BookId, ChapterId } from '../catalog/identifiers'
+import type { ReadingPosition } from './readingPosition'
 
-export interface ChapterBookmark {
-  readonly bookId: BookId
-  readonly chapterId: ChapterId
-}
+export type ChapterBookmark = ReadingPosition

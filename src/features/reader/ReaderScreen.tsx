@@ -16,6 +16,7 @@ import type {
   TableOfContentsEntry,
 } from '../../application/reading/readingUseCases'
 import { calculateReadingProgress } from '../../domain/reading/readingProgressPolicy'
+import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
 import { ReaderAppearanceSheet } from './ReaderAppearanceSheet'
@@ -99,6 +100,7 @@ function clampChapterProgress(chapterProgress: number): number {
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
   readonly recoveryStatus?: string
+  readonly chapterOpenFailed?: boolean
   readonly preferences: ReaderPreferences
   readonly isBookmarked: boolean
   readonly bookmarks: readonly BookmarkEntry[]
@@ -107,12 +109,13 @@ interface ReaderScreenProps {
   readonly onChangePreferences: (newPreferences: ReaderPreferences) => void
   readonly onResetPreferences: () => void
   readonly onToggleBookmark: () => void
-  readonly onSelectBookmark: (bookId: string, chapterId: string) => void
+  readonly onSelectBookmark: (position: ReadingPosition) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
   readonly onSelectChapter: (chapterId: string) => void
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
+  readonly onRetryChapterOpen?: () => void
   readonly canNavigateNextChapter?: boolean
   readonly onProgressChange?: (chapterProgress: number) => void
 }
@@ -120,6 +123,7 @@ interface ReaderScreenProps {
 export function ReaderScreen({
   openedChapter,
   recoveryStatus,
+  chapterOpenFailed = false,
   preferences,
   isBookmarked,
   bookmarks,
@@ -134,6 +138,7 @@ export function ReaderScreen({
   onBackToBook,
   onPrevious,
   onNext,
+  onRetryChapterOpen,
   canNavigateNextChapter = false,
   onProgressChange,
 }: ReaderScreenProps) {
@@ -896,6 +901,21 @@ export function ReaderScreen({
           aria-atomic="true"
         >
           {recoveryStatus}
+        </div>
+      )}
+
+      {chapterOpenFailed && (
+        <div className="reader-chapter-open-error">
+          <p role="alert" aria-live="assertive" aria-atomic="true">
+            章節內容暫時無法載入，已保留目前章節與閱讀進度。請重試或返回作品。
+          </p>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onRetryChapterOpen}
+          >
+            重試載入章節
+          </button>
         </div>
       )}
 

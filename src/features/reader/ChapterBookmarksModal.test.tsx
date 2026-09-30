@@ -41,7 +41,7 @@ interface HarnessProps {
   readonly bookmarks?: readonly BookmarkEntry[]
   readonly initiallyOpen?: boolean
   readonly onClose: () => void
-  readonly onSelectBookmark: (bookId: string, chapterId: string) => void
+  readonly onSelectBookmark: (position: BookmarkEntry['position']) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
 }
 
@@ -162,17 +162,14 @@ describe('ChapterBookmarksModal keyboard and focus behavior', () => {
     expect(screen.getByRole('dialog', { name: '章節書籤' })).toBeInTheDocument()
   })
 
-  it('selects a bookmark once with the same IDs and closes the modal', () => {
+  it('selects a bookmark once with its exact reading position and closes the modal', () => {
     const { onClose, onSelectBookmark } = renderHarness()
     const dialog = screen.getByRole('dialog', { name: '章節書籤' })
 
     fireEvent.click(within(dialog).getByRole('button', { name: '移至章節' }))
 
     expect(onSelectBookmark).toHaveBeenCalledTimes(1)
-    expect(onSelectBookmark).toHaveBeenCalledWith(
-      bookmark.book.book.id,
-      bookmark.chapter.id,
-    )
+    expect(onSelectBookmark).toHaveBeenCalledWith(bookmark.position)
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(
       screen.queryByRole('dialog', { name: '章節書籤' }),

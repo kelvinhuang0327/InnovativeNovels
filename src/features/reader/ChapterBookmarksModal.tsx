@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react'
 import type { BookmarkEntry } from '../../application/reading/readingUseCases'
+import type { ReadingPosition } from '../../domain/reading/readingPosition'
 
 interface ChapterBookmarksModalProps {
   readonly isOpen: boolean
   readonly bookmarks: readonly BookmarkEntry[]
   readonly triggerRef: React.RefObject<HTMLButtonElement | null>
   readonly onClose: () => void
-  readonly onSelectBookmark: (bookId: string, chapterId: string) => void
+  readonly onSelectBookmark: (position: ReadingPosition) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
 }
 
@@ -93,7 +94,7 @@ export function ChapterBookmarksModal({
                     type="button"
                     className="button-primary"
                     onClick={() => {
-                      onSelectBookmark(entry.book.book.id, entry.chapter.id)
+                      onSelectBookmark(entry.position)
                       closeAndRestoreFocus()
                     }}
                   >

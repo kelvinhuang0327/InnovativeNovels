@@ -46,6 +46,33 @@ function chapterPosition(chapter: Chapter): ReadingPosition {
   }
 }
 
+function isValidProse(prose: readonly string[] | undefined): prose is readonly string[] {
+  return (
+    Array.isArray(prose) &&
+    prose.length > 0 &&
+    prose.every((paragraph) =>
+      typeof paragraph === 'string' && paragraph.trim().length > 0,
+    )
+  )
+}
+
+function isValidReadingPosition(
+  position: ReadingPosition,
+  chapter: Chapter,
+  paragraphCount: number,
+): boolean {
+  return (
+    position.bookId === chapter.bookId &&
+    position.chapterId === chapter.id &&
+    Number.isInteger(position.paragraphIndex) &&
+    position.paragraphIndex >= 0 &&
+    position.paragraphIndex < paragraphCount &&
+    Number.isFinite(position.chapterProgress) &&
+    position.chapterProgress >= 0 &&
+    position.chapterProgress <= 1
+  )
+}
+
 function findReadableChapter(
   book: ContentBook,
   chapterId: string,
@@ -113,7 +140,16 @@ export function openReadingChapter(
   let prose: readonly string[] = []
 
   if (access.canLoadProse) {
-    prose = contentRepository.getChapterProse(chapter.id) ?? []
+    const loadedProse = contentRepository.getChapterProse(chapter.id)
+
+    if (
+      !isValidProse(loadedProse) ||
+      !isValidReadingPosition(position, chapter, loadedProse.length)
+    ) {
+      return undefined
+    }
+
+    prose = loadedProse
     readingStateRepository.save(position)
   }
 
@@ -225,6 +261,7 @@ export function isChapterBookmarked(
 
 export function addChapterBookmark(
   contentRepository: ContentRepository,
+  readingStateRepository: ReadingStateRepository,
   bookmarksRepository: ChapterBookmarksRepository,
   bookId: string,
   chapterId: string,
@@ -241,9 +278,25 @@ export function addChapterBookmark(
     return false
   }
 
+  const savedPosition = readingStateRepository.load(bookId)
+  const position =
+    savedPosition?.bookId === bookId && savedPosition.chapterId === chapterId
+      ? savedPosition
+      : chapterPosition(chapter)
+  const prose = contentRepository.getChapterProse(chapter.id)
+
+  if (
+    !isValidProse(prose) ||
+    !isValidReadingPosition(position, chapter, prose.length)
+  ) {
+    return false
+  }
+
   bookmarksRepository.add({
     bookId: toBookId(bookId),
     chapterId: toChapterId(chapterId),
+    paragraphIndex: position.paragraphIndex,
+    chapterProgress: position.chapterProgress,
   })
 
   return true
@@ -345,8 +398,11 @@ export function listChapterBookmarks(
     return []
   }
 
-  const bookmarkMap = new Set(
-    rawBookmarks.map((b) => `${b.bookId}:${b.chapterId}`),
+  const bookmarkMap = new Map(
+    rawBookmarks.map(
+      (bookmark) =>
+        [`${bookmark.bookId}:${bookmark.chapterId}`, bookmark] as const,
+    ),
   )
 
   const entries: BookmarkEntry[] = []
@@ -354,14 +410,9 @@ export function listChapterBookmarks(
   for (const book of contentRepository.listBooks()) {
     const orderedChapters = chaptersByExplicitOrder(book)
     for (const chapter of orderedChapters) {
-      if (bookmarkMap.has(`${book.book.id}:${chapter.id}`)) {
-        if (decideChapterAccess(chapter.access).canOpen) {
-          entries.push({
-            book,
-            chapter,
-            position: chapterPosition(chapter),
-          })
-        }
+      const bookmark = bookmarkMap.get(`${book.book.id}:${chapter.id}`)
+      if (bookmark && decideChapterAccess(chapter.access).canOpen) {
+        entries.push({ book, chapter, position: bookmark })
       }
     }
   }

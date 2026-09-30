@@ -47,8 +47,18 @@ describe('LocalStorageChapterBookmarksRepository', () => {
   })
 
   it('adds and removes bookmarks correctly', () => {
-    const mark1 = { bookId: bookId('b1'), chapterId: chapterId('c1') }
-    const mark2 = { bookId: bookId('b1'), chapterId: chapterId('c2') }
+    const mark1 = {
+      bookId: bookId('b1'),
+      chapterId: chapterId('c1'),
+      paragraphIndex: 0,
+      chapterProgress: 0.42,
+    }
+    const mark2 = {
+      bookId: bookId('b1'),
+      chapterId: chapterId('c2'),
+      paragraphIndex: 0,
+      chapterProgress: 0,
+    }
 
     repository.add(mark1)
     repository.add(mark2)
@@ -62,7 +72,12 @@ describe('LocalStorageChapterBookmarksRepository', () => {
   })
 
   it('prevents duplicate bookmarks', () => {
-    const mark = { bookId: bookId('b1'), chapterId: chapterId('c1') }
+    const mark = {
+      bookId: bookId('b1'),
+      chapterId: chapterId('c1'),
+      paragraphIndex: 0,
+      chapterProgress: 0.42,
+    }
 
     repository.add(mark)
     repository.add(mark)
@@ -79,5 +94,62 @@ describe('LocalStorageChapterBookmarksRepository', () => {
       JSON.stringify({ schemaVersion: 2, bookmarks: [] }),
     )
     expect(repository.list()).toEqual([])
+  })
+
+  it('defaults legacy chapter-only bookmarks to the start of the chapter', () => {
+    storage.setItem(
+      CHAPTER_BOOKMARKS_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        bookmarks: [{ bookId: 'b1', chapterId: 'c1' }],
+      }),
+    )
+
+    expect(repository.list()).toEqual([
+      {
+        bookId: bookId('b1'),
+        chapterId: chapterId('c1'),
+        paragraphIndex: 0,
+        chapterProgress: 0,
+      },
+    ])
+  })
+
+  it('ignores bookmarks with invalid stored reading positions', () => {
+    storage.setItem(
+      CHAPTER_BOOKMARKS_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        bookmarks: [
+          {
+            bookId: 'b1',
+            chapterId: 'c1',
+            paragraphIndex: 0,
+            chapterProgress: 0.42,
+          },
+          {
+            bookId: 'b1',
+            chapterId: 'c2',
+            paragraphIndex: -1,
+            chapterProgress: 0.5,
+          },
+          {
+            bookId: 'b1',
+            chapterId: 'c3',
+            paragraphIndex: 0,
+            chapterProgress: 1.5,
+          },
+        ],
+      }),
+    )
+
+    expect(repository.list()).toEqual([
+      {
+        bookId: bookId('b1'),
+        chapterId: chapterId('c1'),
+        paragraphIndex: 0,
+        chapterProgress: 0.42,
+      },
+    ])
   })
 })
