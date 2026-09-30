@@ -497,6 +497,47 @@ describe('Wave 2 catalog discovery and continue-reading parity', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('does not offer Continue Reading when an active session has invalid chapter prose', () => {
+    const readingState = JSON.stringify({
+      schemaVersion: 2,
+      positions: {
+        'book-tide-city': {
+          bookId: 'book-tide-city',
+          chapterId: 'chapter-tide-letter',
+          paragraphIndex: 0,
+          chapterProgress: 0.42,
+        },
+      },
+    })
+    window.localStorage.setItem(READING_STATE_STORAGE_KEY, readingState)
+    window.localStorage.setItem(
+      ACTIVE_READER_SESSION_STORAGE_KEY,
+      JSON.stringify({ schemaVersion: 1, activeBookId: 'book-tide-city' }),
+    )
+
+    const contentRepository = new StaticContentRepository()
+    vi.spyOn(contentRepository, 'getChapterProse').mockReturnValue(['  '])
+
+    render(
+      <App
+        dependencies={{
+          ...createDependencies(),
+          contentRepository,
+        }}
+      />,
+    )
+
+    expect(
+      screen.queryByRole('heading', { name: '繼續閱讀' }),
+    ).not.toBeInTheDocument()
+    expect(window.localStorage.getItem(ACTIVE_READER_SESSION_STORAGE_KEY)).toBe(
+      null,
+    )
+    expect(window.localStorage.getItem(READING_STATE_STORAGE_KEY)).toBe(
+      readingState,
+    )
+  })
+
   it.each([
     { bookIndex: 0, readableChapterId: 'chapter-sealed-gate' },
     { bookIndex: 1, readableChapterId: 'chapter-immortal-tribulation' },

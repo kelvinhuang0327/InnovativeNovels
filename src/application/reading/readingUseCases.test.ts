@@ -208,6 +208,30 @@ describe('listContinueReading', () => {
     ).toEqual([])
   })
 
+  it.each([
+    ['paragraph index', { ...position('book-a', 'a-1'), paragraphIndex: 1 }],
+    ['chapter progress', { ...position('book-a', 'a-1'), chapterProgress: 1.1 }],
+  ] as const)('ignores a saved position with an invalid %s', (_, savedPosition) => {
+    expect(
+      listContinueReading(
+        new FakeContentRepository(catalog),
+        new FakeReadingStateRepository([savedPosition]),
+      ),
+    ).toEqual([])
+  })
+
+  it('ignores a saved position when its chapter prose is invalid', () => {
+    const contentRepository = new FakeContentRepository(catalog)
+    vi.spyOn(contentRepository, 'getChapterProse').mockReturnValue(['  '])
+
+    expect(
+      listContinueReading(
+        contentRepository,
+        new FakeReadingStateRepository([position('book-a', 'a-1')]),
+      ),
+    ).toEqual([])
+  })
+
   it('returns nothing when no positions are saved', () => {
     const readingStateRepository = new FakeReadingStateRepository([])
 

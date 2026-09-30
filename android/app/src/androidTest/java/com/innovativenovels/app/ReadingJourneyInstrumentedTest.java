@@ -3,14 +3,13 @@ package com.innovativenovels.app;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.text.TextUtils;
 import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
-import androidx.test.runner.lifecycle.Stage;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.StaleObjectException;
 import androidx.test.uiautomator.UiDevice;
@@ -18,12 +17,17 @@ import androidx.test.uiautomator.UiObject2;
 import androidx.test.uiautomator.Until;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.util.Collection;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.junit.Before;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.MethodSorters;
 
 /**
  * Instrumented acceptance test verifying the Android native reading journey
@@ -38,15 +42,18 @@ import org.junit.runner.RunWith;
  * 6. Verify substantive chapter prose is visible.
  * 7. Navigate to the next chapter using existing product UI.
  * 8. Move materially into the chapter.
- * 9. Terminate/background-and-kill the application using the deterministic mechanism supported by the harness.
- * 10. Relaunch.
- * 11. Verify the application resumes into a valid Reader/session state consistent with the existing persistence contract.
+ * 9. Background the app; Android Test Orchestrator ends this test invocation and restarts the app process.
+ * 10. Launch the app in a fresh ordered invocation and verify the prior process is gone.
+ * 11. Verify the application resumes into the saved Chapter 2 Reader/session state.
  */
 @RunWith(AndroidJUnit4.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ReadingJourneyInstrumentedTest {
 
     private static final String TAG = "NovelJourneyTest";
     private static final String PACKAGE_NAME = "com.innovativenovels.app";
+    private static final String TEST_PREFS_NAME = "reading_journey_acceptance";
+    private static final String APP_PROCESS_IDS_BEFORE_RESTART_KEY = "app_process_ids_before_restart";
     private static final long LAUNCH_TIMEOUT_MS = 25000L;
     private static final long UI_TIMEOUT_MS = 15000L;
 
@@ -163,26 +170,83 @@ public class ReadingJourneyInstrumentedTest {
         device.waitForIdle();
     }
 
-    private void terminateAndBackgroundApp() {
-        // Step 9: Deterministically background the application and destroy active UI
-        device.pressHome();
-        device.waitForIdle();
+    private SharedPreferences journeyTestPreferences() {
+        return InstrumentationRegistry.getInstrumentation()
+            .getTargetContext()
+            .getSharedPreferences(TEST_PREFS_NAME, Context.MODE_PRIVATE);
+    }
 
-        try {
-            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
-                for (Stage stage : new Stage[]{Stage.STOPPED, Stage.PAUSED, Stage.RESUMED, Stage.CREATED, Stage.STARTED}) {
-                    Collection<Activity> activities =
-                        ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(stage);
-                    for (Activity a : activities) {
-                        a.finish();
-                    }
-                }
-            });
-        } catch (Exception ignored) {}
+    private Set<String> parseProcessIds(String processIds) {
+        if (processIds == null || processIds.trim().isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new HashSet<>(Arrays.asList(processIds.trim().split("\\s+")));
+    }
 
-        try {
-            Thread.sleep(1500L);
-        } catch (InterruptedException ignored) {}
+    private Set<String> getRunningAppProcessIds() throws Exception {
+        return parseProcessIds(device.executeShellCommand("pidof " + PACKAGE_NAME));
+    }
+
+    private boolean areValidProcessIds(Set<String> processIds) {
+        if (processIds == null || processIds.isEmpty()) {
+            return false;
+        }
+        for (String processId : processIds) {
+            if (processId == null || !processId.matches("[0-9]+")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isPidPersistenceProbeOnly() {
+        return "true".equals(
+            InstrumentationRegistry.getArguments().getString("pidPersistenceProbeOnly")
+        );
+    }
+
+    private Set<String> saveCurrentAppProcessIds(String stepName) throws Exception {
+        Set<String> appProcessIds = getRunningAppProcessIds();
+        assertTrue(
+            stepName + ": PID_CAPTURE=FAIL app process was not found",
+            !appProcessIds.isEmpty()
+        );
+        assertTrue(
+            stepName + ": PID_CAPTURE=FAIL malformed app PID value(s): " + appProcessIds,
+            areValidProcessIds(appProcessIds)
+        );
+        boolean savedProcessIds = journeyTestPreferences()
+            .edit()
+            .putString(APP_PROCESS_IDS_BEFORE_RESTART_KEY, TextUtils.join(" ", appProcessIds))
+            .commit();
+        assertTrue(
+            stepName + ": PID_PERSISTENCE=FAIL SharedPreferences commit returned false",
+            savedProcessIds
+        );
+        Log.i(
+            TAG,
+            stepName + ": PID_CAPTURE=PASS PID_PERSISTENCE=PASS OLD_PID="
+                + TextUtils.join(" ", appProcessIds)
+                + " STORAGE_PACKAGE="
+                + InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageName()
+        );
+        return appProcessIds;
+    }
+
+    private Set<String> readPersistedAppProcessIds(String stepName) {
+        String persistedProcessIds = journeyTestPreferences()
+            .getString(APP_PROCESS_IDS_BEFORE_RESTART_KEY, null);
+        assertTrue(
+            stepName + ": PID_READBACK=FAIL PID saved by Step 9 is unavailable",
+            persistedProcessIds != null && !persistedProcessIds.trim().isEmpty()
+        );
+        Set<String> previousProcessIds = parseProcessIds(persistedProcessIds);
+        assertTrue(
+            stepName + ": PID_READBACK=FAIL persisted PID is malformed: " + persistedProcessIds,
+            areValidProcessIds(previousProcessIds)
+        );
+        Log.i(TAG, stepName + ": PID_READBACK=PASS OLD_PID=" + TextUtils.join(" ", previousProcessIds));
+        return previousProcessIds;
     }
 
     /**
@@ -215,9 +279,15 @@ public class ReadingJourneyInstrumentedTest {
     }
 
     @Test
-    public void testNativeReadingJourney() throws Exception {
+    public void test01SaveChapterProgressBeforeOrchestratorRestart() throws Exception {
         // Step 1: Launch the app in an Android Emulator
         launchApp();
+        if (isPidPersistenceProbeOnly()) {
+            saveCurrentAppProcessIds("PID_PROBE_STEP_9");
+            device.pressHome();
+            device.waitForIdle();
+            return;
+        }
         captureScreenshot("01_AppLaunch");
 
         // Step 2: Reach Catalog
@@ -266,25 +336,73 @@ public class ReadingJourneyInstrumentedTest {
         assertNotNull("Step 8: Chapter 2 prose not visible after moving materially into chapter", chapter2Prose);
         captureScreenshot("08_MovedMateriallyIntoChapter2");
 
-        // Step 9: Terminate/background-and-kill the application using the deterministic mechanism supported by the harness
-        terminateAndBackgroundApp();
+        // Step 9: Save the current app PID, then leave the app in the background.
+        // Android Test Orchestrator ends this test invocation and restarts the
+        // target process before running the next ordered test method.
+        saveCurrentAppProcessIds("Step 9");
 
-        // Step 10: Relaunch
+        device.pressHome();
+        device.waitForIdle();
+        Thread.sleep(1500L);
+    }
+
+    @Test
+    public void test02RelaunchAfterProcessRestartAndResumeChapter() throws Exception {
+        // Step 10: The orchestrator must have ended every app process from the
+        // previous journey invocation before this ordered method begins.
+        Set<String> previousProcessIds = readPersistedAppProcessIds("Step 10");
+        Set<String> processIdsBeforeRelaunch = getRunningAppProcessIds();
+        assertTrue(
+            "Step 10: Running app PID lookup returned malformed values: " + processIdsBeforeRelaunch,
+            processIdsBeforeRelaunch.isEmpty() || areValidProcessIds(processIdsBeforeRelaunch)
+        );
+        assertTrue(
+            "Step 10: The previous app process survived the orchestrator restart",
+            Collections.disjoint(previousProcessIds, processIdsBeforeRelaunch)
+        );
+        Log.i(
+            TAG,
+            "PROCESS_RESTART_PROVEN=PASS OLD_PID=" + TextUtils.join(" ", previousProcessIds)
+                + " PID_BEFORE_RELAUNCH=" + TextUtils.join(" ", processIdsBeforeRelaunch)
+        );
+
+        // Step 11: Relaunch in the fresh process and verify the saved session.
         launchApp();
         captureScreenshot("10_AppRelaunched");
         Thread.sleep(1000L);
-        dumpHierarchy("STEP11_AFTER_RELAUNCH");
+        dumpHierarchy("STEP11_AFTER_PROCESS_RESTART");
 
-        // Step 11: Verify the application resumes into a valid Reader/session state consistent with the existing persistence contract
+        Set<String> relaunchedProcessIds = getRunningAppProcessIds();
+        assertTrue("Step 11: Relaunched app process was not visible to pidof", !relaunchedProcessIds.isEmpty());
+        assertTrue(
+            "Step 11: Relaunched app PID lookup returned malformed values: " + relaunchedProcessIds,
+            areValidProcessIds(relaunchedProcessIds)
+        );
+        assertTrue(
+            "Step 11: Reader was reopened in a process that existed before the restart",
+            Collections.disjoint(previousProcessIds, relaunchedProcessIds)
+        );
+        Log.i(
+            TAG,
+            "NEW_PID=" + TextUtils.join(" ", relaunchedProcessIds)
+                + " PID_READBACK=PASS PROCESS_RESTART_PROVEN=PASS"
+        );
+
+        if (isPidPersistenceProbeOnly()) {
+            return;
+        }
+
+        // Step 12: Verify the application resumes into the saved Chapter 2 Reader/session state.
         UiObject2 resumeStateIndicator = findObjectByTextOrDesc(".*(已恢復上次閱讀|第二章|舊燈塔|頂層|燈室|本章閱讀進度|閱讀器).*", UI_TIMEOUT_MS);
         if (resumeStateIndicator == null) {
-            dumpHierarchy("STEP11_FAILED_INDICATOR");
+            dumpHierarchy("STEP12_FAILED_INDICATOR");
         }
-        assertNotNull("Step 11: Application did not resume to valid reading state on Chapter 2", resumeStateIndicator);
+        assertNotNull("Step 12: Application did not resume to valid reading state on Chapter 2", resumeStateIndicator);
 
 
         UiObject2 resumedProse = findObjectByTextOrDesc(".*(舊燈塔|燈室|澄夏|頂層|鹽霧).*", UI_TIMEOUT_MS);
-        assertNotNull("Step 11: Resumed chapter prose not visible after relaunch", resumedProse);
+        assertNotNull("Step 12: Resumed chapter prose not visible after process restart", resumedProse);
+        Log.i(TAG, "READER_RESUME_AFTER_RESTART=PASS");
         captureScreenshot("11_ResumeStateVerified");
     }
 }

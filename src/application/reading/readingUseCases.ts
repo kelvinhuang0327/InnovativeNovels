@@ -243,6 +243,15 @@ export function listContinueReading(
       continue
     }
 
+    const prose = contentRepository.getChapterProse(chapter.id)
+
+    if (
+      !isValidProse(prose) ||
+      !isValidReadingPosition(saved, chapter, prose.length)
+    ) {
+      continue
+    }
+
     entries.push({ book, chapter, position: saved })
   }
 

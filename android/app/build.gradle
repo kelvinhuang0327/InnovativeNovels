@@ -73,6 +73,11 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    testOptions {
+        // Restart the target app process between ordered journey phases while
+        // preserving its data for the reader-resume assertion.
+        execution 'ANDROIDX_TEST_ORCHESTRATOR'
+    }
     buildTypes {
         release {
             minifyEnabled false
@@ -100,6 +105,7 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     androidTestImplementation "androidx.test.uiautomator:uiautomator:$androidxUiautomatorVersion"
+    androidTestUtil "androidx.test:orchestrator:1.5.1"
     implementation project(':capacitor-cordova-android-plugins')
 }
 
