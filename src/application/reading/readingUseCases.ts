@@ -443,6 +443,70 @@ export interface TableOfContentsEntry {
   readonly isCurrent: boolean
 }
 
+export interface BookTextSearchResult {
+  readonly chapterId: ChapterId
+  readonly chapterTitle: string
+  readonly chapterSequence: number
+  readonly paragraphIndex: number
+  readonly paragraphText: string
+  readonly matchIndex: number
+}
+
+export function searchBookText(
+  contentRepository: ContentRepository,
+  book: ContentBook,
+  searchText: string,
+): readonly BookTextSearchResult[] {
+  const normalizedQuery = searchText.trim().toLowerCase()
+
+  if (normalizedQuery.length === 0) {
+    return []
+  }
+
+  const results: BookTextSearchResult[] = []
+
+  for (const chapter of chaptersByExplicitOrder(book)) {
+    if (!decideChapterAccess(chapter.access).canLoadProse) {
+      continue
+    }
+
+    let paragraphs: readonly string[] | undefined
+
+    try {
+      paragraphs = contentRepository.getChapterProse(chapter.id)
+    } catch {
+      continue
+    }
+
+    if (!Array.isArray(paragraphs)) {
+      continue
+    }
+
+    paragraphs.forEach((paragraphText, paragraphIndex) => {
+      if (typeof paragraphText !== 'string') {
+        return
+      }
+
+      const matchIndex = paragraphText.toLowerCase().indexOf(normalizedQuery)
+
+      if (matchIndex < 0) {
+        return
+      }
+
+      results.push({
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+        chapterSequence: chapter.sequence,
+        paragraphIndex,
+        paragraphText,
+        matchIndex,
+      })
+    })
+  }
+
+  return results
+}
+
 export function filterTableOfContents(
   entries: readonly TableOfContentsEntry[],
   searchText?: string,

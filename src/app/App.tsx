@@ -42,8 +42,10 @@ import {
   removeChapterReadingNote,
   resolveStartOrContinue,
   saveChapterReadingNote,
+  searchBookText,
   updateReadingProgress,
   type BookmarkEntry,
+  type BookTextSearchResult,
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
 import type { ActiveReaderSessionRepository } from '../application/reading/activeReaderSessionRepository'
@@ -118,6 +120,7 @@ type Screen =
       readonly openedChapter: OpenedChapter
       readonly returnTo?: 'catalog' | 'library'
       readonly recoveryStatus?: string
+      readonly searchTargetParagraphIndex?: number
       readonly chapterOpenFailure?: {
         readonly position: ReadingPosition
       }
@@ -450,6 +453,7 @@ function App({
   const openReaderChapter = (
     position: ReadingPosition,
     returnTo: 'catalog' | 'library' = 'catalog',
+    searchTargetParagraphIndex?: number,
   ) => {
     const openedChapter = openReadingChapter(
       dependencies.contentRepository,
@@ -460,7 +464,12 @@ function App({
     if (openedChapter) {
       activeSessionRepo.save(openedChapter.book.book.id)
       recordRecentReading(openedChapter.book.book.id)
-      setScreen({ name: 'reader', openedChapter, returnTo })
+      setScreen({
+        name: 'reader',
+        openedChapter,
+        returnTo,
+        searchTargetParagraphIndex,
+      })
     } else {
       showReaderChapterOpenFailure(position)
     }
@@ -780,6 +789,26 @@ function App({
               screen.returnTo,
             )
           }
+          searchBookText={(query) =>
+            searchBookText(
+              dependencies.contentRepository,
+              screen.openedChapter.book,
+              query,
+            )
+          }
+          onSelectBookTextSearchResult={(result: BookTextSearchResult) =>
+            openReaderChapter(
+              {
+                bookId: toBookId(screen.openedChapter.book.book.id),
+                chapterId: toChapterId(result.chapterId),
+                paragraphIndex: result.paragraphIndex,
+                chapterProgress: 0,
+              },
+              screen.returnTo,
+              result.paragraphIndex,
+            )
+          }
+          searchTargetParagraphIndex={screen.searchTargetParagraphIndex}
           onBackToBook={() => {
             activeSessionRepo.clear()
             setScreen({

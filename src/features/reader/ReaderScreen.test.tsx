@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { BookTextSearchResult } from '../../application/reading/readingUseCases'
 import {
   act,
   cleanup,
@@ -79,6 +80,15 @@ const mockTableOfContents = [
 ]
 
 const mockChapterPosition = { currentPosition: 1, totalChapters: 1 }
+
+const mockBookTextSearchResult: BookTextSearchResult = {
+  chapterId: chapterId('c2'),
+  chapterTitle: 'Chapter 2',
+  chapterSequence: chapterSequence(2),
+  paragraphIndex: 1,
+  paragraphText: 'The hidden target appears twice, target.',
+  matchIndex: 'The hidden target appears twice, target.'.indexOf('target'),
+}
 
 describe('ReaderScreen Comfort & Bookmarks UI', () => {
   afterEach(() => {
@@ -2092,6 +2102,8 @@ describe('ReaderScreen immersive mobile chrome', () => {
     onProgressChange = vi.fn(),
     canNavigateNextChapter = true,
     chapterOpenFailed = false,
+    searchBookText,
+    onSelectBookTextSearchResult = vi.fn(),
   }: {
     readonly openedChapter?: typeof mockOpenedChapter
     readonly preferences?: typeof DEFAULT_READER_PREFERENCES
@@ -2104,6 +2116,12 @@ describe('ReaderScreen immersive mobile chrome', () => {
     readonly onProgressChange?: (chapterProgress: number) => void
     readonly canNavigateNextChapter?: boolean
     readonly chapterOpenFailed?: boolean
+    readonly searchBookText?: (
+      query: string,
+    ) => readonly BookTextSearchResult[]
+    readonly onSelectBookTextSearchResult?: (
+      result: BookTextSearchResult,
+    ) => void
   } = {}) {
     const result = render(
       <ReaderScreen
@@ -2127,6 +2145,8 @@ describe('ReaderScreen immersive mobile chrome', () => {
         onNext={onNext}
         canNavigateNextChapter={canNavigateNextChapter}
         onProgressChange={onProgressChange}
+        searchBookText={searchBookText}
+        onSelectBookTextSearchResult={onSelectBookTextSearchResult}
       />,
     )
 
@@ -2216,6 +2236,24 @@ describe('ReaderScreen immersive mobile chrome', () => {
     ).toBeInTheDocument()
     expect(
       within(chapterEnd).getByRole('button', { name: '返回作品' }),
+    ).toBeInTheDocument()
+  })
+
+  it('exposes book text search from the immersive mobile chrome', () => {
+    installViewportWidth(390)
+    const searchBookText = vi.fn(() => [])
+    renderImmersiveReader({ searchBookText })
+
+    const topChrome = screen.getByTestId('reader-chrome-top')
+    const searchButton = within(topChrome).getByRole('button', {
+      name: '搜尋本書內文',
+    })
+
+    expect(searchButton).toHaveTextContent('搜尋')
+    fireEvent.click(searchButton)
+
+    expect(
+      screen.getByRole('dialog', { name: '搜尋本書內文' }),
     ).toBeInTheDocument()
   })
 
@@ -2869,5 +2907,111 @@ describe('ReaderScreen Chapter-End Reading Momentum V1', () => {
       name: '繼續閱讀：第三章：重逢之後',
     })
     expect(continueBtn).toHaveClass('button-primary')
+  })
+})
+
+describe('ReaderScreen book text search', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('opens from the desktop toolbar and guards Reader shortcuts while open', () => {
+    const searchBookText = vi.fn((query: string) =>
+      query === 'target' ? [mockBookTextSearchResult] : [],
+    )
+    const onNext = vi.fn()
+
+    render(
+      <ReaderScreen
+        openedChapter={{ ...mockOpenedChapter, hasNext: true }}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        searchBookText={searchBookText}
+        onSelectBookTextSearchResult={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+      />,
+    )
+
+    const trigger = screen.getByRole('button', { name: '搜尋本書內文' })
+    expect(trigger).toHaveTextContent('搜尋內文')
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '搜尋本書內文' })
+    const input = screen.getByRole('searchbox', { name: '搜尋關鍵字' })
+    expect(input).toHaveFocus()
+    fireEvent.change(input, { target: { value: 'target' } })
+
+    const resultAction = within(dialog).getByRole('button', {
+      name: /Chapter 2/,
+    })
+    resultAction.focus()
+    expect(resultAction).toHaveFocus()
+
+    fireEvent.keyDown(dialog, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: '搜尋本書內文' }),
+    ).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('keeps the existing TOC chapter-title search functional', () => {
+    const onSelectChapter = vi.fn()
+    const tableOfContents = [
+      ...mockTableOfContents,
+      {
+        chapterId: chapterId('c2'),
+        title: '第二章：星海',
+        sequence: chapterSequence(2),
+        isAccessible: true,
+        isCurrent: false,
+      },
+    ]
+
+    render(
+      <ReaderScreen
+        openedChapter={mockOpenedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={tableOfContents}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={onSelectChapter}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟章節目錄' }))
+    const dialog = screen.getByRole('dialog', { name: '章節目錄' })
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜尋章節' }), {
+      target: { value: '星海' },
+    })
+
+    const result = within(dialog).getByRole('button', { name: /第二章：星海/ })
+    expect(
+      within(dialog).queryByRole('button', { name: /Chapter 1/ }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(result)
+    expect(onSelectChapter).toHaveBeenCalledWith('c2')
   })
 })

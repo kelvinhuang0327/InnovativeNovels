@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type {
   BookmarkEntry,
+  BookTextSearchResult,
   ChapterPositionProgress,
   OpenedChapter,
   TableOfContentsEntry,
@@ -18,6 +19,7 @@ import type {
 import { calculateReadingProgress } from '../../domain/reading/readingProgressPolicy'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
+import { BookTextSearchModal } from './BookTextSearchModal'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
 import { ChapterReadingNoteModal } from './ChapterReadingNoteModal'
 import { ReaderAppearanceSheet } from './ReaderAppearanceSheet'
@@ -158,6 +160,11 @@ interface ReaderScreenProps {
   readonly loadChapterReadingNote?: () => string
   readonly onSaveChapterReadingNote?: (content: string) => void
   readonly onSelectChapter: (chapterId: string) => void
+  readonly searchBookText?: (query: string) => readonly BookTextSearchResult[]
+  readonly onSelectBookTextSearchResult?: (
+    result: BookTextSearchResult,
+  ) => void
+  readonly searchTargetParagraphIndex?: number
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
@@ -183,6 +190,9 @@ export function ReaderScreen({
   loadChapterReadingNote = () => '',
   onSaveChapterReadingNote = () => {},
   onSelectChapter,
+  searchBookText,
+  onSelectBookTextSearchResult,
+  searchTargetParagraphIndex,
   onBackToBook,
   onPrevious,
   onNext,
@@ -197,6 +207,7 @@ export function ReaderScreen({
   const [chapterReadingNoteContent, setChapterReadingNoteContent] =
     useState('')
   const [isTocOpen, setIsTocOpen] = useState(false)
+  const [isBookTextSearchOpen, setIsBookTextSearchOpen] = useState(false)
   const [isReaderChromeVisible, setIsReaderChromeVisible] = useState(true)
   const isMobileReaderChrome = useSyncExternalStore(
     subscribeToMobileReaderChrome,
@@ -232,6 +243,7 @@ export function ReaderScreen({
   const bookmarksTriggerRef = useRef<HTMLButtonElement>(null)
   const chapterReadingNoteTriggerRef = useRef<HTMLButtonElement>(null)
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
+  const bookTextSearchTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
   const proseRef = useRef<HTMLElement>(null)
   const pagedViewportRef = useRef<HTMLDivElement>(null)
@@ -540,6 +552,46 @@ export function ReaderScreen({
     }
   }
 
+  const scrollReaderToParagraph = useCallback(
+    (paragraphIndex: number) => {
+      const paragraph = proseRef.current?.querySelectorAll('p').item(paragraphIndex)
+
+      if (!paragraph) {
+        return
+      }
+
+      const viewport = pagedViewportRef.current
+      const { pageCount, pageStep } = pagedReaderMetricsRef.current
+
+      if (
+        preferences.readingMode === 'paged' &&
+        viewport &&
+        pageStep > 0
+      ) {
+        const paragraphBounds = paragraph.getBoundingClientRect()
+        const viewportBounds = viewport.getBoundingClientRect()
+        const paragraphContentX =
+          viewport.scrollLeft + paragraphBounds.left - viewportBounds.left
+        const pageIndex = Math.floor(Math.max(paragraphContentX, 0) / pageStep)
+
+        applyPagedPage(pageIndex, pageCount, true)
+        return
+      }
+
+      paragraph.scrollIntoView({ block: 'start', inline: 'start' })
+    },
+    [applyPagedPage, preferences.readingMode],
+  )
+
+  const handleSelectBookTextSearchResult = (result: BookTextSearchResult) => {
+    if (result.chapterId === openedChapter.chapter.id) {
+      scrollReaderToParagraph(result.paragraphIndex)
+      return
+    }
+
+    onSelectBookTextSearchResult?.(result)
+  }
+
   useEffect(() => {
     flushProgressRef.current = () => {}
     const reader = readerRef.current
@@ -810,6 +862,33 @@ export function ReaderScreen({
 
   useEffect(() => {
     if (
+      searchTargetParagraphIndex === undefined ||
+      openedChapter.isLocked
+    ) {
+      return
+    }
+
+    if (typeof window.requestAnimationFrame !== 'function') {
+      scrollReaderToParagraph(searchTargetParagraphIndex)
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollReaderToParagraph(searchTargetParagraphIndex)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [
+    openedChapter.chapter.id,
+    openedChapter.isLocked,
+    searchTargetParagraphIndex,
+    scrollReaderToParagraph,
+  ])
+
+  useEffect(() => {
+    if (
       !isMobileReaderChrome ||
       preferences.readingMode !== 'continuous' ||
       openedChapter.isLocked
@@ -987,6 +1066,23 @@ export function ReaderScreen({
     </button>
   )
 
+  const bookTextSearchButton =
+    searchBookText && !chapterOpenFailed && !openedChapter.isLocked ? (
+      <button
+        ref={bookTextSearchTriggerRef}
+        type="button"
+        className={`button-secondary button-open-book-text-search${
+          isMobileReaderChrome ? ' reader-chrome-search' : ''
+        }`}
+        onClick={() => setIsBookTextSearchOpen(true)}
+        aria-label="搜尋本書內文"
+        aria-haspopup="dialog"
+        aria-expanded={isBookTextSearchOpen}
+      >
+        {isMobileReaderChrome ? '搜尋' : '搜尋內文'}
+      </button>
+    ) : null
+
   return (
     <section
       ref={readerRef}
@@ -1031,12 +1127,16 @@ export function ReaderScreen({
                 </span>
               )}
             </div>
-            {bookmarkToggleButton}
+            <div className="reader-mobile-tools">
+              {bookTextSearchButton}
+              {bookmarkToggleButton}
+            </div>
           </>
         ) : (
           <div className="reader-toolbar-actions">
             {appearanceTriggerButton}
             <div className="reader-bookmark-toolbar">
+              {bookTextSearchButton}
               {bookmarkToggleButton}
               {bookmarksListButton}
               {chapterReadingNoteButton}
@@ -1388,6 +1488,16 @@ export function ReaderScreen({
         onClose={() => setIsTocOpen(false)}
         onSelectChapter={onSelectChapter}
       />
+
+      {searchBookText && (
+        <BookTextSearchModal
+          isOpen={isBookTextSearchOpen}
+          triggerRef={bookTextSearchTriggerRef}
+          searchBookText={searchBookText}
+          onClose={() => setIsBookTextSearchOpen(false)}
+          onSelectResult={handleSelectBookTextSearchResult}
+        />
+      )}
     </section>
   )
 }

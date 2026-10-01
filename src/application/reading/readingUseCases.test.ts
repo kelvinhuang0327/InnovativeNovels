@@ -26,6 +26,7 @@ import {
   recoverActiveReaderSession,
   removeChapterBookmark,
   removeChapterReadingNote,
+  searchBookText,
   saveChapterReadingNote,
   updateReadingProgress,
 } from './readingUseCases'
@@ -51,6 +52,29 @@ function makeBook(id: string, chapters: readonly Chapter[]): ContentBook {
     book: { id: bookId(id), title: `Title ${id}`, authorName: 'Author', categoryLabel: 'Genre' },
     description: 'Description',
     chapters,
+  }
+}
+
+function makeSearchRepository(
+  books: readonly ContentBook[],
+  proseByChapterId: ReadonlyMap<string, unknown>,
+  onReadChapterProse?: (chapterId: string) => void,
+): ContentRepository {
+  return {
+    listBooks: () => books,
+    getBook: (requestedBookId) =>
+      books.find((entry) => entry.book.id === requestedBookId),
+    getChapterProse: (requestedChapterId) => {
+      onReadChapterProse?.(requestedChapterId)
+
+      if (requestedChapterId === 'broken') {
+        throw new Error('Malformed chapter prose')
+      }
+
+      return proseByChapterId.get(requestedChapterId) as
+        | readonly string[]
+        | undefined
+    },
   }
 }
 
@@ -923,5 +947,123 @@ describe('updateReadingProgress', () => {
       paragraphIndex: 0,
       chapterProgress: 0.66,
     })
+  })
+})
+
+describe('searchBookText', () => {
+  it('returns no results for whitespace-only queries and searches only the current book', () => {
+    const currentBook = makeBook('book-a', [
+      chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const otherBook = makeBook('book-b', [
+      chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const readChapterProse = vi.fn()
+    const contentRepository = makeSearchRepository(
+      [currentBook, otherBook],
+      new Map([
+        ['a-1', ['A distant STORM crosses the harbor.']],
+        ['b-1', ['A distant storm crosses another harbor.']],
+      ]),
+      readChapterProse,
+    )
+
+    expect(searchBookText(contentRepository, currentBook, ' \n\t ')).toEqual(
+      [],
+    )
+    expect(searchBookText(contentRepository, currentBook, 'sToRm')).toEqual([
+      expect.objectContaining({
+        chapterId: 'a-1',
+        paragraphIndex: 0,
+        paragraphText: 'A distant STORM crosses the harbor.',
+      }),
+    ])
+    expect(readChapterProse).toHaveBeenCalledTimes(1)
+    expect(readChapterProse).toHaveBeenCalledWith('a-1')
+  })
+
+  it('returns one result per matching paragraph in chapter and paragraph order', () => {
+    const earlyParagraphs = [
+      'A TARGET appears, then target appears again.',
+      'target in the next paragraph',
+    ]
+    const book = makeBook('ordered-book', [
+      chapter('ordered-book', 'later', 2, CHAPTER_ACCESS.READABLE),
+      chapter('ordered-book', 'earlier', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map([
+        ['earlier', earlyParagraphs],
+        ['later', ['Target in chapter two']],
+      ]),
+    )
+
+    const results = searchBookText(contentRepository, book, 'tArGeT')
+
+    expect(
+      results.map(({ chapterId: id, paragraphIndex, matchIndex }) => [
+        id,
+        paragraphIndex,
+        matchIndex,
+      ]),
+    ).toEqual([
+      ['earlier', 0, earlyParagraphs[0].toLowerCase().indexOf('target')],
+      ['earlier', 1, 0],
+      ['later', 0, 0],
+    ])
+  })
+
+  it('does not read prose from locked or unavailable chapters', () => {
+    const book = makeBook('access-book', [
+      chapter('access-book', 'readable', 1, CHAPTER_ACCESS.READABLE),
+      chapter('access-book', 'locked', 2, CHAPTER_ACCESS.LOCKED),
+      chapter('access-book', 'unavailable', 3, CHAPTER_ACCESS.UNAVAILABLE),
+    ])
+    const readChapterProse = vi.fn()
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map([
+        ['readable', ['A safe paragraph.']],
+        ['locked', ['Restricted prose must not leak.']],
+        ['unavailable', ['Unavailable prose must not leak.']],
+      ]),
+      readChapterProse,
+    )
+
+    expect(searchBookText(contentRepository, book, 'prose')).toEqual([])
+    expect(readChapterProse).toHaveBeenCalledTimes(1)
+    expect(readChapterProse).toHaveBeenCalledWith('readable')
+  })
+
+  it('skips missing, malformed, unusable, or failing chapter prose', () => {
+    const book = makeBook('malformed-book', [
+      chapter('malformed-book', 'missing', 1, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'malformed', 2, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'unusable', 3, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'broken', 4, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'valid', 5, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map<string, unknown>([
+        ['malformed', { prose: ['target in a non-array payload'] }],
+        ['unusable', [null, 7, 'usable target paragraph']],
+        ['valid', ['valid target paragraph']],
+      ]),
+    )
+
+    const results = searchBookText(contentRepository, book, 'target')
+
+    expect(
+      results.map(({ chapterId: id, paragraphIndex, paragraphText }) => [
+        id,
+        paragraphIndex,
+        paragraphText,
+      ]),
+    ).toEqual([
+      ['unusable', 2, 'usable target paragraph'],
+      ['valid', 0, 'valid target paragraph'],
+    ])
   })
 })

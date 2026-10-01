@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,7 +17,9 @@ import { createAuthoringGatewayHandler } from '../infrastructure/authoring/autho
 import { CHAPTER_ACCESS } from '../domain/access/chapterAccess'
 import { chapterSequence } from '../domain/catalog/chapter'
 import { bookId, chapterId } from '../domain/catalog/identifiers'
+import type { ReadingPosition } from '../domain/reading/readingPosition'
 import { StaticContentRepository } from '../infrastructure/content/staticContentRepository'
+import type { ReadingStateRepository } from '../application/reading/readingStateRepository'
 import {
   ACTIVE_READER_SESSION_STORAGE_KEY,
   LocalStorageActiveReaderSessionRepository,
@@ -128,6 +131,47 @@ function createAccessStatusRepository() {
   }
 
   return { repository, getChapterProse }
+}
+
+function createBookTextSearchFixture() {
+  const targetBookId = bookId('text-search-book')
+  const firstChapter = {
+    id: chapterId('text-search-first'),
+    bookId: targetBookId,
+    title: '第一章：起點',
+    sequence: chapterSequence(1),
+    access: CHAPTER_ACCESS.READABLE,
+  }
+  const targetChapter = {
+    id: chapterId('text-search-target'),
+    bookId: targetBookId,
+    title: '第二章：目標章',
+    sequence: chapterSequence(2),
+    access: CHAPTER_ACCESS.READABLE,
+  }
+  const book: ContentBook = {
+    book: {
+      id: targetBookId,
+      title: '內文搜尋測試書',
+      authorName: '測試作者',
+      categoryLabel: '測試',
+    },
+    description: '用來確認內文搜尋導覽的測試作品。',
+    chapters: [firstChapter, targetChapter],
+  }
+  const proseByChapterId = new Map<string, readonly string[]>([
+    [firstChapter.id, ['第一章第一段。']],
+    [targetChapter.id, ['第二章第一段。', '第二章第二段包含獨特目標。']],
+  ])
+  const contentRepository: ContentRepository = {
+    listBooks: () => [book],
+    getBook: (requestedBookId) =>
+      requestedBookId === targetBookId ? book : undefined,
+    getChapterProse: (requestedChapterId) =>
+      proseByChapterId.get(requestedChapterId),
+  }
+
+  return { book, contentRepository, targetChapter }
 }
 
 describe('Wave 1 core reading journey', () => {
@@ -348,6 +392,127 @@ describe('Wave 1 core reading journey', () => {
     expect(proseRequest).toHaveBeenCalledTimes(3)
     expect(proseRequest).toHaveBeenCalledWith('chapter-sealed-gate')
   })
+})
+
+describe('Book text search navigation', () => {
+  const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'scrollIntoView',
+  )
+  const scrolledElements: HTMLElement[] = []
+  const scrollIntoView = vi.fn(function (this: HTMLElement) {
+    scrolledElements.push(this)
+  })
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    scrolledElements.length = 0
+    scrollIntoView.mockClear()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    if (originalScrollIntoViewDescriptor) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'scrollIntoView',
+        originalScrollIntoViewDescriptor,
+      )
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+    }
+  })
+
+  it.each([
+    {
+      source: 'Catalog',
+      enterLibrary: false,
+      expectedReturnButton: '返回書庫',
+      expectedReturnHeading: '探索故事',
+    },
+    {
+      source: 'Library',
+      enterLibrary: true,
+      expectedReturnButton: '返回我的書架',
+      expectedReturnHeading: '我的書架',
+    },
+  ])(
+    'opens the matching chapter at its paragraph and preserves the $source return context',
+    async ({ enterLibrary, expectedReturnButton, expectedReturnHeading }) => {
+      const fixture = createBookTextSearchFixture()
+      const savedPositions: ReadingPosition[] = []
+      const readingStateRepository: ReadingStateRepository = {
+        load: (requestedBookId) =>
+          [...savedPositions]
+            .reverse()
+            .find((position) => position.bookId === requestedBookId),
+        save: (position) => savedPositions.push(position),
+        listSavedPositions: () => savedPositions,
+      }
+      const dependencies: AppDependencies = {
+        ...createDependencies(),
+        contentRepository: fixture.contentRepository,
+        readingStateRepository,
+      }
+
+      if (enterLibrary) {
+        new LocalStorageBookShelfRepository(window.localStorage).add(
+          fixture.book.book.id,
+        )
+      }
+
+      render(<App dependencies={dependencies} />)
+
+      if (enterLibrary) {
+        fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
+        expect(
+          screen.getByRole('heading', { name: '我的書架', level: 1 }),
+        ).toBeInTheDocument()
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: '查看書籍' }))
+      fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      expect(
+        screen.getByRole('heading', { name: '第一章：起點' }),
+      ).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: '搜尋本書內文' }))
+      const dialog = screen.getByRole('dialog', { name: '搜尋本書內文' })
+      fireEvent.change(screen.getByRole('searchbox', { name: '搜尋關鍵字' }), {
+        target: { value: '目標' },
+      })
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /第二章：目標章/ }),
+      )
+
+      expect(
+        screen.getByRole('heading', { name: '第二章：目標章' }),
+      ).toBeInTheDocument()
+      const targetParagraph = screen
+        .getByText('第二章第二段包含獨特目標。')
+        .closest('p')
+      expect(targetParagraph).not.toBeNull()
+      await waitFor(() => {
+        expect(scrolledElements).toContain(targetParagraph)
+      })
+      expect(savedPositions).toContainEqual({
+        bookId: fixture.book.book.id,
+        chapterId: fixture.targetChapter.id,
+        paragraphIndex: 1,
+        chapterProgress: 0,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+      fireEvent.click(screen.getByRole('button', { name: expectedReturnButton }))
+      expect(
+        screen.getByRole('heading', { name: expectedReturnHeading, level: 1 }),
+      ).toBeInTheDocument()
+    },
+  )
 })
 
 describe('Wave 2 catalog discovery and continue-reading parity', () => {

@@ -2399,6 +2399,60 @@ button:focus-visible {
   opacity: 0.55;
 }
 
+.book-text-search-modal {
+  width: min(100%, 44rem);
+}
+
+.book-text-search-count {
+  margin-bottom: 0.65rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.book-text-search-result {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 0.85rem;
+  background: #fff;
+  color: #2b221a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.book-text-search-result:hover {
+  border-color: #c69b6d;
+  background: #fffaf1;
+}
+
+.book-text-search-result:focus-visible {
+  outline: 3px solid #e1a867;
+  outline-offset: 2px;
+}
+
+.book-text-search-chapter {
+  color: #8d3f2f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.book-text-search-snippet {
+  line-height: 1.6;
+}
+
+.book-text-search-snippet mark {
+  border-radius: 0.2rem;
+  background: #ffe6a8;
+  color: inherit;
+}
+
 .toc-locked-label {
   font-size: 0.8rem;
   font-weight: 700;
@@ -3189,7 +3243,7 @@ button:focus-visible {
     left: 0;
     z-index: 220;
     display: grid;
-    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.35rem;
     box-sizing: border-box;
@@ -3228,11 +3282,22 @@ button:focus-visible {
   }
 
   .reader-chrome-back,
-  .reader-chrome-bookmark {
+  .reader-chrome-bookmark,
+  .reader-chrome-search {
     min-width: 2.75rem;
     min-height: 2.75rem;
     padding: 0;
     font-size: 0.9rem;
+  }
+
+  .reader-mobile-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .reader-chrome-search {
+    font-size: 0.72rem;
   }
 
   .reader-chrome-context {
