@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import type { ContentBook } from '../../application/catalog/contentRepository'
-import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
+import type {
+  BookmarkEntry,
+  ContinueReadingEntry,
+} from '../../application/reading/readingUseCases'
 import {
   filterBookshelfBooks,
   type RecentReadingEntry,
@@ -9,11 +12,14 @@ import { ContinueReadingShelf } from './ContinueReadingShelf'
 
 interface LibraryScreenProps {
   readonly books: readonly ContentBook[]
+  readonly bookmarks: readonly BookmarkEntry[]
   readonly recentReading: readonly RecentReadingEntry[]
   readonly continueReading: readonly ContinueReadingEntry[]
   readonly onBackToBookstore: () => void
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
+  readonly onOpenBookmark: (position: BookmarkEntry['position']) => void
+  readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
   readonly onRemoveFromBookshelf: (bookId: string) => void
 }
 
@@ -134,11 +140,14 @@ function RecentReadingCard({
 
 export function LibraryScreen({
   books,
+  bookmarks,
   recentReading,
   continueReading,
   onBackToBookstore,
   onOpenBook,
   onContinueBook,
+  onOpenBookmark,
+  onRemoveBookmark,
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
@@ -168,6 +177,59 @@ export function LibraryScreen({
           onContinueBook={onContinueBook}
         />
       )}
+
+      <section
+        aria-labelledby="bookmarks-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">儲存的閱讀位置</p>
+            <h2 className="section-heading" id="bookmarks-heading">
+              章節書籤
+            </h2>
+          </div>
+          <p className="section-heading-note">{bookmarks.length} 個</p>
+        </div>
+
+        {bookmarks.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>還沒有章節書籤。</p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {bookmarks.map(({ book, chapter, position }) => (
+              <li
+                className="library-recent-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <p className="book-meta">{book.book.categoryLabel}</p>
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() => onOpenBookmark(position)}
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveBookmark(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section
         aria-labelledby="bookshelf-heading"

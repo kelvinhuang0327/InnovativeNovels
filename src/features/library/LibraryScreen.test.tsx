@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { RecentReadingEntry } from '../../application/library/libraryUseCases'
-import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
+import type {
+  BookmarkEntry,
+  ContinueReadingEntry,
+} from '../../application/reading/readingUseCases'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
@@ -63,8 +67,28 @@ function makeRecentReadingEntry(
   }
 }
 
+function makeBookmarkEntry(
+  book: ContentBook,
+  paragraphIndex: number,
+  chapterProgress: number,
+): BookmarkEntry {
+  const chapter = book.chapters[0]
+
+  return {
+    book,
+    chapter,
+    position: {
+      bookId: book.book.id,
+      chapterId: chapter.id,
+      paragraphIndex,
+      chapterProgress,
+    },
+  }
+}
+
 const baseProps = {
   books: [bookA],
+  bookmarks: [] as readonly BookmarkEntry[],
   recentReading: [
     {
       book: bookB,
@@ -75,6 +99,8 @@ const baseProps = {
   onBackToBookstore: vi.fn(),
   onOpenBook: vi.fn(),
   onContinueBook: vi.fn(),
+  onOpenBookmark: vi.fn(),
+  onRemoveBookmark: vi.fn(),
   onRemoveFromBookshelf: vi.fn(),
 }
 
@@ -84,6 +110,102 @@ afterEach(() => {
 })
 
 describe('LibraryScreen', () => {
+  it('renders all supplied bookmarks independently of the shelf and opens the exact saved position', () => {
+    const bookmarks = [
+      makeBookmarkEntry(bookB, 2, 0.425),
+      makeBookmarkEntry(bookA, 3, 0.73),
+    ]
+    const onOpenBookmark = vi.fn()
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        books={[]}
+        bookmarks={bookmarks}
+        recentReading={[]}
+        onOpenBookmark={onOpenBookmark}
+      />,
+    )
+
+    const bookmarkSection = screen.getByRole('region', {
+      name: '章節書籤',
+    })
+    const bookmarkItems = within(bookmarkSection).getAllByRole('listitem')
+
+    expect(bookmarkItems).toHaveLength(2)
+    expect(
+      bookmarkItems.map((item) => within(item).getByRole('heading').textContent),
+    ).toEqual(['山中劍客', '海邊書店'])
+    expect(within(bookmarkItems[0]).getByText('山中劍客 第一章')).toBeInTheDocument()
+    expect(within(bookmarkItems[1]).getByText('海邊書店 第一章')).toBeInTheDocument()
+
+    fireEvent.click(
+      within(bookmarkItems[0]).getByRole('button', { name: '移至章節' }),
+    )
+
+    expect(onOpenBookmark).toHaveBeenCalledTimes(1)
+    expect(onOpenBookmark).toHaveBeenCalledWith(bookmarks[0].position)
+  })
+
+  it('shows an explicit empty state when there are no chapter bookmarks', () => {
+    render(<LibraryScreen {...baseProps} books={[]} bookmarks={[]} recentReading={[]} />)
+
+    const bookmarkSection = screen.getByRole('region', {
+      name: '章節書籤',
+    })
+
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節書籤。',
+    )
+    expect(within(bookmarkSection).queryByRole('list')).not.toBeInTheDocument()
+  })
+
+  it('calls the removal handler and immediately renders the empty state after the last bookmark is removed', () => {
+    const bookmark = makeBookmarkEntry(bookA, 2, 0.61)
+    const onRemoveBookmark = vi.fn()
+
+    function ControlledLibrary() {
+      const [visibleBookmarks, setVisibleBookmarks] = useState([bookmark])
+
+      return (
+        <LibraryScreen
+          {...baseProps}
+          books={[]}
+          bookmarks={visibleBookmarks}
+          recentReading={[]}
+          onRemoveBookmark={(requestedBookId, requestedChapterId) => {
+            onRemoveBookmark(requestedBookId, requestedChapterId)
+            setVisibleBookmarks((current) =>
+              current.filter(
+                (entry) =>
+                  entry.book.book.id !== requestedBookId ||
+                  entry.chapter.id !== requestedChapterId,
+              ),
+            )
+          }}
+        />
+      )
+    }
+
+    render(<ControlledLibrary />)
+
+    const bookmarkSection = screen.getByRole('region', {
+      name: '章節書籤',
+    })
+    const item = within(bookmarkSection).getByRole('listitem')
+    fireEvent.click(within(item).getByRole('button', { name: '移除' }))
+
+    expect(onRemoveBookmark).toHaveBeenCalledTimes(1)
+    expect(onRemoveBookmark).toHaveBeenCalledWith(
+      bookA.book.id,
+      bookA.chapters[0].id,
+    )
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節書籤。',
+    )
+    expect(within(bookmarkSection).queryByRole('listitem')).not.toBeInTheDocument()
+  })
+
   it('renders saved books and recent books in the supplied order', () => {
     render(<LibraryScreen {...baseProps} />)
 
@@ -174,6 +296,8 @@ describe('LibraryScreen', () => {
     const onBackToBookstore = vi.fn()
     const onContinueBook = vi.fn()
     const onOpenBook = vi.fn()
+    const onOpenBookmark = vi.fn()
+    const onRemoveBookmark = vi.fn()
     const onRemoveFromBookshelf = vi.fn()
     const continueBook = makeBook('continue-only', '繼續故事', 'Continue Author')
     const continueChapter = continueBook.chapters[0]
@@ -192,11 +316,14 @@ describe('LibraryScreen', () => {
     render(
       <LibraryScreen
         books={[bookA, bookB]}
+        bookmarks={[]}
         recentReading={[makeRecentReadingEntry(recentBook)]}
         continueReading={[continueEntry]}
         onBackToBookstore={onBackToBookstore}
         onOpenBook={onOpenBook}
         onContinueBook={onContinueBook}
+        onOpenBookmark={onOpenBookmark}
+        onRemoveBookmark={onRemoveBookmark}
         onRemoveFromBookshelf={onRemoveFromBookshelf}
       />,
     )
@@ -223,7 +350,9 @@ describe('LibraryScreen', () => {
 
     expect(onBackToBookstore).not.toHaveBeenCalled()
     expect(onContinueBook).not.toHaveBeenCalled()
+    expect(onOpenBookmark).not.toHaveBeenCalled()
     expect(onOpenBook).not.toHaveBeenCalled()
+    expect(onRemoveBookmark).not.toHaveBeenCalled()
     expect(onRemoveFromBookshelf).not.toHaveBeenCalled()
 
     const matchingBook = within(shelf).getAllByRole('listitem')[0]

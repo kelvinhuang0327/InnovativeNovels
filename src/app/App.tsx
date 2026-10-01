@@ -425,10 +425,13 @@ function App({
   }
 
   const handleJumpBookmark = (position: ReadingPosition) => {
-    openReaderChapter(
-      position,
-      screen.name === 'reader' ? screen.returnTo : 'catalog',
-    )
+    const returnTo: 'catalog' | 'library' =
+      screen.name === 'reader'
+        ? screen.returnTo ?? 'catalog'
+        : screen.name === 'library'
+          ? 'library'
+          : 'catalog'
+    openReaderChapter(position, returnTo)
   }
 
   const openBookDetail = (
@@ -552,13 +555,16 @@ function App({
       {screen.name === 'library' && (
         <LibraryScreen
           books={bookshelfBooks}
+          bookmarks={bookmarks}
           continueReading={listContinueReading(
             dependencies.contentRepository,
             dependencies.readingStateRepository,
           )}
           onBackToBookstore={() => setScreen({ name: 'catalog' })}
           onContinueBook={(bookId) => openReader(bookId, 'library')}
+          onOpenBookmark={handleJumpBookmark}
           onOpenBook={(bookId) => openBookDetail(bookId, 'library')}
+          onRemoveBookmark={handleRemoveBookmark}
           onRemoveFromBookshelf={handleToggleBookshelf}
           recentReading={recentReading}
         />

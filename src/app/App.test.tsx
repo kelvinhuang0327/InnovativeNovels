@@ -2269,6 +2269,118 @@ describe('Bookshelf and Recent Reading v1', () => {
       ),
     ).not.toBeInTheDocument()
   })
+
+  it('opens an unshelved Library bookmark at its exact saved position and returns to Library', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-tide-letter',
+    )!
+    const bookmark = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 4,
+      chapterProgress: 0.375,
+    }
+    dependencies.chapterBookmarksRepository?.add(bookmark)
+    const saveReadingPosition = vi.spyOn(
+      dependencies.readingStateRepository,
+      'save',
+    )
+
+    expect(
+      dependencies.bookShelfRepository?.contains(targetBook.book.id),
+    ).toBe(false)
+
+    render(<App dependencies={dependencies} />)
+    openLibrary()
+
+    const bookmarkSection = screen.getByRole('region', {
+      name: '章節書籤',
+    })
+    expect(within(bookmarkSection).getByText(targetBook.book.title)).toBeInTheDocument()
+    expect(within(bookmarkSection).getByText(targetChapter.title)).toBeInTheDocument()
+
+    fireEvent.click(
+      within(bookmarkSection).getByRole('button', { name: '移至章節' }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: targetChapter.title }),
+    ).toBeInTheDocument()
+    expect(
+      saveReadingPosition,
+    ).toHaveBeenCalledWith(bookmark)
+    expect(
+      dependencies.readingStateRepository.load(targetBook.book.id)?.chapterProgress,
+    ).toBe(bookmark.chapterProgress)
+    expect(
+      dependencies.bookShelfRepository?.contains(targetBook.book.id),
+    ).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '返回作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    expect(
+      screen.getByRole('heading', { name: '我的書架', level: 1 }),
+    ).toBeInTheDocument()
+    expect(
+      dependencies.bookShelfRepository?.contains(targetBook.book.id),
+    ).toBe(false)
+  })
+
+  it('removes the last Library bookmark without changing reading position, active session, or shelf membership', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-tide-letter',
+    )!
+    const bookmark = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 4,
+      chapterProgress: 0.375,
+    }
+    const savedPosition = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 7,
+      chapterProgress: 0.82,
+    }
+    dependencies.chapterBookmarksRepository?.add(bookmark)
+    dependencies.readingStateRepository.save(savedPosition)
+    dependencies.bookShelfRepository?.add(targetBook.book.id)
+    const shelfBefore = dependencies.bookShelfRepository?.list()
+    const readingPositionBefore = dependencies.readingStateRepository.load(
+      targetBook.book.id,
+    )
+    const activeSessionBefore = dependencies.activeReaderSessionRepository?.load()
+
+    render(<App dependencies={dependencies} />)
+    openLibrary()
+
+    const bookmarkSection = screen.getByRole('region', {
+      name: '章節書籤',
+    })
+    fireEvent.click(
+      within(bookmarkSection).getByRole('button', { name: '移除' }),
+    )
+
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節書籤。',
+    )
+    expect(dependencies.chapterBookmarksRepository?.list()).toEqual([])
+    expect(
+      dependencies.readingStateRepository.load(targetBook.book.id),
+    ).toEqual(readingPositionBefore)
+    expect(dependencies.bookShelfRepository?.list()).toEqual(shelfBefore)
+    expect(
+      dependencies.bookShelfRepository?.contains(targetBook.book.id),
+    ).toBe(true)
+    expect(dependencies.activeReaderSessionRepository?.load()).toBe(
+      activeSessionBefore,
+    )
+  })
 })
 
 describe('Mobile app shell navigation v1', () => {
