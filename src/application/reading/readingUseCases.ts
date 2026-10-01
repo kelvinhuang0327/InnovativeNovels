@@ -33,10 +33,37 @@ export interface BookmarkEntry {
   readonly position: ReadingPosition
 }
 
+export interface ChapterReadingNoteEntry {
+  readonly book: ContentBook
+  readonly chapter: Chapter
+  readonly note: ChapterReadingNote
+}
+
 function chaptersByExplicitOrder(book: ContentBook): readonly Chapter[] {
   return [...book.chapters].sort(
     (left, right) => left.sequence - right.sequence,
   )
+}
+
+function isChapterReadingNote(value: unknown): value is ChapterReadingNote {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return false
+    }
+
+    const candidate = value as Record<string, unknown>
+
+    return (
+      typeof candidate.bookId === 'string' &&
+      candidate.bookId.trim().length > 0 &&
+      typeof candidate.chapterId === 'string' &&
+      candidate.chapterId.trim().length > 0 &&
+      typeof candidate.content === 'string' &&
+      candidate.content.trim().length > 0
+    )
+  } catch {
+    return false
+  }
 }
 
 function chapterPosition(chapter: Chapter): ReadingPosition {
@@ -276,6 +303,59 @@ export function getChapterReadingNote(
   chapterId: string,
 ): ChapterReadingNote | undefined {
   return notesRepository.load(bookId, chapterId)
+}
+
+export function listChapterReadingNotes(
+  contentRepository: ContentRepository,
+  notesRepository: ChapterReadingNotesRepository,
+): readonly ChapterReadingNoteEntry[] {
+  let persistedNotes: unknown
+
+  try {
+    persistedNotes = notesRepository.list()
+  } catch {
+    return []
+  }
+
+  if (!Array.isArray(persistedNotes)) {
+    return []
+  }
+
+  const notesByChapter = new Map<string, ChapterReadingNote>()
+
+  for (const candidate of persistedNotes as readonly unknown[]) {
+    if (!isChapterReadingNote(candidate)) {
+      continue
+    }
+
+    notesByChapter.set(
+      JSON.stringify([candidate.bookId, candidate.chapterId]),
+      candidate,
+    )
+  }
+
+  const entries: ChapterReadingNoteEntry[] = []
+
+  for (const book of contentRepository.listBooks()) {
+    for (const chapter of chaptersByExplicitOrder(book)) {
+      if (
+        chapter.bookId !== book.book.id ||
+        !decideChapterAccess(chapter.access).canOpen
+      ) {
+        continue
+      }
+
+      const note = notesByChapter.get(
+        JSON.stringify([book.book.id, chapter.id]),
+      )
+
+      if (note) {
+        entries.push({ book, chapter, note })
+      }
+    }
+  }
+
+  return entries
 }
 
 export function saveChapterReadingNote(

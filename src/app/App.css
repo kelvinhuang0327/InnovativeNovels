@@ -1072,6 +1072,10 @@ button:focus-visible {
   background: var(--library-paper);
 }
 
+.library-recent-item.library-reading-note-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .library-book-cover,
 .library-recent-cover {
   display: flex;
@@ -1146,6 +1150,14 @@ button:focus-visible {
 
 .library-recent-chapter {
   margin-top: 0.55rem;
+}
+
+.library-reading-note-content {
+  margin: 0.55rem 0 0;
+  color: var(--library-ink);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .library-book-actions {

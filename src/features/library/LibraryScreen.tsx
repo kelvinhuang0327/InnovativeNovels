@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type {
   BookmarkEntry,
+  ChapterReadingNoteEntry,
   ContinueReadingEntry,
 } from '../../application/reading/readingUseCases'
 import {
@@ -13,6 +14,7 @@ import { ContinueReadingShelf } from './ContinueReadingShelf'
 interface LibraryScreenProps {
   readonly books: readonly ContentBook[]
   readonly bookmarks: readonly BookmarkEntry[]
+  readonly notes: readonly ChapterReadingNoteEntry[]
   readonly recentReading: readonly RecentReadingEntry[]
   readonly continueReading: readonly ContinueReadingEntry[]
   readonly onBackToBookstore: () => void
@@ -20,6 +22,8 @@ interface LibraryScreenProps {
   readonly onContinueBook: (bookId: string) => void
   readonly onOpenBookmark: (position: BookmarkEntry['position']) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
+  readonly onOpenReadingNote: (bookId: string, chapterId: string) => void
+  readonly onRemoveReadingNote: (bookId: string, chapterId: string) => void
   readonly onRemoveFromBookshelf: (bookId: string) => void
 }
 
@@ -141,6 +145,7 @@ function RecentReadingCard({
 export function LibraryScreen({
   books,
   bookmarks,
+  notes,
   recentReading,
   continueReading,
   onBackToBookstore,
@@ -148,6 +153,8 @@ export function LibraryScreen({
   onContinueBook,
   onOpenBookmark,
   onRemoveBookmark,
+  onOpenReadingNote,
+  onRemoveReadingNote,
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
@@ -219,6 +226,61 @@ export function LibraryScreen({
                       type="button"
                       onClick={() =>
                         onRemoveBookmark(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="reading-notes-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">閱讀時留下的想法</p>
+            <h2 className="section-heading" id="reading-notes-heading">
+              章節筆記
+            </h2>
+          </div>
+          <p className="section-heading-note">{notes.length} 則</p>
+        </div>
+
+        {notes.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>還沒有章節筆記。</p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {notes.map(({ book, chapter, note }) => (
+              <li
+                className="library-recent-item library-reading-note-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <p className="library-reading-note-content">{note.content}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenReadingNote(book.book.id, chapter.id)
+                      }
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveReadingNote(book.book.id, chapter.id)
                       }
                     >
                       移除

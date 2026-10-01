@@ -2387,6 +2387,193 @@ describe('Bookshelf and Recent Reading v1', () => {
       activeSessionBefore,
     )
   })
+
+  it('opens an unshelved Library note at its saved position and returns to Library', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-lighthouse-watch',
+    )!
+    const prose = dependencies.contentRepository.getChapterProse(targetChapter.id)!
+    const savedPosition = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: prose.length - 1,
+      chapterProgress: 0.73,
+    }
+    expect(prose.length).toBeGreaterThan(1)
+    dependencies.readingStateRepository.save(savedPosition)
+    vi.spyOn(dependencies.readingStateRepository, 'load').mockReturnValue(
+      savedPosition,
+    )
+    dependencies.chapterReadingNotesRepository?.save({
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      content: '第二章筆記',
+    })
+    const saveReadingPosition = vi.spyOn(
+      dependencies.readingStateRepository,
+      'save',
+    )
+
+    expect(dependencies.bookShelfRepository?.contains(targetBook.book.id)).toBe(
+      false,
+    )
+    render(<App dependencies={dependencies} />)
+    openLibrary()
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByText('第二章筆記')).toBeInTheDocument()
+    fireEvent.click(
+      within(notesSection).getByRole('button', { name: '移至章節' }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: targetChapter.title }),
+    ).toBeInTheDocument()
+    expect(saveReadingPosition).toHaveBeenCalledWith(savedPosition)
+    expect(dependencies.bookShelfRepository?.contains(targetBook.book.id)).toBe(
+      false,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: '返回作品' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    expect(
+      screen.getByRole('heading', { name: '我的書架', level: 1 }),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '章節筆記' })).getByText(
+        '第二章筆記',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('uses the normal chapter-start position when a note has no saved position', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-lighthouse-watch',
+    )!
+    dependencies.chapterReadingNotesRepository?.save({
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      content: '沒有閱讀位置的筆記',
+    })
+    const saveReadingPosition = vi.spyOn(
+      dependencies.readingStateRepository,
+      'save',
+    )
+
+    render(<App dependencies={dependencies} />)
+    openLibrary()
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '章節筆記' })).getByRole(
+        'button',
+        { name: '移至章節' },
+      ),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: targetChapter.title }),
+    ).toBeInTheDocument()
+    expect(saveReadingPosition).toHaveBeenCalledWith({
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 0,
+      chapterProgress: 0,
+    })
+  })
+
+  it('removes only the selected note without changing reading or Library state', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    const targetChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-tide-letter',
+    )!
+    const otherChapter = targetBook.chapters.find(
+      (chapter) => chapter.id === 'chapter-lighthouse-watch',
+    )!
+    const savedPosition = {
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 0,
+      chapterProgress: 0.64,
+    }
+    dependencies.readingStateRepository.save(savedPosition)
+    dependencies.chapterBookmarksRepository?.add({
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      paragraphIndex: 0,
+      chapterProgress: 0.2,
+    })
+    dependencies.bookShelfRepository?.add(targetBook.book.id)
+    dependencies.recentReadingRepository?.touch(targetBook.book.id)
+    dependencies.chapterReadingNotesRepository?.save({
+      bookId: targetBook.book.id,
+      chapterId: targetChapter.id,
+      content: '要移除的筆記',
+    })
+    dependencies.chapterReadingNotesRepository?.save({
+      bookId: targetBook.book.id,
+      chapterId: otherChapter.id,
+      content: '要保留的筆記',
+    })
+    const readingPositionBefore = dependencies.readingStateRepository.load(
+      targetBook.book.id,
+    )
+    const bookmarksBefore = dependencies.chapterBookmarksRepository?.list()
+    const bookshelfBefore = [...(dependencies.bookShelfRepository?.list() ?? [])]
+    const recentBefore = [...(dependencies.recentReadingRepository?.list() ?? [])]
+
+    render(<App dependencies={dependencies} />)
+    openLibrary()
+    dependencies.activeReaderSessionRepository?.save('book-frost-sword')
+    const activeSessionBefore = dependencies.activeReaderSessionRepository?.load()
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    const item = within(notesSection).getByText('要移除的筆記').closest('li')!
+    fireEvent.click(within(item).getByRole('button', { name: '移除' }))
+
+    expect(
+      dependencies.chapterReadingNotesRepository?.load(
+        targetBook.book.id,
+        targetChapter.id,
+      ),
+    ).toBeUndefined()
+    expect(
+      dependencies.chapterReadingNotesRepository?.load(
+        targetBook.book.id,
+        otherChapter.id,
+      )?.content,
+    ).toBe('要保留的筆記')
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(1)
+    expect(
+      dependencies.readingStateRepository.load(targetBook.book.id),
+    ).toEqual(readingPositionBefore)
+    expect(dependencies.chapterBookmarksRepository?.list()).toEqual(
+      bookmarksBefore,
+    )
+    expect(dependencies.bookShelfRepository?.list()).toEqual(bookshelfBefore)
+    expect(dependencies.recentReadingRepository?.list()).toEqual(recentBefore)
+    expect(dependencies.activeReaderSessionRepository?.load()).toBe(
+      activeSessionBefore,
+    )
+  })
+
+  it('keeps malformed stored notes out of the Library without crashing', () => {
+    const malformedKey = `${CHAPTER_READING_NOTES_STORAGE_KEY_PREFIX}${encodeURIComponent('book-tide-city')}:${encodeURIComponent('chapter-tide-letter')}`
+    window.localStorage.setItem(malformedKey, '{broken note data')
+
+    render(<App dependencies={createDependencies()} />)
+    openLibrary()
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByText('0 則')).toBeInTheDocument()
+    expect(within(notesSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節筆記。',
+    )
+  })
 })
 
 describe('Mobile app shell navigation v1', () => {
@@ -2759,5 +2946,54 @@ describe('Reader chapter notes', () => {
       ),
     ).toHaveValue('')
     expect(window.localStorage.getItem(malformedKey)).toBe(malformedValue)
+  })
+
+  it('refreshes Library notes after Reader save, edit, and clear without a reload', () => {
+    const dependencies = createDependencies()
+    const targetBook = dependencies.contentRepository.getBook('book-tide-city')!
+    dependencies.bookShelfRepository?.add(targetBook.book.id)
+    render(<App dependencies={dependencies} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '我的書架' }))
+    let shelf = screen.getByRole('region', { name: '我的書架' })
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+    saveCurrentChapterNote('新筆記')
+    fireEvent.click(screen.getAllByRole('button', { name: '返回作品' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    let notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByText('新筆記')).toBeInTheDocument()
+    expect(within(notesSection).getByText('1 則')).toBeInTheDocument()
+
+    shelf = screen.getByRole('region', { name: '我的書架' })
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: /^繼續閱讀/ }))
+    saveCurrentChapterNote('已編輯筆記')
+    fireEvent.click(screen.getAllByRole('button', { name: '返回作品' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).queryByText('新筆記')).not.toBeInTheDocument()
+    expect(within(notesSection).getByText('已編輯筆記')).toBeInTheDocument()
+
+    shelf = screen.getByRole('region', { name: '我的書架' })
+    fireEvent.click(within(shelf).getByRole('button', { name: '查看書籍' }))
+    fireEvent.click(screen.getByRole('button', { name: /^繼續閱讀/ }))
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '本章筆記' })).getByRole(
+        'button',
+        { name: '清除筆記' },
+      ),
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: '返回作品' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '返回我的書架' }))
+
+    notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByText('0 則')).toBeInTheDocument()
+    expect(within(notesSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節筆記。',
+    )
   })
 })

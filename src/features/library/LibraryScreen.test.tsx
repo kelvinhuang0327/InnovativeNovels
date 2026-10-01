@@ -5,6 +5,7 @@ import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { RecentReadingEntry } from '../../application/library/libraryUseCases'
 import type {
   BookmarkEntry,
+  ChapterReadingNoteEntry,
   ContinueReadingEntry,
 } from '../../application/reading/readingUseCases'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
@@ -86,9 +87,27 @@ function makeBookmarkEntry(
   }
 }
 
+function makeReadingNoteEntry(
+  book: ContentBook,
+  content: string,
+): ChapterReadingNoteEntry {
+  const chapter = book.chapters[0]
+
+  return {
+    book,
+    chapter,
+    note: {
+      bookId: book.book.id,
+      chapterId: chapter.id,
+      content,
+    },
+  }
+}
+
 const baseProps = {
   books: [bookA],
   bookmarks: [] as readonly BookmarkEntry[],
+  notes: [] as readonly ChapterReadingNoteEntry[],
   recentReading: [
     {
       book: bookB,
@@ -101,6 +120,8 @@ const baseProps = {
   onContinueBook: vi.fn(),
   onOpenBookmark: vi.fn(),
   onRemoveBookmark: vi.fn(),
+  onOpenReadingNote: vi.fn(),
+  onRemoveReadingNote: vi.fn(),
   onRemoveFromBookshelf: vi.fn(),
 }
 
@@ -110,6 +131,127 @@ afterEach(() => {
 })
 
 describe('LibraryScreen', () => {
+  it('shows the chapter-notes empty state between bookmarks and the bookshelf', () => {
+    const { container } = render(
+      <LibraryScreen
+        {...baseProps}
+        books={[]}
+        bookmarks={[]}
+        notes={[]}
+        recentReading={[]}
+      />,
+    )
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByRole('heading', { name: '章節筆記' })).toBeInTheDocument()
+    expect(within(notesSection).getByText('0 則')).toBeInTheDocument()
+    expect(within(notesSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節筆記。',
+    )
+    expect(within(notesSection).queryByRole('list')).not.toBeInTheDocument()
+
+    expect(
+      Array.from(container.querySelectorAll('.library-section')).map((section) =>
+        section.getAttribute('aria-labelledby'),
+      ),
+    ).toEqual([
+      'bookmarks-heading',
+      'reading-notes-heading',
+      'bookshelf-heading',
+      'recent-reading-heading',
+    ])
+  })
+
+  it('renders plain-text notes from books outside the shelf and exposes note actions', () => {
+    const content = '<img src="unsafe" onerror="alert(1)">\n第二行筆記'
+    const entry = makeReadingNoteEntry(
+      bookB,
+      content,
+    )
+    const onOpenReadingNote = vi.fn()
+    const onRemoveReadingNote = vi.fn()
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        books={[]}
+        bookmarks={[]}
+        notes={[entry]}
+        recentReading={[]}
+        onOpenReadingNote={onOpenReadingNote}
+        onRemoveReadingNote={onRemoveReadingNote}
+      />,
+    )
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    const item = within(notesSection).getByRole('listitem')
+
+    expect(within(item).getByRole('heading', { name: '山中劍客' })).toBeInTheDocument()
+    expect(within(item).getByText('山中劍客 第一章')).toBeInTheDocument()
+    expect(
+      item.querySelector('.library-reading-note-content')?.textContent,
+    ).toBe(content)
+    expect(within(item).queryByRole('img')).not.toBeInTheDocument()
+
+    fireEvent.click(within(item).getByRole('button', { name: '移至章節' }))
+    expect(onOpenReadingNote).toHaveBeenCalledWith(
+      bookB.book.id,
+      bookB.chapters[0].id,
+    )
+
+    fireEvent.click(within(item).getByRole('button', { name: '移除' }))
+    expect(onRemoveReadingNote).toHaveBeenCalledWith(
+      bookB.book.id,
+      bookB.chapters[0].id,
+    )
+  })
+
+  it('renders the empty state immediately after the last note is removed', () => {
+    const note = makeReadingNoteEntry(bookA, '第一章筆記')
+    const onRemoveReadingNote = vi.fn()
+
+    function ControlledLibrary() {
+      const [visibleNotes, setVisibleNotes] = useState([note])
+
+      return (
+        <LibraryScreen
+          {...baseProps}
+          books={[]}
+          bookmarks={[]}
+          notes={visibleNotes}
+          recentReading={[]}
+          onRemoveReadingNote={(requestedBookId, requestedChapterId) => {
+            onRemoveReadingNote(requestedBookId, requestedChapterId)
+            setVisibleNotes((current) =>
+              current.filter(
+                (entry) =>
+                  entry.book.book.id !== requestedBookId ||
+                  entry.chapter.id !== requestedChapterId,
+              ),
+            )
+          }}
+        />
+      )
+    }
+
+    render(<ControlledLibrary />)
+
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    fireEvent.click(
+      within(notesSection).getByRole('button', { name: '移除' }),
+    )
+
+    expect(onRemoveReadingNote).toHaveBeenCalledWith(
+      bookA.book.id,
+      bookA.chapters[0].id,
+    )
+    expect(within(notesSection).getByText('0 則')).toBeInTheDocument()
+    expect(within(notesSection).getByRole('status')).toHaveTextContent(
+      '還沒有章節筆記。',
+    )
+    expect(within(notesSection).queryByRole('list')).not.toBeInTheDocument()
+  })
+
   it('renders all supplied bookmarks independently of the shelf and opens the exact saved position', () => {
     const bookmarks = [
       makeBookmarkEntry(bookB, 2, 0.425),
@@ -317,6 +459,7 @@ describe('LibraryScreen', () => {
       <LibraryScreen
         books={[bookA, bookB]}
         bookmarks={[]}
+        notes={[]}
         recentReading={[makeRecentReadingEntry(recentBook)]}
         continueReading={[continueEntry]}
         onBackToBookstore={onBackToBookstore}
@@ -324,6 +467,8 @@ describe('LibraryScreen', () => {
         onContinueBook={onContinueBook}
         onOpenBookmark={onOpenBookmark}
         onRemoveBookmark={onRemoveBookmark}
+        onOpenReadingNote={vi.fn()}
+        onRemoveReadingNote={vi.fn()}
         onRemoveFromBookshelf={onRemoveFromBookshelf}
       />,
     )

@@ -18,6 +18,7 @@ import {
   getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
+  listChapterReadingNotes,
   listContinueReading,
   listTableOfContents,
   navigateToAdjacentChapter,
@@ -147,10 +148,16 @@ class FakeBookmarksRepository implements ChapterBookmarksRepository {
 class FakeChapterReadingNotesRepository
   implements ChapterReadingNotesRepository
 {
-  private readonly notes = new Map<string, ChapterReadingNote>()
+  private readonly notes = new Map<string, unknown>()
+
+  list(): readonly ChapterReadingNote[] {
+    return [...this.notes.values()] as readonly ChapterReadingNote[]
+  }
 
   load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
-    return this.notes.get(JSON.stringify([targetBookId, targetChapterId]))
+    return this.notes.get(
+      JSON.stringify([targetBookId, targetChapterId]),
+    ) as ChapterReadingNote | undefined
   }
 
   save(note: ChapterReadingNote): void {
@@ -159,6 +166,10 @@ class FakeChapterReadingNotesRepository
 
   remove(targetBookId: string, targetChapterId: string): void {
     this.notes.delete(JSON.stringify([targetBookId, targetChapterId]))
+  }
+
+  addPersisted(value: unknown): void {
+    this.notes.set(`malformed-${this.notes.size}`, value)
   }
 }
 
@@ -383,6 +394,80 @@ describe('chapter reading notes', () => {
     expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
       'keep this note',
     )
+  })
+
+  it('lists notes in content-book and canonical chapter order, including books outside the shelf', () => {
+    const firstBook = makeBook('book-a', [
+      chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.READABLE),
+      chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.PREVIEW),
+      chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const secondBook = makeBook('book-b', [
+      chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = new FakeContentRepository([firstBook, secondBook])
+    const notesRepository = new FakeChapterReadingNotesRepository()
+
+    saveChapterReadingNote(notesRepository, 'book-b', 'b-1', '最後一書')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-3', '第三章')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-2', '第二章')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-1', '第一章')
+
+    const entries = listChapterReadingNotes(contentRepository, notesRepository)
+
+    expect(
+      entries.map(({ book, chapter, note }) => [
+        book.book.id,
+        chapter.id,
+        note.content,
+      ]),
+    ).toEqual([
+      ['book-a', 'a-1', '第一章'],
+      ['book-a', 'a-2', '第二章'],
+      ['book-a', 'a-3', '第三章'],
+      ['book-b', 'b-1', '最後一書'],
+    ])
+  })
+
+  it('ignores locked, unavailable, orphaned, and malformed notes without throwing', () => {
+    const book = makeBook('book-a', [
+      chapter('book-a', 'a-readable', 1, CHAPTER_ACCESS.READABLE),
+      chapter('book-a', 'a-locked', 2, CHAPTER_ACCESS.LOCKED),
+      chapter('book-a', 'a-unavailable', 3, CHAPTER_ACCESS.UNAVAILABLE),
+    ])
+    const notesRepository = new FakeChapterReadingNotesRepository()
+    const validNote: ChapterReadingNote = {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-readable'),
+      content: '可讀筆記',
+    }
+
+    notesRepository.addPersisted(validNote)
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'a-locked',
+      content: '鎖定筆記',
+    })
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'a-unavailable',
+      content: '暫不可用筆記',
+    })
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'missing-chapter',
+      content: '孤立筆記',
+    })
+    notesRepository.addPersisted({ bookId: 'book-a', chapterId: 'a-readable', content: ' \n ' })
+    notesRepository.addPersisted({ bookId: 5, chapterId: 'a-readable', content: 'bad id' })
+    notesRepository.addPersisted(null)
+
+    expect(
+      listChapterReadingNotes(
+        new FakeContentRepository([book]),
+        notesRepository,
+      ).map((entry) => entry.note),
+    ).toEqual([validNote])
   })
 })
 

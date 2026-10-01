@@ -32,12 +32,14 @@ import {
   getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
+  listChapterReadingNotes,
   listContinueReading,
   listTableOfContents,
   navigateToAdjacentChapter,
   openReadingChapter,
   recoverActiveReaderSession,
   removeChapterBookmark,
+  removeChapterReadingNote,
   resolveStartOrContinue,
   saveChapterReadingNote,
   updateReadingProgress,
@@ -163,6 +165,10 @@ class MemoryChapterReadingNotesRepository
   implements ChapterReadingNotesRepository
 {
   private readonly notes = new Map<string, ChapterReadingNote>()
+
+  list(): readonly ChapterReadingNote[] {
+    return [...this.notes.values()]
+  }
 
   load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
     return this.notes.get(JSON.stringify([targetBookId, targetChapterId]))
@@ -392,6 +398,11 @@ function App({
     })
   }
 
+  const handleRemoveReadingNote = (bookId: string, chapterId: string) => {
+    removeChapterReadingNote(chapterReadingNotesRepo, bookId, chapterId)
+    refreshLibraryState()
+  }
+
   const handleToggleBookshelf = (bookId: string) => {
     if (bookShelfRepo.contains(bookId)) {
       removeBookFromBookshelf(bookShelfRepo, bookId)
@@ -463,6 +474,21 @@ function App({
           ? 'library'
           : 'catalog'
     openReaderChapter(position, returnTo)
+  }
+
+  const handleOpenReadingNote = (bookId: string, chapterId: string) => {
+    const savedPosition = dependencies.readingStateRepository.load(bookId)
+    const position =
+      savedPosition?.bookId === bookId && savedPosition.chapterId === chapterId
+        ? savedPosition
+        : {
+            bookId: toBookId(bookId),
+            chapterId: toChapterId(chapterId),
+            paragraphIndex: 0,
+            chapterProgress: 0,
+          }
+
+    openReaderChapter(position, 'library')
   }
 
   const openBookDetail = (
@@ -587,6 +613,10 @@ function App({
         <LibraryScreen
           books={bookshelfBooks}
           bookmarks={bookmarks}
+          notes={listChapterReadingNotes(
+            dependencies.contentRepository,
+            chapterReadingNotesRepo,
+          )}
           continueReading={listContinueReading(
             dependencies.contentRepository,
             dependencies.readingStateRepository,
@@ -594,8 +624,10 @@ function App({
           onBackToBookstore={() => setScreen({ name: 'catalog' })}
           onContinueBook={(bookId) => openReader(bookId, 'library')}
           onOpenBookmark={handleJumpBookmark}
+          onOpenReadingNote={handleOpenReadingNote}
           onOpenBook={(bookId) => openBookDetail(bookId, 'library')}
           onRemoveBookmark={handleRemoveBookmark}
+          onRemoveReadingNote={handleRemoveReadingNote}
           onRemoveFromBookshelf={handleToggleBookshelf}
           recentReading={recentReading}
         />

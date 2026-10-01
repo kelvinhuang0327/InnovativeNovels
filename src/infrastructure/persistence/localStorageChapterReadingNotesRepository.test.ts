@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ChapterReadingNote } from '../../domain/reading/chapterReadingNote'
 import {
@@ -100,6 +100,41 @@ describe('LocalStorageChapterReadingNotesRepository', () => {
     expect(repository.load('book-b', 'chapter-1')).toBeUndefined()
     expect(storage.getItem(malformedKey)).toBe(malformedValue)
     expect(repository.load('book-a', 'chapter-1')).toEqual(validNote)
+    expect(repository.list()).toEqual([validNote])
+  })
+
+  it('lists only valid notes in its namespace and ignores unrelated storage keys', () => {
+    const validNote = note('book-a', 'chapter-1', 'valid note')
+    const malformedKey = storageKey('book-b', 'chapter-1')
+    repository.save(validNote)
+    storage.setItem(malformedKey, '{not-json')
+    storage.setItem('unrelated:reading-state', JSON.stringify(note('book-c', 'chapter-1', 'other data')))
+
+    const getItem = vi.spyOn(storage, 'getItem')
+
+    expect(repository.list()).toEqual([validNote])
+    expect(getItem).toHaveBeenCalledWith(storageKey('book-a', 'chapter-1'))
+    expect(getItem).toHaveBeenCalledWith(malformedKey)
+    expect(getItem).not.toHaveBeenCalledWith('unrelated:reading-state')
+  })
+
+  it('continues listing valid records when one namespaced record cannot be read', () => {
+    const validNote = note('book-a', 'chapter-1', 'valid note')
+    const unreadableKey = storageKey('book-b', 'chapter-1')
+    repository.save(validNote)
+    storage.setItem(unreadableKey, JSON.stringify(note('book-b', 'chapter-1', 'hidden note')))
+
+    const readStoredItem = storage.getItem.bind(storage)
+    const getItem = vi.spyOn(storage, 'getItem')
+    getItem.mockImplementation((key) => {
+      if (key === unreadableKey) {
+        throw new Error('storage read failed')
+      }
+
+      return readStoredItem(key)
+    })
+
+    expect(repository.list()).toEqual([validNote])
   })
 
   it('rejects mismatched identity and whitespace-only persisted records', () => {
@@ -122,5 +157,6 @@ describe('LocalStorageChapterReadingNotesRepository', () => {
       }),
     )
     expect(repository.load('book-a', 'chapter-1')).toBeUndefined()
+    expect(repository.list()).toEqual([])
   })
 })
