@@ -19,6 +19,7 @@ import { calculateReadingProgress } from '../../domain/reading/readingProgressPo
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
+import { ChapterReadingNoteModal } from './ChapterReadingNoteModal'
 import { ReaderAppearanceSheet } from './ReaderAppearanceSheet'
 import { TableOfContentsModal } from './TableOfContentsModal'
 
@@ -154,6 +155,8 @@ interface ReaderScreenProps {
   readonly onToggleBookmark: () => void
   readonly onSelectBookmark: (position: ReadingPosition) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
+  readonly loadChapterReadingNote?: () => string
+  readonly onSaveChapterReadingNote?: (content: string) => void
   readonly onSelectChapter: (chapterId: string) => void
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
@@ -177,6 +180,8 @@ export function ReaderScreen({
   onToggleBookmark,
   onSelectBookmark,
   onRemoveBookmark,
+  loadChapterReadingNote = () => '',
+  onSaveChapterReadingNote = () => {},
   onSelectChapter,
   onBackToBook,
   onPrevious,
@@ -187,6 +192,10 @@ export function ReaderScreen({
 }: ReaderScreenProps) {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
+  const [isChapterReadingNoteOpen, setIsChapterReadingNoteOpen] =
+    useState(false)
+  const [chapterReadingNoteContent, setChapterReadingNoteContent] =
+    useState('')
   const [isTocOpen, setIsTocOpen] = useState(false)
   const [isReaderChromeVisible, setIsReaderChromeVisible] = useState(true)
   const isMobileReaderChrome = useSyncExternalStore(
@@ -221,6 +230,7 @@ export function ReaderScreen({
     pageCount: 1,
   })
   const bookmarksTriggerRef = useRef<HTMLButtonElement>(null)
+  const chapterReadingNoteTriggerRef = useRef<HTMLButtonElement>(null)
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
   const proseRef = useRef<HTMLElement>(null)
@@ -942,6 +952,29 @@ export function ReaderScreen({
     </button>
   )
 
+  const chapterReadingNoteButton =
+    !chapterOpenFailed && !openedChapter.isLocked ? (
+      <button
+        ref={chapterReadingNoteTriggerRef}
+        type="button"
+        className="button-secondary button-open-chapter-reading-note"
+        onClick={() => {
+          setChapterReadingNoteContent(loadChapterReadingNote())
+          setIsChapterReadingNoteOpen(true)
+        }}
+        aria-label="本章筆記"
+        aria-haspopup="dialog"
+        aria-expanded={isChapterReadingNoteOpen}
+      >
+        {isMobileReaderChrome ? '筆記' : '本章筆記'}
+      </button>
+    ) : null
+
+  const handleSaveChapterReadingNote = (content: string) => {
+    setChapterReadingNoteContent(content.trim().length > 0 ? content : '')
+    onSaveChapterReadingNote(content)
+  }
+
   const tocTriggerButton = (
     <button
       ref={tocTriggerRef}
@@ -1006,6 +1039,7 @@ export function ReaderScreen({
             <div className="reader-bookmark-toolbar">
               {bookmarkToggleButton}
               {bookmarksListButton}
+              {chapterReadingNoteButton}
               {tocTriggerButton}
             </div>
           </div>
@@ -1280,6 +1314,7 @@ export function ReaderScreen({
             {tocTriggerButton}
             {appearanceTriggerButton}
             {bookmarksListButton}
+            {chapterReadingNoteButton}
           </>
         ) : (
           <div className="persistent-reader-context">
@@ -1335,6 +1370,15 @@ export function ReaderScreen({
         onClose={() => setIsBookmarksOpen(false)}
         onSelectBookmark={onSelectBookmark}
         onRemoveBookmark={onRemoveBookmark}
+      />
+
+      <ChapterReadingNoteModal
+        isOpen={isChapterReadingNoteOpen}
+        chapterTitle={openedChapter.chapter.title}
+        initialContent={chapterReadingNoteContent}
+        triggerRef={chapterReadingNoteTriggerRef}
+        onClose={() => setIsChapterReadingNoteOpen(false)}
+        onSave={handleSaveChapterReadingNote}
       />
 
       <TableOfContentsModal

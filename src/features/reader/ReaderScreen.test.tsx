@@ -2086,22 +2086,29 @@ describe('ReaderScreen immersive mobile chrome', () => {
     onPrevious = vi.fn(),
     onNext = vi.fn(),
     onToggleBookmark = vi.fn(),
+    loadChapterReadingNote = () => 'saved note',
+    onSaveChapterReadingNote = vi.fn(),
     onBackToBook = vi.fn(),
     onProgressChange = vi.fn(),
     canNavigateNextChapter = true,
+    chapterOpenFailed = false,
   }: {
     readonly openedChapter?: typeof mockOpenedChapter
     readonly preferences?: typeof DEFAULT_READER_PREFERENCES
     readonly onPrevious?: () => void
     readonly onNext?: () => void
     readonly onToggleBookmark?: () => void
+    readonly loadChapterReadingNote?: () => string
+    readonly onSaveChapterReadingNote?: (content: string) => void
     readonly onBackToBook?: () => void
     readonly onProgressChange?: (chapterProgress: number) => void
     readonly canNavigateNextChapter?: boolean
+    readonly chapterOpenFailed?: boolean
   } = {}) {
     const result = render(
       <ReaderScreen
         openedChapter={openedChapter}
+        chapterOpenFailed={chapterOpenFailed}
         preferences={preferences}
         isBookmarked={false}
         bookmarks={[]}
@@ -2110,6 +2117,8 @@ describe('ReaderScreen immersive mobile chrome', () => {
         onChangePreferences={vi.fn()}
         onResetPreferences={vi.fn()}
         onToggleBookmark={onToggleBookmark}
+        loadChapterReadingNote={loadChapterReadingNote}
+        onSaveChapterReadingNote={onSaveChapterReadingNote}
         onSelectBookmark={vi.fn()}
         onRemoveBookmark={vi.fn()}
         onSelectChapter={vi.fn()}
@@ -2126,6 +2135,8 @@ describe('ReaderScreen immersive mobile chrome', () => {
       onPrevious,
       onNext,
       onToggleBookmark,
+      loadChapterReadingNote,
+      onSaveChapterReadingNote,
       onBackToBook,
       onProgressChange,
       reader: screen.getByLabelText('閱讀器'),
@@ -2189,6 +2200,9 @@ describe('ReaderScreen immersive mobile chrome', () => {
     expect(
       within(bottomChrome).getByRole('button', { name: '開啟書籤列表' }),
     ).toHaveTextContent('書籤')
+    expect(
+      within(bottomChrome).getByRole('button', { name: '本章筆記' }),
+    ).toHaveTextContent('筆記')
     expect(
       within(bottomChrome).getByRole('button', { name: '下一章' }),
     ).toHaveTextContent('下章')
@@ -2268,6 +2282,66 @@ describe('ReaderScreen immersive mobile chrome', () => {
     fireEvent.click(screen.getByRole('button', { name: '開啟書籤列表' }))
     expect(screen.getByRole('dialog', { name: '章節書籤' })).toBeInTheDocument()
     expect(reader).toHaveAttribute('data-reader-chrome', 'visible')
+  })
+
+  it('loads the current chapter note, restores focus on Escape, and guards Reader navigation', () => {
+    const onNext = vi.fn()
+    const onSaveChapterReadingNote = vi.fn()
+    const loadChapterReadingNote = vi.fn(() => 'saved note')
+    renderImmersiveReader({
+      onNext,
+      loadChapterReadingNote,
+      onSaveChapterReadingNote,
+    })
+    const trigger = screen.getByRole('button', { name: '本章筆記' })
+
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '本章筆記' })
+    expect(loadChapterReadingNote).toHaveBeenCalledTimes(1)
+    expect(loadChapterReadingNote).toHaveBeenCalledWith()
+    expect(within(dialog).getByLabelText('筆記內容')).toHaveValue('saved note')
+    fireEvent.keyDown(dialog, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog', { name: '本章筆記' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(onSaveChapterReadingNote).not.toHaveBeenCalled()
+  })
+
+  it('shows chapter notes only for a readable chapter without an open failure', () => {
+    const lockedChapter = {
+      ...mockOpenedChapter,
+      isLocked: true,
+    }
+    const lockedView = render(
+      <ReaderScreen
+        openedChapter={lockedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={{ currentPosition: 1, totalChapters: 1 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: '本章筆記' })).not.toBeInTheDocument()
+    lockedView.unmount()
+
+    renderImmersiveReader({ chapterOpenFailed: true })
+
+    expect(screen.queryByRole('button', { name: '本章筆記' })).not.toBeInTheDocument()
   })
 
   it('navigates with a qualifying swipe and does not treat the swipe as a chrome toggle', () => {
@@ -2480,6 +2554,7 @@ describe('ReaderScreen immersive mobile chrome', () => {
     expect(screen.getByRole('button', { name: '開啟章節目錄' })).toBeVisible()
     expect(screen.getByRole('button', { name: '開啟書籤列表' })).toBeVisible()
     expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '本章筆記' })).toBeVisible()
     expect(screen.getByTestId('reader-persistent-navigation')).toBeVisible()
     expect(screen.getByRole('button', { name: '返回作品' })).toBeVisible()
 
@@ -2499,6 +2574,7 @@ describe('ReaderScreen immersive mobile chrome', () => {
     expect(screen.getByRole('button', { name: '開啟章節目錄' })).toBeVisible()
     expect(screen.getByRole('button', { name: '開啟書籤列表' })).toBeVisible()
     expect(screen.getByRole('button', { name: '加入章節書籤' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '本章筆記' })).toBeVisible()
     expect(screen.getByTestId('reader-persistent-navigation')).toBeVisible()
     expect(
       screen.queryByTestId('reader-chrome-top')?.getAttribute('inert'),

@@ -2252,6 +2252,52 @@ button:focus-visible {
   font-size: 0.85rem;
 }
 
+.chapter-reading-note-modal {
+  width: min(100%, 42rem);
+}
+
+.chapter-reading-note-chapter {
+  margin: 0 0 0.9rem;
+  color: #8d3f2f;
+  font-weight: 700;
+}
+
+.chapter-reading-note-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.chapter-reading-note-editor {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid #b9aea0;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #2b221a;
+  font: inherit;
+  line-height: 1.55;
+}
+
+.chapter-reading-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.chapter-reading-note-clear {
+  margin-right: auto;
+}
+
 /* Table of Contents Modal */
 .toc-search {
   margin-bottom: 1.25rem;

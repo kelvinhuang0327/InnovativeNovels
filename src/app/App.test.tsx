@@ -25,6 +25,10 @@ import {
   LocalStorageChapterBookmarksRepository,
   CHAPTER_BOOKMARKS_STORAGE_KEY,
 } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import {
+  CHAPTER_READING_NOTES_STORAGE_KEY_PREFIX,
+  LocalStorageChapterReadingNotesRepository,
+} from '../infrastructure/persistence/localStorageChapterReadingNotesRepository'
 import { LocalStorageBookShelfRepository } from '../infrastructure/persistence/localStorageBookShelfRepository'
 import {
   LocalStorageReaderPreferencesRepository,
@@ -55,6 +59,8 @@ function createDependencies(): AppDependencies {
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
       window.localStorage,
     ),
+    chapterReadingNotesRepository:
+      new LocalStorageChapterReadingNotesRepository(window.localStorage),
     activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
       window.localStorage,
     ),
@@ -2647,5 +2653,111 @@ describe('Readable Depth Presentation V1 integration', () => {
       expect(within(btn.closest('li') as HTMLElement).queryByText('已鎖定')).not.toBeInTheDocument()
       expect(within(btn.closest('li') as HTMLElement).queryByText('暫不可用')).not.toBeInTheDocument()
     }
+  })
+})
+
+describe('Reader chapter notes', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  function openFirstChapterReader() {
+    openBookDetail()
+    fireEvent.click(screen.getByRole('button', { name: /^(開始閱讀|繼續閱讀)/ }))
+  }
+
+  function saveCurrentChapterNote(content: string) {
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+    const dialog = screen.getByRole('dialog', { name: '本章筆記' })
+    fireEvent.change(within(dialog).getByLabelText('筆記內容'), {
+      target: { value: content },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '儲存筆記' }))
+  }
+
+  it('keeps chapter notes independent and restores them after remounting App', () => {
+    render(<App dependencies={createDependencies()} />)
+    openFirstChapterReader()
+
+    expect(screen.getByRole('heading', { name: '第一章：潮聲來信' })).toBeInTheDocument()
+    const existingStorageSnapshot = () =>
+      Array.from({ length: window.localStorage.length }, (_, index) => {
+        const key = window.localStorage.key(index)
+        return key === null ? undefined : [key, window.localStorage.getItem(key)] as const
+      })
+        .filter(
+          (entry): entry is readonly [string, string | null] =>
+            entry !== undefined &&
+            !entry[0].startsWith(CHAPTER_READING_NOTES_STORAGE_KEY_PREFIX),
+        )
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    const storageBeforeNote = existingStorageSnapshot()
+    saveCurrentChapterNote('第一章筆記\n保留換行')
+    expect(existingStorageSnapshot()).toEqual(storageBeforeNote)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    saveCurrentChapterNote('第二章筆記')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '上一章' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+    const firstChapterDialog = screen.getByRole('dialog', { name: '本章筆記' })
+    expect(within(firstChapterDialog).getByLabelText('筆記內容')).toHaveValue(
+      '第一章筆記\n保留換行',
+    )
+    fireEvent.click(within(firstChapterDialog).getByRole('button', { name: '清除筆記' }))
+
+    const notesRepository = new LocalStorageChapterReadingNotesRepository(
+      window.localStorage,
+    )
+    expect(
+      notesRepository.load('book-tide-city', 'chapter-tide-letter'),
+    ).toBeUndefined()
+    expect(
+      notesRepository.load('book-tide-city', 'chapter-lighthouse-watch')?.content,
+    ).toBe('第二章筆記')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '下一章' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+    expect(
+      within(screen.getByRole('dialog', { name: '本章筆記' })).getByLabelText(
+        '筆記內容',
+      ),
+    ).toHaveValue('第二章筆記')
+    fireEvent.click(screen.getByRole('button', { name: '關閉本章筆記' }))
+
+    fireEvent.click(screen.getAllByRole('button', { name: '返回作品' })[0])
+    cleanup()
+    render(<App dependencies={createDependencies()} />)
+    openFirstChapterReader()
+
+    expect(screen.getByRole('heading', { name: '第二章：燈塔守望' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+    expect(
+      within(screen.getByRole('dialog', { name: '本章筆記' })).getByLabelText(
+        '筆記內容',
+      ),
+    ).toHaveValue('第二章筆記')
+  })
+
+  it('opens safely with malformed stored note data without rewriting it', () => {
+    const malformedKey = `${CHAPTER_READING_NOTES_STORAGE_KEY_PREFIX}${encodeURIComponent('book-tide-city')}:${encodeURIComponent('chapter-tide-letter')}`
+    const malformedValue = '{broken note data'
+    window.localStorage.setItem(malformedKey, malformedValue)
+
+    render(<App dependencies={createDependencies()} />)
+    openFirstChapterReader()
+    fireEvent.click(screen.getByRole('button', { name: '本章筆記' }))
+
+    expect(
+      within(screen.getByRole('dialog', { name: '本章筆記' })).getByLabelText(
+        '筆記內容',
+      ),
+    ).toHaveValue('')
+    expect(window.localStorage.getItem(malformedKey)).toBe(malformedValue)
   })
 })

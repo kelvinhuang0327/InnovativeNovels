@@ -6,8 +6,10 @@ import { decideChapterAccess } from '../../domain/access/chapterAccessPolicy'
 import type { Chapter } from '../../domain/catalog/chapter'
 import { bookId as toBookId, chapterId as toChapterId } from '../../domain/catalog/identifiers'
 import type { ChapterId } from '../../domain/catalog/identifiers'
+import type { ChapterReadingNote } from '../../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from './chapterReadingNotesRepository'
 import type { ReadingStateRepository } from './readingStateRepository'
 
 export interface ReadingDestination {
@@ -266,6 +268,40 @@ export function isChapterBookmarked(
   return bookmarksRepository
     .list()
     .some((b) => b.bookId === bookId && b.chapterId === chapterId)
+}
+
+export function getChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  bookId: string,
+  chapterId: string,
+): ChapterReadingNote | undefined {
+  return notesRepository.load(bookId, chapterId)
+}
+
+export function saveChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  targetBookId: string,
+  targetChapterId: string,
+  content: string,
+): void {
+  if (content.trim().length === 0) {
+    notesRepository.remove(targetBookId, targetChapterId)
+    return
+  }
+
+  notesRepository.save({
+    bookId: toBookId(targetBookId),
+    chapterId: toChapterId(targetChapterId),
+    content,
+  })
+}
+
+export function removeChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  bookId: string,
+  chapterId: string,
+): void {
+  notesRepository.remove(bookId, chapterId)
 }
 
 export function addChapterBookmark(

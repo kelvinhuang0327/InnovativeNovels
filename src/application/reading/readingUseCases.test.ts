@@ -3,16 +3,19 @@ import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence, type Chapter } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ChapterBookmark } from '../../domain/reading/chapterBookmark'
+import type { ChapterReadingNote } from '../../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type {
   ContentBook,
   ContentRepository,
 } from '../catalog/contentRepository'
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from './chapterReadingNotesRepository'
 import {
   addChapterBookmark,
   canNavigateToAdjacentChapter,
   describeChapterPosition,
+  getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
   listContinueReading,
@@ -21,6 +24,8 @@ import {
   openReadingChapter,
   recoverActiveReaderSession,
   removeChapterBookmark,
+  removeChapterReadingNote,
+  saveChapterReadingNote,
   updateReadingProgress,
 } from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
@@ -136,6 +141,24 @@ class FakeBookmarksRepository implements ChapterBookmarksRepository {
     this.items = this.items.filter(
       (b) => !(b.bookId === targetBookId && b.chapterId === targetChapterId),
     )
+  }
+}
+
+class FakeChapterReadingNotesRepository
+  implements ChapterReadingNotesRepository
+{
+  private readonly notes = new Map<string, ChapterReadingNote>()
+
+  load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
+    return this.notes.get(JSON.stringify([targetBookId, targetChapterId]))
+  }
+
+  save(note: ChapterReadingNote): void {
+    this.notes.set(JSON.stringify([note.bookId, note.chapterId]), note)
+  }
+
+  remove(targetBookId: string, targetChapterId: string): void {
+    this.notes.delete(JSON.stringify([targetBookId, targetChapterId]))
   }
 }
 
@@ -318,6 +341,48 @@ describe('Chapter Bookmarks Use Cases', () => {
 
     const list = listChapterBookmarks(repo, bookmarksRepo)
     expect(list).toEqual([])
+  })
+})
+
+describe('chapter reading notes', () => {
+  it('keeps notes independent by book and chapter and preserves plain text', () => {
+    const repository = new FakeChapterReadingNotesRepository()
+
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', 'first\nline')
+    saveChapterReadingNote(repository, 'book-a', 'chapter-2', 'second chapter')
+    saveChapterReadingNote(repository, 'book-b', 'chapter-1', 'other book')
+
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')?.content).toBe(
+      'first\nline',
+    )
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'second chapter',
+    )
+    expect(getChapterReadingNote(repository, 'book-b', 'chapter-1')?.content).toBe(
+      'other book',
+    )
+
+    removeChapterReadingNote(repository, 'book-a', 'chapter-1')
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')).toBeUndefined()
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'second chapter',
+    )
+    expect(getChapterReadingNote(repository, 'book-b', 'chapter-1')?.content).toBe(
+      'other book',
+    )
+  })
+
+  it('treats whitespace-only content as clearing the current chapter note', () => {
+    const repository = new FakeChapterReadingNotesRepository()
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', 'saved note')
+    saveChapterReadingNote(repository, 'book-a', 'chapter-2', 'keep this note')
+
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', ' \n  ')
+
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')).toBeUndefined()
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'keep this note',
+    )
   })
 })
 

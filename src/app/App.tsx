@@ -23,11 +23,13 @@ import {
 import type { BookShelfRepository } from '../application/library/bookShelfRepository'
 import type { RecentReadingRepository } from '../application/library/recentReadingRepository'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from '../application/reading/chapterReadingNotesRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
   addChapterBookmark,
   canNavigateToAdjacentChapter,
   describeChapterPosition,
+  getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
   listContinueReading,
@@ -37,6 +39,7 @@ import {
   recoverActiveReaderSession,
   removeChapterBookmark,
   resolveStartOrContinue,
+  saveChapterReadingNote,
   updateReadingProgress,
   type BookmarkEntry,
   type OpenedChapter,
@@ -47,6 +50,7 @@ import type { PwaDependencies } from '../application/pwa/pwaPorts'
 import { usePwaController } from '../application/pwa/usePwaController'
 import { bookId as toBookId, chapterId as toChapterId } from '../domain/catalog/identifiers'
 import type { ChapterBookmark } from '../domain/reading/chapterBookmark'
+import type { ChapterReadingNote } from '../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../domain/reading/readingPosition'
 import {
   DEFAULT_READER_PREFERENCES,
@@ -68,6 +72,7 @@ import { LocalStorageAuthoringSessionRepository } from '../infrastructure/persis
 import { LocalStorageAuthoringProjectRepository } from '../infrastructure/persistence/localStorageAuthoringProjectRepository'
 import { LocalStorageBookShelfRepository } from '../infrastructure/persistence/localStorageBookShelfRepository'
 import { LocalStorageChapterBookmarksRepository } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import { LocalStorageChapterReadingNotesRepository } from '../infrastructure/persistence/localStorageChapterReadingNotesRepository'
 import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageRecentReadingRepository } from '../infrastructure/persistence/localStorageRecentReadingRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
@@ -82,6 +87,7 @@ export interface AppDependencies {
   readonly recentReadingRepository?: RecentReadingRepository
   readonly readerPreferencesRepository?: ReaderPreferencesRepository
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
+  readonly chapterReadingNotesRepository?: ChapterReadingNotesRepository
   readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
   readonly authoringGatewayClient?: AuthoringGatewayClient
   readonly authoringProjectRepository?: AuthoringProjectRepository
@@ -150,6 +156,24 @@ class MemoryBookmarksRepository implements ChapterBookmarksRepository {
     this.items = this.items.filter(
       (i) => !(i.bookId === bookId && i.chapterId === chapterId),
     )
+  }
+}
+
+class MemoryChapterReadingNotesRepository
+  implements ChapterReadingNotesRepository
+{
+  private readonly notes = new Map<string, ChapterReadingNote>()
+
+  load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
+    return this.notes.get(JSON.stringify([targetBookId, targetChapterId]))
+  }
+
+  save(note: ChapterReadingNote): void {
+    this.notes.set(JSON.stringify([note.bookId, note.chapterId]), note)
+  }
+
+  remove(targetBookId: string, targetChapterId: string): void {
+    this.notes.delete(JSON.stringify([targetBookId, targetChapterId]))
   }
 }
 
@@ -239,6 +263,8 @@ function createDefaultDependencies(): AppDependencies {
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
       window.localStorage,
     ),
+    chapterReadingNotesRepository:
+      new LocalStorageChapterReadingNotesRepository(window.localStorage),
     activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
       window.localStorage,
     ),
@@ -262,6 +288,11 @@ function App({
     new MemoryPreferencesRepository()
   const bookmarkRepo =
     dependencies.chapterBookmarksRepository ?? new MemoryBookmarksRepository()
+  const [memoryChapterReadingNotesRepo] = useState(
+    () => new MemoryChapterReadingNotesRepository(),
+  )
+  const chapterReadingNotesRepo =
+    dependencies.chapterReadingNotesRepository ?? memoryChapterReadingNotesRepo
   const activeSessionRepo =
     dependencies.activeReaderSessionRepository ??
     new MemoryActiveReaderSessionRepository()
@@ -691,6 +722,21 @@ function App({
           }
           onSelectBookmark={handleJumpBookmark}
           onRemoveBookmark={handleRemoveBookmark}
+          loadChapterReadingNote={() =>
+            getChapterReadingNote(
+              chapterReadingNotesRepo,
+              screen.openedChapter.book.book.id,
+              screen.openedChapter.chapter.id,
+            )?.content ?? ''
+          }
+          onSaveChapterReadingNote={(content) =>
+            saveChapterReadingNote(
+              chapterReadingNotesRepo,
+              screen.openedChapter.book.book.id,
+              screen.openedChapter.chapter.id,
+              content,
+            )
+          }
           onSelectChapter={(targetChapterId) =>
             openReaderChapter(
               {
