@@ -45,6 +45,12 @@ interface PagedReaderState {
   readonly pageCount: number
 }
 
+interface LiveProgress {
+  readonly chapterId: string
+  readonly percent: number
+  readonly bookPercent: number | undefined
+}
+
 interface PagedReaderMetrics {
   readonly pageCount: number
   readonly pageStep: number
@@ -58,6 +64,29 @@ function isChromeToggleExcludedTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
     target.closest(CHROME_TOGGLE_EXCLUDED_TARGETS) !== null
+  )
+}
+
+function isReaderKeyboardShortcutEditableTarget(
+  target: EventTarget | null,
+): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+
+  if (
+    target.closest(
+      'input, textarea, select, [role="textbox"], [role="searchbox"]',
+    )
+  ) {
+    return true
+  }
+
+  const contentEditableTarget = target.closest('[contenteditable]')
+  return (
+    contentEditableTarget !== null &&
+    contentEditableTarget.getAttribute('contenteditable')?.toLowerCase() !==
+      'false'
   )
 }
 
@@ -95,6 +124,20 @@ function clampChapterProgress(chapterProgress: number): number {
   return Number.isFinite(chapterProgress)
     ? Math.min(Math.max(chapterProgress, 0), 1)
     : 0
+}
+
+function roundedProgressPercent(
+  position: ReadingPosition,
+  chapterSequence: number,
+  totalChapters: number,
+): number | undefined {
+  const progress = calculateReadingProgress({
+    position,
+    chapterSequence,
+    totalChapters,
+  })
+
+  return progress.valid ? Math.round(progress.percent) : undefined
 }
 
 interface ReaderScreenProps {
@@ -152,9 +195,25 @@ export function ReaderScreen({
     () => false,
   )
   const isMobileChromeHidden = isMobileReaderChrome && !isReaderChromeVisible
-  const [liveProgress, setLiveProgress] = useState({
-    chapterId: openedChapter.chapter.id,
-    percent: 0,
+  const [liveProgress, setLiveProgress] = useState<LiveProgress>(() => {
+    const position: ReadingPosition = {
+      bookId: openedChapter.book.book.id,
+      chapterId: openedChapter.chapter.id,
+      paragraphIndex: 0,
+      chapterProgress: openedChapter.initialChapterProgress,
+    }
+
+    return {
+      chapterId: openedChapter.chapter.id,
+      percent: roundedProgressPercent(position, 1, 1) ?? 0,
+      bookPercent: chapterPosition
+        ? roundedProgressPercent(
+            position,
+            chapterPosition.currentPosition,
+            chapterPosition.totalChapters,
+          )
+        : undefined,
+    }
   })
   const [pagedReaderState, setPagedReaderState] = useState<PagedReaderState>({
     chapterId: openedChapter.chapter.id,
@@ -182,6 +241,10 @@ export function ReaderScreen({
     liveProgress.chapterId === openedChapter.chapter.id
       ? liveProgress.percent
       : 0
+  const liveBookProgressPercent =
+    liveProgress.chapterId === openedChapter.chapter.id
+      ? liveProgress.bookPercent
+      : undefined
   const currentPagedState =
     pagedReaderState.chapterId === openedChapter.chapter.id
       ? pagedReaderState
@@ -207,28 +270,37 @@ export function ReaderScreen({
     (chapterProgress: number) => {
       latestChapterProgressRef.current = chapterProgress
 
-      const progress = calculateReadingProgress({
-        position: {
-          bookId: openedChapter.book.book.id,
-          chapterId: openedChapter.chapter.id,
-          paragraphIndex: 0,
-          chapterProgress,
-        },
-        chapterSequence: 1,
-        totalChapters: 1,
-      })
-      const percent = progress.valid ? Math.round(progress.percent) : 0
+      const position: ReadingPosition = {
+        bookId: openedChapter.book.book.id,
+        chapterId: openedChapter.chapter.id,
+        paragraphIndex: 0,
+        chapterProgress,
+      }
+      const percent = roundedProgressPercent(position, 1, 1) ?? 0
+      const bookPercent = chapterPosition
+        ? roundedProgressPercent(
+            position,
+            chapterPosition.currentPosition,
+            chapterPosition.totalChapters,
+          )
+        : undefined
 
       setLiveProgress((current) =>
         current.chapterId === openedChapter.chapter.id &&
-        current.percent === percent
+        current.percent === percent &&
+        current.bookPercent === bookPercent
           ? current
-          : { chapterId: openedChapter.chapter.id, percent },
+          : { chapterId: openedChapter.chapter.id, percent, bookPercent },
       )
 
       return percent
     },
-    [openedChapter.book.book.id, openedChapter.chapter.id],
+    [
+      openedChapter.book.book.id,
+      openedChapter.chapter.id,
+      chapterPosition?.currentPosition,
+      chapterPosition?.totalChapters,
+    ],
   )
 
   const applyPagedPage = useCallback(
@@ -430,6 +502,31 @@ export function ReaderScreen({
     } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
       event.preventDefault()
       turnPagedPage(-1)
+    }
+  }
+
+  const handleReaderChapterShortcut = (
+    event: ReactKeyboardEvent<HTMLElement>,
+  ) => {
+    if (
+      event.repeat ||
+      !event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isReaderKeyboardShortcutEditableTarget(event.target) ||
+      (event.target instanceof Element &&
+        event.target.closest('dialog, [role="dialog"], [role="menu"], [role="listbox"]'))
+    ) {
+      return
+    }
+
+    if (event.key === 'ArrowLeft' && openedChapter.hasPrevious) {
+      event.preventDefault()
+      onPrevious()
+    } else if (event.key === 'ArrowRight' && openedChapter.hasNext) {
+      event.preventDefault()
+      onNext()
     }
   }
 
@@ -754,25 +851,48 @@ export function ReaderScreen({
   ])
 
   const readingProgressIndicator = !openedChapter.isLocked ? (
-    <div
-      className="chapter-reading-progress"
-      role="progressbar"
-      aria-label="本章閱讀進度"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={liveProgressPercent}
-      aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
-    >
-      <span className="chapter-reading-progress-label" aria-hidden="true">
-        本章閱讀進度 {liveProgressPercent}%
-      </span>
-      <span className="chapter-reading-progress-track" aria-hidden="true">
-        <span
-          className="chapter-reading-progress-fill"
-          style={{ width: `${liveProgressPercent}%` }}
-        />
-      </span>
-    </div>
+    <>
+      <div
+        className="chapter-reading-progress"
+        role="progressbar"
+        aria-label="本章閱讀進度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={liveProgressPercent}
+        aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
+      >
+        <span className="chapter-reading-progress-label" aria-hidden="true">
+          本章閱讀進度 {liveProgressPercent}%
+        </span>
+        <span className="chapter-reading-progress-track" aria-hidden="true">
+          <span
+            className="chapter-reading-progress-fill"
+            style={{ width: `${liveProgressPercent}%` }}
+          />
+        </span>
+      </div>
+      {liveBookProgressPercent !== undefined && (
+        <div
+          className="chapter-reading-progress"
+          role="progressbar"
+          aria-label="全書閱讀進度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={liveBookProgressPercent}
+          aria-valuetext={`全書閱讀進度 ${liveBookProgressPercent}%`}
+        >
+          <span className="chapter-reading-progress-label" aria-hidden="true">
+            全書閱讀進度 {liveBookProgressPercent}%
+          </span>
+          <span className="chapter-reading-progress-track" aria-hidden="true">
+            <span
+              className="chapter-reading-progress-fill"
+              style={{ width: `${liveBookProgressPercent}%` }}
+            />
+          </span>
+        </div>
+      )}
+    </>
   ) : null
 
   const bookmarkToggleButton = !openedChapter.isLocked ? (
@@ -837,6 +957,7 @@ export function ReaderScreen({
   return (
     <section
       ref={readerRef}
+      onKeyDown={handleReaderChapterShortcut}
       className="reader-screen-container"
       data-theme={preferences.theme}
       data-font-family={preferences.fontFamily}
@@ -1065,6 +1186,7 @@ export function ReaderScreen({
                   className="button-primary chapter-end-continue-button"
                   onClick={onNext}
                   aria-label={`繼續閱讀：${nextChapterTitle}`}
+                  aria-keyshortcuts="Shift+ArrowRight"
                 >
                   繼續閱讀
                 </button>
@@ -1107,6 +1229,7 @@ export function ReaderScreen({
                   className="button-secondary chapter-end-prev-button"
                   onClick={onPrevious}
                   aria-label="上一章"
+                  aria-keyshortcuts="Shift+ArrowLeft"
                 >
                   ← 上一章
                 </button>
@@ -1147,6 +1270,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasPrevious}
           aria-disabled={!openedChapter.hasPrevious}
           aria-label="上一章"
+          aria-keyshortcuts="Shift+ArrowLeft"
         >
           {isMobileReaderChrome ? '上章' : '上一章'}
         </button>
@@ -1180,6 +1304,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasNext}
           aria-disabled={!openedChapter.hasNext}
           aria-label="下一章"
+          aria-keyshortcuts="Shift+ArrowRight"
         >
           {isMobileReaderChrome ? '下章' : '下一章'}
         </button>

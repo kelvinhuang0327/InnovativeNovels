@@ -33,16 +33,25 @@ interface EditorialShelfProps {
   readonly onOpenBook: (bookId: string) => void
 }
 
-type CatalogSortMode = 'bookstore' | 'chapters-desc' | 'chapters-asc'
+type CatalogSortMode =
+  | 'bookstore'
+  | 'title-asc'
+  | 'author-asc'
+  | 'chapters-desc'
+  | 'chapters-asc'
 
 const CATALOG_SORT_OPTIONS: readonly {
   readonly value: CatalogSortMode
   readonly label: string
 }[] = [
   { value: 'bookstore', label: '書庫順序' },
+  { value: 'title-asc', label: '書名升冪' },
+  { value: 'author-asc', label: '作者升冪' },
   { value: 'chapters-desc', label: '章節較多優先' },
   { value: 'chapters-asc', label: '章節較少優先' },
 ]
+
+const CATALOG_TEXT_COLLATOR = new Intl.Collator('zh-Hant')
 
 function sortCatalogResults(
   entries: readonly ContentBook[],
@@ -55,16 +64,26 @@ function sortCatalogResults(
   return entries
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
-      const chapterDifference =
-        left.entry.chapters.length - right.entry.chapters.length
+      const difference =
+        sortMode === 'title-asc'
+          ? CATALOG_TEXT_COLLATOR.compare(
+              left.entry.book.title,
+              right.entry.book.title,
+            )
+          : sortMode === 'author-asc'
+            ? CATALOG_TEXT_COLLATOR.compare(
+                left.entry.book.authorName,
+                right.entry.book.authorName,
+              )
+            : left.entry.chapters.length - right.entry.chapters.length
 
-      if (chapterDifference === 0) {
+      if (difference === 0) {
         return left.index - right.index
       }
 
       return sortMode === 'chapters-desc'
-        ? -chapterDifference
-        : chapterDifference
+        ? -difference
+        : difference
     })
     .map(({ entry }) => entry)
 }

@@ -443,6 +443,36 @@ describe('Reader Table of Contents & Chapter Position Progress', () => {
 
 describe('ReaderScreen Live Chapter Progress', () => {
   let animationFrames: FrameRequestCallback[]
+  const progressBookId = bookId('progress-book')
+  const progressBook = {
+    book: { ...mockBook.book, id: progressBookId, title: 'Progress Book' },
+    description: 'Desc',
+    chapters: [1, 2, 3].map((sequence) => ({
+      id: chapterId(`progress-${sequence}`),
+      bookId: progressBookId,
+      title: `Chapter ${sequence}`,
+      sequence: chapterSequence(sequence),
+      access: CHAPTER_ACCESS.READABLE,
+    })),
+  }
+
+  function openedProgressChapter(sequence: number, initialChapterProgress = 0) {
+    const chapter = progressBook.chapters[sequence - 1]
+
+    if (!chapter) {
+      throw new Error(`Unknown progress chapter: ${sequence}`)
+    }
+
+    return {
+      ...mockOpenedChapter,
+      book: progressBook,
+      chapter,
+      prose: [`Paragraph ${sequence}`],
+      hasPrevious: sequence > 1,
+      hasNext: sequence < progressBook.chapters.length,
+      initialChapterProgress,
+    }
+  }
 
   beforeEach(() => {
     animationFrames = []
@@ -464,6 +494,7 @@ describe('ReaderScreen Live Chapter Progress', () => {
 
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
     Reflect.deleteProperty(document.documentElement, 'scrollHeight')
   })
@@ -505,6 +536,45 @@ describe('ReaderScreen Live Chapter Progress', () => {
     )
   }
 
+  function readerAtPosition(
+    chapterPosition: { currentPosition: number; totalChapters: number } | undefined,
+    openedChapter = openedProgressChapter(1),
+    handlers: {
+      onPrevious?: () => void
+      onNext?: () => void
+      onProgressChange?: (chapterProgress: number) => void
+    } = {},
+  ) {
+    const tableOfContents = openedChapter.book.chapters.map((chapter) => ({
+      chapterId: chapter.id,
+      title: chapter.title,
+      sequence: chapter.sequence,
+      isAccessible: true,
+      isCurrent: chapter.id === openedChapter.chapter.id,
+    }))
+
+    return (
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={tableOfContents}
+        chapterPosition={chapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={handlers.onPrevious ?? vi.fn()}
+        onNext={handlers.onNext ?? vi.fn()}
+        onProgressChange={handlers.onProgressChange}
+      />
+    )
+  }
+
   function mockReaderGeometry(reader: HTMLElement, readerTopRef: { current: number }) {
     const readerHeight = 1000
 
@@ -524,6 +594,248 @@ describe('ReaderScreen Live Chapter Progress', () => {
       toJSON: () => ({}),
     }))
   }
+
+  it('derives book progress at the start, middle, and end from canonical chapter position', () => {
+    const firstChapter = openedProgressChapter(1)
+    const first = render(
+      readerAtPosition({ currentPosition: 1, totalChapters: 3 }, firstChapter),
+    )
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '0')
+    first.unmount()
+
+    const middleChapter = openedProgressChapter(2, 0.5)
+    render(
+      readerAtPosition({ currentPosition: 2, totalChapters: 3 }, middleChapter),
+    )
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+    cleanup()
+
+    const finalChapter = openedProgressChapter(3, 1)
+    render(
+      readerAtPosition({ currentPosition: 3, totalChapters: 3 }, finalChapter),
+    )
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '100')
+  })
+
+  it('updates chapter identity and progress as previous and next chapters open', () => {
+    const onPrevious = vi.fn()
+    const onNext = vi.fn()
+    const { rerender } = render(
+      readerAtPosition(
+        { currentPosition: 2, totalChapters: 3 },
+        openedProgressChapter(2),
+        { onPrevious, onNext },
+      ),
+    )
+    const readerTopRef = { current: 0 }
+    vi.spyOn(window, 'scrollTo').mockImplementation((_x?: unknown, y?: unknown) => {
+      const targetY = typeof y === 'number' ? y : 0
+      vi.stubGlobal('scrollY', targetY)
+      readerTopRef.current = -targetY
+    })
+    mockReaderGeometry(screen.getByLabelText('閱讀器'), readerTopRef)
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Chapter 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '目前章節位置' }),
+    ).toHaveAttribute('aria-valuetext', '第 2 / 3 章')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '33')
+
+    fireEvent.click(screen.getByRole('button', { name: '下一章' }))
+    expect(onNext).toHaveBeenCalledTimes(1)
+    rerender(
+      readerAtPosition(
+        { currentPosition: 3, totalChapters: 3 },
+        openedProgressChapter(3),
+        { onPrevious, onNext },
+      ),
+    )
+    flushAnimationFrame()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Chapter 3' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '目前章節位置' }),
+    ).toHaveAttribute('aria-valuetext', '第 3 / 3 章')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '67')
+
+    fireEvent.click(
+      within(screen.getByTestId('reader-persistent-navigation')).getByRole(
+        'button',
+        { name: '上一章' },
+      ),
+    )
+    expect(onPrevious).toHaveBeenCalledTimes(1)
+    rerender(
+      readerAtPosition(
+        { currentPosition: 2, totalChapters: 3 },
+        openedProgressChapter(2),
+        { onPrevious, onNext },
+      ),
+    )
+    flushAnimationFrame()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Chapter 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '33')
+  })
+
+  it('ignores dialog shortcuts and updates progress after keyboard chapter navigation', () => {
+    const onNext = vi.fn()
+    const readerTopRef = { current: 0 }
+    vi.spyOn(window, 'scrollTo').mockImplementation((_x?: unknown, y?: unknown) => {
+      const targetY = typeof y === 'number' ? y : 0
+      vi.stubGlobal('scrollY', targetY)
+      readerTopRef.current = -targetY
+    })
+
+    const { rerender } = render(
+      readerAtPosition(
+        { currentPosition: 1, totalChapters: 3 },
+        openedProgressChapter(1),
+        { onNext },
+      ),
+    )
+    const reader = screen.getByLabelText('閱讀器')
+    mockReaderGeometry(reader, readerTopRef)
+    flushAnimationFrame()
+
+    fireEvent.click(screen.getByRole('button', { name: '閱讀設定' }))
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '閱讀設定' }), {
+      key: 'ArrowRight',
+      shiftKey: true,
+    })
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '關閉閱讀設定' }))
+    fireEvent.keyDown(reader, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).toHaveBeenCalledTimes(1)
+
+    rerender(
+      readerAtPosition(
+        { currentPosition: 2, totalChapters: 3 },
+        openedProgressChapter(2, 0.5),
+        { onNext },
+      ),
+    )
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Chapter 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '50')
+  })
+
+  it('shows restored progress when resuming a chapter', () => {
+    const readerTopRef = { current: 0 }
+    vi.spyOn(window, 'scrollTo').mockImplementation((_x?: unknown, y?: unknown) => {
+      const targetY = typeof y === 'number' ? y : 0
+      vi.stubGlobal('scrollY', targetY)
+      readerTopRef.current = -targetY
+    })
+
+    render(
+      readerAtPosition(
+        { currentPosition: 2, totalChapters: 3 },
+        openedProgressChapter(2, 0.75),
+      ),
+    )
+    mockReaderGeometry(screen.getByLabelText('閱讀器'), readerTopRef)
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '75')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '58')
+  })
+
+  it('shows the restored position after returning to a bookmarked chapter', () => {
+    const readerTopRef = { current: 0 }
+    vi.spyOn(window, 'scrollTo').mockImplementation((_x?: unknown, y?: unknown) => {
+      const targetY = typeof y === 'number' ? y : 0
+      vi.stubGlobal('scrollY', targetY)
+      readerTopRef.current = -targetY
+    })
+
+    const { rerender } = render(
+      readerAtPosition(
+        { currentPosition: 1, totalChapters: 3 },
+        openedProgressChapter(1),
+      ),
+    )
+    mockReaderGeometry(screen.getByLabelText('閱讀器'), readerTopRef)
+    flushAnimationFrame()
+
+    rerender(
+      readerAtPosition(
+        { currentPosition: 2, totalChapters: 3 },
+        openedProgressChapter(2, 0.75),
+      ),
+    )
+    flushAnimationFrame()
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Chapter 2' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', { name: '本章閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '75')
+    expect(
+      screen.getByRole('progressbar', { name: '全書閱讀進度' }),
+    ).toHaveAttribute('aria-valuenow', '58')
+  })
+
+  it('exposes accessible book progress only when canonical chapter position is valid', () => {
+    const openedChapter = openedProgressChapter(2, 0.5)
+    const { rerender } = render(
+      readerAtPosition({ currentPosition: 2, totalChapters: 3 }, openedChapter),
+    )
+    const validProgress = screen.getByRole('progressbar', {
+      name: '全書閱讀進度',
+    })
+    expect(validProgress).toHaveAttribute('aria-valuetext', '全書閱讀進度 50%')
+    expect(validProgress).toHaveTextContent('全書閱讀進度 50%')
+    expect(validProgress).not.toHaveAttribute('aria-live', 'assertive')
+
+    rerender(readerAtPosition(undefined, openedChapter))
+    flushAnimationFrame()
+    expect(
+      screen.queryByRole('progressbar', { name: '全書閱讀進度' }),
+    ).not.toBeInTheDocument()
+
+    rerender(
+      readerAtPosition({ currentPosition: 4, totalChapters: 3 }, openedChapter),
+    )
+    flushAnimationFrame()
+    expect(
+      screen.queryByRole('progressbar', { name: '全書閱讀進度' }),
+    ).not.toBeInTheDocument()
+  })
 
   it('reports bounded chapter progress from actual Reader geometry and recomputes on chapter change', () => {
     let readerTop = 0
@@ -1441,10 +1753,23 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
 
     expect(prevBtn).toBeDisabled()
     expect(prevBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(prevBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowLeft')
     expect(nextBtn).not.toBeDisabled()
+    expect(nextBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowRight')
+    expect(nextBtn).toHaveAttribute('type', 'button')
+    expect(nextBtn).not.toHaveAttribute('tabindex', '-1')
+
+    nextBtn.focus()
+    expect(nextBtn).toHaveFocus()
+    fireEvent.keyDown(nextBtn, { key: 'ArrowLeft', shiftKey: true })
+    expect(onPrevious).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(nextBtn, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(nextBtn).toHaveFocus()
 
     fireEvent.click(nextBtn)
-    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onNext).toHaveBeenCalledTimes(2)
 
     fireEvent.click(prevBtn)
     expect(onPrevious).not.toHaveBeenCalled()
@@ -1480,10 +1805,147 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
 
     expect(nextBtn).toBeDisabled()
     expect(nextBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(prevBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowLeft')
+    expect(nextBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowRight')
     expect(prevBtn).not.toBeDisabled()
 
-    fireEvent.click(prevBtn)
+    prevBtn.focus()
+    expect(prevBtn).toHaveFocus()
+    fireEvent.keyDown(prevBtn, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(prevBtn, { key: 'ArrowLeft', shiftKey: true })
     expect(onPrevious).toHaveBeenCalledTimes(1)
+    expect(prevBtn).toHaveFocus()
+
+    fireEvent.click(prevBtn)
+    expect(onPrevious).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['input', 'textarea', 'contenteditable'] as const)(
+    'ignores chapter shortcuts from %s targets',
+    (targetKind) => {
+      const onPrevious = vi.fn()
+      const onNext = vi.fn()
+
+      render(
+        <ReaderScreen
+          openedChapter={lastChapter}
+          preferences={DEFAULT_READER_PREFERENCES}
+          isBookmarked={false}
+          bookmarks={[]}
+          tableOfContents={[]}
+          chapterPosition={{ currentPosition: 2, totalChapters: 2 }}
+          onChangePreferences={vi.fn()}
+          onResetPreferences={vi.fn()}
+          onToggleBookmark={vi.fn()}
+          onSelectBookmark={vi.fn()}
+          onRemoveBookmark={vi.fn()}
+          onSelectChapter={vi.fn()}
+          onBackToBook={vi.fn()}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />,
+      )
+
+      let editableTarget: HTMLElement
+      if (targetKind === 'input') {
+        editableTarget = document.createElement('input')
+        editableTarget.setAttribute('type', 'text')
+      } else if (targetKind === 'textarea') {
+        editableTarget = document.createElement('textarea')
+      } else {
+        editableTarget = document.createElement('div')
+        editableTarget.setAttribute('contenteditable', 'true')
+      }
+
+      screen.getByLabelText('閱讀器').append(editableTarget)
+      fireEvent.keyDown(editableTarget, { key: 'ArrowLeft', shiftKey: true })
+      fireEvent.keyDown(editableTarget, { key: 'ArrowRight', shiftKey: true })
+
+      expect(onPrevious).not.toHaveBeenCalled()
+      expect(onNext).not.toHaveBeenCalled()
+    },
+  )
+
+  it('keeps persistent navigation focus after the next shortcut changes chapter props', () => {
+    const nextChapter = {
+      ...lastChapter,
+      hasNext: true,
+    }
+    let updateToNextChapter = () => {}
+    const onNext = vi.fn(() => updateToNextChapter())
+
+    const renderReader = (openedChapter: typeof firstChapter | typeof nextChapter) => (
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+      />
+    )
+
+    const view = render(renderReader(firstChapter))
+    updateToNextChapter = () => view.rerender(renderReader(nextChapter))
+
+    const nextButton = screen.getByRole('button', { name: '下一章' })
+    nextButton.focus()
+    fireEvent.keyDown(nextButton, { key: 'ArrowRight', shiftKey: true })
+
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('heading', { level: 1, name: 'Chapter 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一章' })).toBe(nextButton)
+    expect(nextButton).toHaveFocus()
+  })
+
+  it('preserves chapter-open failure and retry behavior when a shortcut is used', () => {
+    const onNext = vi.fn()
+    const onRetryChapterOpen = vi.fn()
+
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        chapterOpenFailed
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+        onRetryChapterOpen={onRetryChapterOpen}
+      />,
+    )
+
+    fireEvent.keyDown(screen.getByLabelText('閱讀器'), {
+      key: 'ArrowRight',
+      shiftKey: true,
+    })
+
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onRetryChapterOpen).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('章節內容暫時無法載入')
+
+    fireEvent.click(screen.getByRole('button', { name: '重試載入章節' }))
+    expect(onRetryChapterOpen).toHaveBeenCalledTimes(1)
   })
 
   it('provides an accessible polite live region announcing chapter change', () => {

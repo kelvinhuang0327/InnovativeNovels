@@ -50,6 +50,13 @@ const sortingBooks: readonly ContentBook[] = [
   makeBook('sort-d', '來源第四本', '仙俠', '排序測試 D', '作者丁', 2),
 ]
 
+const metadataSortingBooks: readonly ContentBook[] = [
+  makeBook('metadata-zulu', 'Zulu', '懸疑', '排序測試 Zulu', 'Wendy'),
+  makeBook('metadata-alpha', 'Alpha', '懸疑', '排序測試 Alpha', 'Bao'),
+  makeBook('metadata-echo', 'Echo', '懸疑', '排序測試 Echo', 'Ann'),
+  makeBook('metadata-bravo', 'Bravo', '懸疑', '排序測試 Bravo', 'Wendy'),
+]
+
 function getResultTitles(heading = '探索更多故事') {
   return within(
     screen.getByRole('region', { name: heading }),
@@ -129,6 +136,66 @@ describe('CatalogScreen', () => {
       '來源第三本',
     ])
     expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+  })
+
+  it('sorts by title and author ascending while preserving default and tie order', () => {
+    const onOpenBook = vi.fn()
+
+    render(
+      <CatalogScreen
+        books={metadataSortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
+    expect(screen.getByRole('option', { name: '書名升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '作者升冪' })).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+
+    fireEvent.change(sortControl, { target: { value: 'author-asc' } })
+    expect(getResultTitles()).toEqual(['Echo', 'Alpha', 'Zulu', 'Bravo'])
+
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    fireEvent.click(
+      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+    )
+    expect(onOpenBook).toHaveBeenCalledWith('metadata-echo')
+  })
+
+  it('keeps title sorting through search, whitespace, and clearing filters', () => {
+    render(
+      <CatalogScreen
+        books={metadataSortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const searchInput = screen.getByLabelText('搜尋小說')
+    const sortControl = screen.getByLabelText('排序方式')
+    fireEvent.change(searchInput, { target: { value: 'Wendy' } })
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+
+    expect(getResultTitles('篩選結果')).toEqual(['Bravo', 'Zulu'])
+
+    fireEvent.change(searchInput, { target: { value: '  \t  ' } })
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+    expect(sortControl).toHaveValue('title-asc')
+
+    fireEvent.change(searchInput, { target: { value: 'Ann' } })
+    expect(getResultTitles('篩選結果')).toEqual(['Echo'])
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+    expect(searchInput).toHaveValue('')
+    expect(sortControl).toHaveValue('title-asc')
   })
 
   it('sorts after title, author, and description search filtering', () => {
@@ -237,7 +304,7 @@ describe('CatalogScreen', () => {
     )
 
     fireEvent.change(screen.getByLabelText('排序方式'), {
-      target: { value: 'chapters-desc' },
+      target: { value: 'title-asc' },
     })
 
     expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
@@ -256,8 +323,14 @@ describe('CatalogScreen', () => {
     expect(onOpenAuthoring).not.toHaveBeenCalled()
 
     const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    const selectedBookCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '來源第一本' })
+      .closest('article')
+    expect(selectedBookCard).not.toBeNull()
     fireEvent.click(
-      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+      within(selectedBookCard as HTMLElement).getByRole('button', {
+        name: '查看書籍',
+      }),
     )
 
     expect(onOpenBook).toHaveBeenCalledTimes(1)
