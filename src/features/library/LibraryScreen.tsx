@@ -158,8 +158,25 @@ export function LibraryScreen({
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
+  const [savedItemsSearch, setSavedItemsSearch] = useState('')
   const hasBookshelfSearch = bookshelfSearch.trim().length > 0
   const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
+  const normalizedSavedItemsSearch = savedItemsSearch.trim().toLowerCase()
+  const hasSavedItemsSearch = normalizedSavedItemsSearch.length > 0
+  const visibleBookmarks = hasSavedItemsSearch
+    ? bookmarks.filter(({ book, chapter }) =>
+        [book.book.title, chapter.title].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : bookmarks
+  const visibleNotes = hasSavedItemsSearch
+    ? notes.filter(({ book, chapter, note }) =>
+        [book.book.title, chapter.title, note.content].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : notes
 
   return (
     <section
@@ -177,6 +194,34 @@ export function LibraryScreen({
           </p>
         </div>
       </header>
+
+      <div className="library-search">
+        <label
+          className="library-search-label"
+          htmlFor="library-saved-items-search"
+        >
+          搜尋已保存內容
+        </label>
+        <div className="library-search-controls">
+          <input
+            className="library-search-input"
+            id="library-saved-items-search"
+            placeholder="搜尋書名、章名或筆記文字"
+            type="search"
+            value={savedItemsSearch}
+            onChange={(event) => setSavedItemsSearch(event.target.value)}
+          />
+          {hasSavedItemsSearch && (
+            <button
+              className="button-secondary library-search-clear"
+              type="button"
+              onClick={() => setSavedItemsSearch('')}
+            >
+              清除搜尋
+            </button>
+          )}
+        </div>
+      </div>
 
       {continueReading.length > 0 && (
         <ContinueReadingShelf
@@ -196,16 +241,24 @@ export function LibraryScreen({
               章節書籤
             </h2>
           </div>
-          <p className="section-heading-note">{bookmarks.length} 個</p>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${bookmarks.length} 個`
+              : `${visibleBookmarks.length} / ${bookmarks.length} 個`}
+          </p>
         </div>
 
         {bookmarks.length === 0 ? (
           <div className="library-empty-state" role="status">
             <p>還沒有章節書籤。</p>
           </div>
+        ) : visibleBookmarks.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的章節書籤</p>
+          </div>
         ) : (
           <ul className="library-recent-list">
-            {bookmarks.map(({ book, chapter, position }) => (
+            {visibleBookmarks.map(({ book, chapter, position }) => (
               <li
                 className="library-recent-item"
                 key={`${book.book.id}:${chapter.id}`}
@@ -249,16 +302,24 @@ export function LibraryScreen({
               章節筆記
             </h2>
           </div>
-          <p className="section-heading-note">{notes.length} 則</p>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${notes.length} 則`
+              : `${visibleNotes.length} / ${notes.length} 則`}
+          </p>
         </div>
 
         {notes.length === 0 ? (
           <div className="library-empty-state" role="status">
             <p>還沒有章節筆記。</p>
           </div>
+        ) : visibleNotes.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的章節筆記</p>
+          </div>
         ) : (
           <ul className="library-recent-list">
-            {notes.map(({ book, chapter, note }) => (
+            {visibleNotes.map(({ book, chapter, note }) => (
               <li
                 className="library-recent-item library-reading-note-item"
                 key={`${book.book.id}:${chapter.id}`}

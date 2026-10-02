@@ -138,7 +138,7 @@ describe('CatalogScreen', () => {
     expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
   })
 
-  it('sorts by title and author ascending while preserving default and tie order', () => {
+  it('sorts by title and author in both directions while preserving default and tie order', () => {
     const onOpenBook = vi.fn()
 
     render(
@@ -153,10 +153,15 @@ describe('CatalogScreen', () => {
     const sortControl = screen.getByLabelText('排序方式')
     expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
     expect(screen.getByRole('option', { name: '書名升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '書名降冪' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '作者升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '作者降冪' })).toBeInTheDocument()
 
     fireEvent.change(sortControl, { target: { value: 'title-asc' } })
     expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+
+    fireEvent.change(sortControl, { target: { value: 'title-desc' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Echo', 'Bravo', 'Alpha'])
 
     fireEvent.change(sortControl, { target: { value: 'author-asc' } })
     expect(getResultTitles()).toEqual(['Echo', 'Alpha', 'Zulu', 'Bravo'])
@@ -166,6 +171,105 @@ describe('CatalogScreen', () => {
       within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
     )
     expect(onOpenBook).toHaveBeenCalledWith('metadata-echo')
+
+    fireEvent.change(sortControl, { target: { value: 'author-desc' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Bravo', 'Alpha', 'Echo'])
+
+    fireEvent.change(sortControl, { target: { value: 'bookstore' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
+  })
+
+  it('sorts in either direction after genre and search filters and restores bookstore order when cleared', () => {
+    const filteredBooks: readonly ContentBook[] = [
+      ...metadataSortingBooks,
+      makeBook(
+        'metadata-other-genre',
+        'Outside Genre',
+        '仙俠',
+        '排序測試 Genre',
+        'Aaron',
+      ),
+      makeBook(
+        'metadata-other-search',
+        'Outside Search',
+        '懸疑',
+        '其他描述',
+        'Aaron',
+      ),
+    ]
+
+    render(
+      <CatalogScreen
+        books={filteredBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '懸疑' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '排序測試' },
+    })
+    const sortControl = screen.getByLabelText('排序方式')
+
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'author-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Echo',
+      'Alpha',
+      'Zulu',
+      'Bravo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'author-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Bravo',
+      'Alpha',
+      'Echo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Alpha',
+      'Bravo',
+      'Echo',
+      'Zulu',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'title-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Echo',
+      'Bravo',
+      'Alpha',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'bookstore' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+
+    expect(getResultTitles()).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+      'Outside Genre',
+      'Outside Search',
+    ])
+    expect(sortControl).toHaveValue('bookstore')
   })
 
   it('keeps title sorting through search, whitespace, and clearing filters', () => {

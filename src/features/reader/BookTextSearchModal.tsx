@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { BookTextSearchResult } from '../../application/reading/readingUseCases'
 
 interface BookTextSearchModalProps {
@@ -9,19 +9,46 @@ interface BookTextSearchModalProps {
   readonly onSelectResult: (result: BookTextSearchResult) => void
 }
 
+function renderCaseInsensitiveMatches(text: string, query: string) {
+  const normalizedQuery = query.toLowerCase()
+  if (normalizedQuery.length === 0) {
+    return text
+  }
+
+  const normalizedText = text.toLowerCase()
+  const parts: ReactNode[] = []
+  let textStart = 0
+  let matchStart = normalizedText.indexOf(normalizedQuery)
+
+  while (matchStart >= 0) {
+    parts.push(text.slice(textStart, matchStart))
+    parts.push(
+      <mark key={matchStart}>
+        {text.slice(matchStart, matchStart + query.length)}
+      </mark>,
+    )
+    textStart = matchStart + query.length
+    matchStart = normalizedText.indexOf(normalizedQuery, textStart)
+  }
+
+  if (textStart === 0) {
+    return text
+  }
+
+  parts.push(text.slice(textStart))
+  return <>{parts}</>
+}
+
 function renderSnippet(result: BookTextSearchResult, query: string) {
   const snippetStart = Math.max(0, result.matchIndex - 48)
   const matchEnd = result.matchIndex + query.length
   const snippetEnd = Math.min(result.paragraphText.length, matchEnd + 72)
+  const snippetText = result.paragraphText.slice(snippetStart, snippetEnd)
 
   return (
     <>
       {snippetStart > 0 ? '…' : ''}
-      {result.paragraphText.slice(snippetStart, result.matchIndex)}
-      <mark>
-        {result.paragraphText.slice(result.matchIndex, matchEnd)}
-      </mark>
-      {result.paragraphText.slice(matchEnd, snippetEnd)}
+      {renderCaseInsensitiveMatches(snippetText, query)}
       {snippetEnd < result.paragraphText.length ? '…' : ''}
     </>
   )

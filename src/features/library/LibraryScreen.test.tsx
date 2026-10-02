@@ -289,6 +289,141 @@ describe('LibraryScreen', () => {
     expect(onOpenBookmark).toHaveBeenCalledWith(bookmarks[0].position)
   })
 
+  it('filters saved bookmarks and notes by trimmed, case-insensitive titles and note content', () => {
+    const savedBook = makeBook('saved-search-silver', 'Silver Orchard')
+    const savedChapter = {
+      ...savedBook.chapters[0],
+      title: 'The Glass Harbor',
+    }
+    const otherBook = makeBook('saved-search-copper', 'Copper Station')
+    const otherChapter = {
+      ...otherBook.chapters[0],
+      title: 'The Last Train',
+    }
+    const savedBookmark = {
+      ...makeBookmarkEntry(savedBook, 4, 0.37),
+      chapter: savedChapter,
+    }
+    const otherBookmark = {
+      ...makeBookmarkEntry(otherBook, 2, 0.81),
+      chapter: otherChapter,
+    }
+    const savedNote = {
+      ...makeReadingNoteEntry(savedBook, 'A QUIET voice by the sea.'),
+      chapter: savedChapter,
+    }
+    const otherNote = {
+      ...makeReadingNoteEntry(otherBook, 'The train left at midnight.'),
+      chapter: otherChapter,
+    }
+    const onOpenBookmark = vi.fn()
+    const onRemoveBookmark = vi.fn()
+    const onOpenReadingNote = vi.fn()
+    const onRemoveReadingNote = vi.fn()
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        books={[bookB]}
+        bookmarks={[savedBookmark, otherBookmark]}
+        notes={[savedNote, otherNote]}
+        recentReading={[]}
+        onOpenBookmark={onOpenBookmark}
+        onRemoveBookmark={onRemoveBookmark}
+        onOpenReadingNote={onOpenReadingNote}
+        onRemoveReadingNote={onRemoveReadingNote}
+      />,
+    )
+
+    const search = screen.getByRole('searchbox', { name: '搜尋已保存內容' })
+    const bookmarkSection = screen.getByRole('region', { name: '章節書籤' })
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+
+    expect(search).toHaveValue('')
+    expect(within(bookmarkSection).getByText('2 個')).toBeInTheDocument()
+    expect(within(bookmarkSection).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(notesSection).getByText('2 則')).toBeInTheDocument()
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(2)
+
+    fireEvent.change(search, { target: { value: '   ' } })
+
+    expect(within(bookmarkSection).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: '清除搜尋' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: '  sIlVeR  ' } })
+
+    expect(within(bookmarkSection).getByText('1 / 2 個')).toBeInTheDocument()
+    expect(within(notesSection).getByText('1 / 2 則')).toBeInTheDocument()
+    const bookmarkItem = within(bookmarkSection).getByRole('listitem')
+    const noteItem = within(notesSection).getByRole('listitem')
+    expect(within(bookmarkItem).getByRole('heading', { name: 'Silver Orchard' })).toBeInTheDocument()
+    expect(within(noteItem).getByRole('heading', { name: 'Silver Orchard' })).toBeInTheDocument()
+
+    fireEvent.click(
+      within(bookmarkItem).getByRole('button', { name: '移至章節' }),
+    )
+    fireEvent.click(within(bookmarkItem).getByRole('button', { name: '移除' }))
+    fireEvent.click(within(noteItem).getByRole('button', { name: '移至章節' }))
+    fireEvent.click(within(noteItem).getByRole('button', { name: '移除' }))
+
+    expect(onOpenBookmark).toHaveBeenCalledWith(savedBookmark.position)
+    expect(onRemoveBookmark).toHaveBeenCalledWith(
+      savedBook.book.id,
+      savedChapter.id,
+    )
+    expect(onOpenReadingNote).toHaveBeenCalledWith(
+      savedBook.book.id,
+      savedChapter.id,
+    )
+    expect(onRemoveReadingNote).toHaveBeenCalledWith(
+      savedBook.book.id,
+      savedChapter.id,
+    )
+
+    fireEvent.change(search, { target: { value: '  gLaSs  ' } })
+
+    expect(within(bookmarkSection).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(bookmarkSection).getByText('The Glass Harbor')).toBeInTheDocument()
+    expect(within(notesSection).getByText('The Glass Harbor')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: '  qUiEt  ' } })
+
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '找不到符合條件的章節書籤',
+    )
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(notesSection).getByText('A QUIET voice by the sea.')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: 'no saved item matches this' } })
+
+    expect(within(bookmarkSection).getByRole('heading', { name: '章節書籤' })).toBeInTheDocument()
+    expect(within(notesSection).getByRole('heading', { name: '章節筆記' })).toBeInTheDocument()
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '找不到符合條件的章節書籤',
+    )
+    expect(within(notesSection).getByRole('status')).toHaveTextContent(
+      '找不到符合條件的章節筆記',
+    )
+    expect(
+      within(screen.getByRole('region', { name: '我的書架' })).getByText('山中劍客'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '清除搜尋' }))
+
+    expect(search).toHaveValue('')
+    expect(within(bookmarkSection).getByText('2 個')).toBeInTheDocument()
+    expect(within(bookmarkSection).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(notesSection).getByText('2 則')).toBeInTheDocument()
+    expect(within(notesSection).getAllByRole('listitem')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: '清除搜尋' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows an explicit empty state when there are no chapter bookmarks', () => {
     render(<LibraryScreen {...baseProps} books={[]} bookmarks={[]} recentReading={[]} />)
 
