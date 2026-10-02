@@ -98,10 +98,16 @@ describe('BookTextSearchModal', () => {
 
   it('shows chapter title and a highlighted snippet in a keyboard-reachable result action', () => {
     const result = createResult()
+    const onSelectResult = vi.fn()
     const searchBookText = vi.fn((query: string) =>
       query === '鹽晶' ? [result] : [],
     )
-    render(<SearchModalHarness searchBookText={searchBookText} />)
+    render(
+      <SearchModalHarness
+        searchBookText={searchBookText}
+        onSelectResult={onSelectResult}
+      />,
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Open text search' }))
     fireEvent.change(screen.getByRole('searchbox', { name: '搜尋關鍵字' }), {
       target: { value: '鹽晶' },
@@ -118,6 +124,42 @@ describe('BookTextSearchModal', () => {
 
     resultAction.focus()
     expect(resultAction).toHaveFocus()
+
+    fireEvent.click(resultAction)
+
+    expect(onSelectResult).toHaveBeenCalledWith(result)
+    expect(
+      screen.queryByRole('dialog', { name: '搜尋本書內文' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open text search' })).toHaveFocus()
+  })
+
+  it('highlights all case-insensitive matches while preserving snippet casing', () => {
+    const paragraphText = 'The SALT wind carried salt across the shore.'
+    const result = {
+      ...createResult(),
+      paragraphText,
+      matchIndex: paragraphText.toLowerCase().indexOf('salt'),
+    }
+    const searchBookText = vi.fn((query: string) =>
+      query === 'salt' ? [result] : [],
+    )
+    render(<SearchModalHarness searchBookText={searchBookText} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open text search' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜尋關鍵字' }), {
+      target: { value: 'salt' },
+    })
+
+    const snippet = screen
+      .getByRole('list', { name: '內文搜尋結果' })
+      .querySelector('.book-text-search-snippet')
+
+    expect(snippet?.textContent).toBe(paragraphText)
+    expect(
+      Array.from(snippet?.querySelectorAll('mark') ?? []).map(
+        (match) => match.textContent,
+      ),
+    ).toEqual(['SALT', 'salt'])
   })
 
   it('closes on Escape and returns focus to the search trigger', () => {
