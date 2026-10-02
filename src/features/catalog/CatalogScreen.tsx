@@ -36,7 +36,9 @@ interface EditorialShelfProps {
 type CatalogSortMode =
   | 'bookstore'
   | 'title-asc'
+  | 'title-desc'
   | 'author-asc'
+  | 'author-desc'
   | 'chapters-desc'
   | 'chapters-asc'
 
@@ -46,7 +48,9 @@ const CATALOG_SORT_OPTIONS: readonly {
 }[] = [
   { value: 'bookstore', label: '書庫順序' },
   { value: 'title-asc', label: '書名升冪' },
+  { value: 'title-desc', label: '書名降冪' },
   { value: 'author-asc', label: '作者升冪' },
+  { value: 'author-desc', label: '作者降冪' },
   { value: 'chapters-desc', label: '章節較多優先' },
   { value: 'chapters-asc', label: '章節較少優先' },
 ]
@@ -65,12 +69,12 @@ function sortCatalogResults(
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
       const difference =
-        sortMode === 'title-asc'
+        sortMode.startsWith('title-')
           ? CATALOG_TEXT_COLLATOR.compare(
               left.entry.book.title,
               right.entry.book.title,
             )
-          : sortMode === 'author-asc'
+          : sortMode.startsWith('author-')
             ? CATALOG_TEXT_COLLATOR.compare(
                 left.entry.book.authorName,
                 right.entry.book.authorName,
@@ -81,7 +85,7 @@ function sortCatalogResults(
         return left.index - right.index
       }
 
-      return sortMode === 'chapters-desc'
+      return sortMode.endsWith('-desc')
         ? -difference
         : difference
     })
