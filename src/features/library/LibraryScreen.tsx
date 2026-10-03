@@ -178,14 +178,16 @@ export function LibraryScreen({
         ),
       )
     : notes
-  const hasExportableSavedItems = bookmarks.length > 0 || notes.length > 0
+  const hasExportableSavedItems =
+    visibleBookmarks.length > 0 || visibleNotes.length > 0
+  const hasSavedItems = bookmarks.length > 0 || notes.length > 0
 
   function handleExportSavedItems() {
     if (!hasExportableSavedItems) {
       return
     }
 
-    const serialized = serializeReadingDataExport(bookmarks, notes)
+    const serialized = serializeReadingDataExport(visibleBookmarks, visibleNotes)
 
     if (serialized.length === 0) {
       return
@@ -254,7 +256,11 @@ export function LibraryScreen({
             匯出書籤與筆記
           </button>
         ) : (
-          <p role="status">目前沒有可匯出的書籤或筆記。</p>
+          <p role="status">
+            {hasSavedItems && hasSavedItemsSearch
+              ? '目前沒有符合搜尋條件可匯出的書籤或筆記。'
+              : '目前沒有可匯出的書籤或筆記。'}
+          </p>
         )}
       </div>
 

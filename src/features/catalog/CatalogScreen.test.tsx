@@ -892,7 +892,7 @@ describe('CatalogScreen', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders accurate readable depth labels for fully openable and partially accessible books', () => {
+  it('renders accurate readability labels and an explicit no-chapters state', () => {
     const mixedBooks: readonly ContentBook[] = [
       {
         book: {
@@ -951,6 +951,7 @@ describe('CatalogScreen', () => {
           },
         ],
       },
+      makeBook('empty-book', '尚無章節小說', '懸疑', '尚無章節描述', '作者', 0),
     ]
 
     render(
@@ -970,15 +971,23 @@ describe('CatalogScreen', () => {
     const partialCard = within(resultsRegion)
       .getByRole('heading', { level: 3, name: '部分解鎖小說' })
       .closest('article')
+    const emptyCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '尚無章節小說' })
+      .closest('article')
 
     expect(fullCard).not.toBeNull()
     expect(partialCard).not.toBeNull()
+    expect(emptyCard).not.toBeNull()
     expect(within(fullCard as HTMLElement).getByText('2 章可讀')).toBeInTheDocument()
     expect(within(partialCard as HTMLElement).getByText('可讀 2 / 3 章')).toBeInTheDocument()
+    expect(within(emptyCard as HTMLElement).getByText('尚無章節')).toBeInTheDocument()
+    expect(within(emptyCard as HTMLElement).queryByText(/0\s*\/\s*0/)).not.toBeInTheDocument()
 
     // Verify editorial shelf
     const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
     expect(within(editorialShelf).getByText('沈墨 · 2 章可讀')).toBeInTheDocument()
     expect(within(editorialShelf).getByText('岑海 · 可讀 2 / 3 章')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('作者 · 尚無章節')).toBeInTheDocument()
+    expect(within(editorialShelf).queryByText(/0\s*\/\s*0/)).not.toBeInTheDocument()
   })
 })

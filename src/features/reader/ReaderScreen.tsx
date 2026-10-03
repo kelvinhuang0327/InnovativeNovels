@@ -244,6 +244,7 @@ export function ReaderScreen({
   const [speakingChapterId, setSpeakingChapterId] = useState<string | null>(
     null,
   )
+  const [pausedChapterId, setPausedChapterId] = useState<string | null>(null)
   const isMobileReaderChrome = useSyncExternalStore(
     subscribeToMobileReaderChrome,
     getMobileReaderChromeSnapshot,
@@ -325,7 +326,9 @@ export function ReaderScreen({
     !chapterOpenFailed &&
     !openedChapter.isLocked &&
     hasReadableProse
-  const isSpeaking = speakingChapterId === openedChapter.chapter.id
+  const isSpeechActive = speakingChapterId === openedChapter.chapter.id
+  const isSpeechPaused =
+    isSpeechActive && pausedChapterId === openedChapter.chapter.id
 
   const cancelReaderSpeech = useCallback((resetSpeakingState = true) => {
     speechSessionRef.current += 1
@@ -336,6 +339,7 @@ export function ReaderScreen({
 
     if (resetSpeakingState) {
       setSpeakingChapterId(null)
+      setPausedChapterId(null)
     }
   }, [])
 
@@ -378,6 +382,7 @@ export function ReaderScreen({
       )
 
       setSpeakingChapterId(openedChapter.chapter.id)
+      setPausedChapterId(null)
 
       utterances.forEach((utterance, index) => {
         utterance.onend = () => {
@@ -387,6 +392,7 @@ export function ReaderScreen({
           ) {
             speechSynthesisRef.current = null
             setSpeakingChapterId(null)
+            setPausedChapterId(null)
           }
         }
         utterance.onerror = () => {
@@ -399,6 +405,24 @@ export function ReaderScreen({
     } catch {
       cancelReaderSpeech()
     }
+  }
+
+  const handlePauseSpeech = () => {
+    if (!isSpeechActive || isSpeechPaused || !speechSynthesisRef.current) {
+      return
+    }
+
+    speechSynthesisRef.current.pause()
+    setPausedChapterId(openedChapter.chapter.id)
+  }
+
+  const handleResumeSpeech = () => {
+    if (!isSpeechPaused || !speechSynthesisRef.current) {
+      return
+    }
+
+    speechSynthesisRef.current.resume()
+    setPausedChapterId(null)
   }
 
   useEffect(() => {
@@ -1143,14 +1167,42 @@ export function ReaderScreen({
   )
 
   const speechButton = canReadAloud ? (
-    <button
-      type="button"
-      className="button-secondary button-reader-speech"
-      onClick={isSpeaking ? () => cancelReaderSpeech() : handleStartSpeech}
-      aria-label={isSpeaking ? '停止朗讀' : '開始朗讀'}
-    >
-      {isSpeaking ? '停止朗讀' : '朗讀本章'}
-    </button>
+    <>
+      <button
+        type="button"
+        className="button-secondary button-reader-speech"
+        onClick={
+          !isSpeechActive
+            ? handleStartSpeech
+            : isSpeechPaused
+              ? handleResumeSpeech
+              : handlePauseSpeech
+        }
+        aria-label={
+          !isSpeechActive
+            ? '開始朗讀'
+            : isSpeechPaused
+              ? '繼續朗讀'
+              : '暫停朗讀'
+        }
+      >
+        {!isSpeechActive
+          ? '朗讀本章'
+          : isSpeechPaused
+            ? '繼續朗讀'
+            : '暫停朗讀'}
+      </button>
+      {isSpeechActive ? (
+        <button
+          type="button"
+          className="button-secondary button-reader-speech"
+          onClick={() => cancelReaderSpeech()}
+          aria-label="停止朗讀"
+        >
+          停止朗讀
+        </button>
+      ) : null}
+    </>
   ) : null
 
   const bookmarksListButton = (
