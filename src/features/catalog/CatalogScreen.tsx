@@ -42,6 +42,8 @@ type CatalogSortMode =
   | 'author-desc'
   | 'chapters-desc'
   | 'chapters-asc'
+  | 'readable-desc'
+  | 'readable-asc'
 
 const CATALOG_SORT_OPTIONS: readonly {
   readonly value: CatalogSortMode
@@ -54,6 +56,8 @@ const CATALOG_SORT_OPTIONS: readonly {
   { value: 'author-desc', label: '作者降冪' },
   { value: 'chapters-desc', label: '章節較多優先' },
   { value: 'chapters-asc', label: '章節較少優先' },
+  { value: 'readable-desc', label: '可讀章節較多優先' },
+  { value: 'readable-asc', label: '可讀章節較少優先' },
 ]
 
 const CATALOG_TEXT_COLLATOR = new Intl.Collator('zh-Hant')
@@ -66,8 +70,16 @@ function sortCatalogResults(
     return entries
   }
 
+  const isReadabilitySort = sortMode.startsWith('readable-')
+
   return entries
-    .map((entry, index) => ({ entry, index }))
+    .map((entry, index) => ({
+      entry,
+      index,
+      openableChapterCount: isReadabilitySort
+        ? getReadingDepth(entry.chapters).openableChapters
+        : 0,
+    }))
     .sort((left, right) => {
       const difference =
         sortMode.startsWith('title-')
@@ -77,10 +89,12 @@ function sortCatalogResults(
             )
           : sortMode.startsWith('author-')
             ? CATALOG_TEXT_COLLATOR.compare(
-                left.entry.book.authorName,
-                right.entry.book.authorName,
-              )
-            : left.entry.chapters.length - right.entry.chapters.length
+              left.entry.book.authorName,
+              right.entry.book.authorName,
+            )
+            : isReadabilitySort
+              ? left.openableChapterCount - right.openableChapterCount
+              : left.entry.chapters.length - right.entry.chapters.length
 
       if (difference === 0) {
         return left.index - right.index
