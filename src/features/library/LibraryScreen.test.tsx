@@ -156,10 +156,15 @@ describe('LibraryScreen', () => {
     expect(createObjectURL).not.toHaveBeenCalled()
   })
 
-  it('creates a UTF-8 plain-text download only after the export button is clicked', () => {
+  it('exports all saved items as UTF-8 text when the filter is empty', async () => {
     const bookmark = makeBookmarkEntry(bookA, 2, 0.4)
-    const note = makeReadingNoteEntry(bookB, '第一行\n第二行')
-    const createObjectURL = vi.fn(() => 'blob:reading-data')
+    const noteContent = '第一行\n  第二行\n第三行'
+    const note = makeReadingNoteEntry(bookB, noteContent)
+    let downloadedFile: Blob | undefined
+    const createObjectURL = vi.fn((file: Blob) => {
+      downloadedFile = file
+      return 'blob:reading-data'
+    })
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -182,6 +187,110 @@ describe('LibraryScreen', () => {
       expect.objectContaining({ type: 'text/plain;charset=utf-8' }),
     )
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
+
+    const exportedText = await downloadedFile?.text()
+    expect(exportedText).toContain(`bookId：${bookmark.position.bookId}`)
+    expect(exportedText).toContain(`chapterId：${bookmark.position.chapterId}`)
+    expect(exportedText).toContain('paragraphIndex：2')
+    expect(exportedText).toContain('chapterProgress：0.4')
+    expect(exportedText).toContain(`筆記內容：\n${noteContent}\n—— 筆記結束 ——`)
+  })
+
+  it('exports only the bookmarks and notes visible under the saved-item filter', async () => {
+    const savedBook = makeBook('saved-export-silver', 'Silver Orchard')
+    const savedChapter = {
+      ...savedBook.chapters[0],
+      title: 'The Glass Harbor',
+    }
+    const otherBook = makeBook('saved-export-copper', 'Copper Station')
+    const otherChapter = {
+      ...otherBook.chapters[0],
+      title: 'The Last Train',
+    }
+    const savedBookmark = {
+      ...makeBookmarkEntry(savedBook, 4, 0.37),
+      chapter: savedChapter,
+    }
+    const otherBookmark = {
+      ...makeBookmarkEntry(otherBook, 2, 0.81),
+      chapter: otherChapter,
+    }
+    const savedNoteContent = '第一行保留\n  第二行保留縮排\n第三行'
+    const savedNote = {
+      ...makeReadingNoteEntry(savedBook, savedNoteContent),
+      chapter: savedChapter,
+    }
+    const otherNote = {
+      ...makeReadingNoteEntry(otherBook, '不應匯出的筆記'),
+      chapter: otherChapter,
+    }
+    let downloadedFile: Blob | undefined
+    const createObjectURL = vi.fn((file: Blob) => {
+      downloadedFile = file
+      return 'blob:reading-data'
+    })
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        bookmarks={[savedBookmark, otherBookmark]}
+        notes={[savedNote, otherNote]}
+        recentReading={[]}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜尋已保存內容' }), {
+      target: { value: '  sIlVeR  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '匯出書籤與筆記' }))
+
+    const exportedText = await downloadedFile?.text()
+    expect(exportedText).toContain('章節書籤（1）')
+    expect(exportedText).toContain('章節筆記（1）')
+    expect(exportedText).toContain('書名：Silver Orchard')
+    expect(exportedText).not.toContain('Copper Station')
+    expect(exportedText).not.toContain('不應匯出的筆記')
+    expect(exportedText).toContain(`bookId：${savedBookmark.position.bookId}`)
+    expect(exportedText).toContain(`chapterId：${savedBookmark.position.chapterId}`)
+    expect(exportedText).toContain('paragraphIndex：4')
+    expect(exportedText).toContain('chapterProgress：0.37')
+    expect(exportedText).toContain(
+      `筆記內容：\n${savedNoteContent}\n—— 筆記結束 ——`,
+    )
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an unavailable state and creates no download when the filter matches nothing', () => {
+    const createObjectURL = vi.fn(() => 'blob:reading-data')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        bookmarks={[makeBookmarkEntry(bookA, 2, 0.4)]}
+        notes={[makeReadingNoteEntry(bookB, '第二章筆記')]}
+        recentReading={[]}
+      />,
+    )
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜尋已保存內容' }), {
+      target: { value: 'no saved item matches this' },
+    })
+
+    expect(
+      screen.getByText('目前沒有符合搜尋條件可匯出的書籤或筆記。'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '匯出書籤與筆記' }),
+    ).not.toBeInTheDocument()
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
   })
 
   it('shows the chapter-notes empty state between bookmarks and the bookshelf', () => {
