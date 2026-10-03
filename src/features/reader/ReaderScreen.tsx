@@ -36,6 +36,38 @@ const SWIPE_EXCLUDED_TARGETS =
   'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
 const CHROME_TOGGLE_EXCLUDED_TARGETS = `${SWIPE_EXCLUDED_TARGETS}, dialog, [role="menu"], [role="listbox"]`
 
+interface ReaderSpeechRuntime extends Window {
+  readonly SpeechSynthesisUtterance?: new (
+    text?: string,
+  ) => SpeechSynthesisUtterance
+}
+
+function getReaderSpeechRuntime():
+  | {
+      readonly speechSynthesis: SpeechSynthesis
+      readonly SpeechSynthesisUtterance: new (
+        text?: string,
+      ) => SpeechSynthesisUtterance
+    }
+  | undefined {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+
+  const speechWindow = window as ReaderSpeechRuntime
+  const speechSynthesis = speechWindow.speechSynthesis
+  const SpeechSynthesisUtterance = speechWindow.SpeechSynthesisUtterance
+
+  if (
+    !speechSynthesis ||
+    typeof SpeechSynthesisUtterance !== 'function'
+  ) {
+    return undefined
+  }
+
+  return { speechSynthesis, SpeechSynthesisUtterance }
+}
+
 interface ReaderSwipeGesture {
   readonly pointerId: number
   readonly startX: number
@@ -209,6 +241,9 @@ export function ReaderScreen({
   const [isTocOpen, setIsTocOpen] = useState(false)
   const [isBookTextSearchOpen, setIsBookTextSearchOpen] = useState(false)
   const [isReaderChromeVisible, setIsReaderChromeVisible] = useState(true)
+  const [speakingChapterId, setSpeakingChapterId] = useState<string | null>(
+    null,
+  )
   const isMobileReaderChrome = useSyncExternalStore(
     subscribeToMobileReaderChrome,
     getMobileReaderChromeSnapshot,
@@ -249,6 +284,9 @@ export function ReaderScreen({
   const pagedViewportRef = useRef<HTMLDivElement>(null)
   const readerSwipeGestureRef = useRef<ReaderSwipeGesture | null>(null)
   const suppressChromeToggleClickRef = useRef(false)
+  const speechSynthesisRef = useRef<SpeechSynthesis | null>(null)
+  const speechSessionRef = useRef(0)
+  const speechChapterIdRef = useRef(openedChapter.chapter.id)
   const pagedReaderMetricsRef = useRef<PagedReaderMetrics>({
     pageCount: 1,
     pageStep: 0,
@@ -275,6 +313,93 @@ export function ReaderScreen({
           pageIndex: 0,
           pageCount: 1,
         }
+
+  const speechRuntime = getReaderSpeechRuntime()
+  const hasReadableProse =
+    openedChapter.prose.length > 0 &&
+    openedChapter.prose.every(
+      (paragraph) => typeof paragraph === 'string' && paragraph.trim().length > 0,
+    )
+  const canReadAloud =
+    speechRuntime !== undefined &&
+    !chapterOpenFailed &&
+    !openedChapter.isLocked &&
+    hasReadableProse
+  const isSpeaking = speakingChapterId === openedChapter.chapter.id
+
+  const cancelReaderSpeech = useCallback((resetSpeakingState = true) => {
+    speechSessionRef.current += 1
+    const speechSynthesis =
+      speechSynthesisRef.current ?? getReaderSpeechRuntime()?.speechSynthesis
+    speechSynthesisRef.current = null
+    speechSynthesis?.cancel()
+
+    if (resetSpeakingState) {
+      setSpeakingChapterId(null)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (speechChapterIdRef.current === openedChapter.chapter.id) {
+      return
+    }
+
+    speechChapterIdRef.current = openedChapter.chapter.id
+    cancelReaderSpeech()
+  }, [cancelReaderSpeech, openedChapter.chapter.id])
+
+  useEffect(() => {
+    return () => {
+      cancelReaderSpeech(false)
+    }
+  }, [cancelReaderSpeech])
+
+  useEffect(() => {
+    if (!canReadAloud && speechSynthesisRef.current) {
+      cancelReaderSpeech()
+    }
+  }, [canReadAloud, cancelReaderSpeech])
+
+  const handleStartSpeech = () => {
+    const runtime = getReaderSpeechRuntime()
+
+    if (!canReadAloud || !runtime) {
+      return
+    }
+
+    speechSessionRef.current += 1
+    const session = speechSessionRef.current
+    runtime.speechSynthesis.cancel()
+    speechSynthesisRef.current = runtime.speechSynthesis
+
+    try {
+      const utterances = openedChapter.prose.map(
+        (paragraph) => new runtime.SpeechSynthesisUtterance(paragraph),
+      )
+
+      setSpeakingChapterId(openedChapter.chapter.id)
+
+      utterances.forEach((utterance, index) => {
+        utterance.onend = () => {
+          if (
+            index === utterances.length - 1 &&
+            speechSessionRef.current === session
+          ) {
+            speechSynthesisRef.current = null
+            setSpeakingChapterId(null)
+          }
+        }
+        utterance.onerror = () => {
+          if (speechSessionRef.current === session) {
+            cancelReaderSpeech()
+          }
+        }
+        runtime.speechSynthesis.speak(utterance)
+      })
+    } catch {
+      cancelReaderSpeech()
+    }
+  }
 
   useEffect(() => {
     onProgressChangeRef.current = onProgressChange
@@ -1017,6 +1142,17 @@ export function ReaderScreen({
     </button>
   )
 
+  const speechButton = canReadAloud ? (
+    <button
+      type="button"
+      className="button-secondary button-reader-speech"
+      onClick={isSpeaking ? () => cancelReaderSpeech() : handleStartSpeech}
+      aria-label={isSpeaking ? '停止朗讀' : '開始朗讀'}
+    >
+      {isSpeaking ? '停止朗讀' : '朗讀本章'}
+    </button>
+  ) : null
+
   const bookmarksListButton = (
     <button
       ref={bookmarksTriggerRef}
@@ -1128,6 +1264,7 @@ export function ReaderScreen({
               )}
             </div>
             <div className="reader-mobile-tools">
+              {speechButton}
               {bookTextSearchButton}
               {bookmarkToggleButton}
             </div>
@@ -1136,6 +1273,7 @@ export function ReaderScreen({
           <div className="reader-toolbar-actions">
             {appearanceTriggerButton}
             <div className="reader-bookmark-toolbar">
+              {speechButton}
               {bookTextSearchButton}
               {bookmarkToggleButton}
               {bookmarksListButton}

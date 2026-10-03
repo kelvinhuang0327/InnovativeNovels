@@ -5,6 +5,7 @@ import {
   getReadingDepth,
   listGenres,
 } from '../../application/catalog/catalogUseCases'
+import type { CatalogAvailability } from '../../application/catalog/catalogUseCases'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
 import { ContinueReadingShelf } from '../library/ContinueReadingShelf'
@@ -302,18 +303,25 @@ export function CatalogScreen({
   const [selectedGenre, setSelectedGenre] = useState<string | undefined>(
     undefined,
   )
+  const [availabilityFilter, setAvailabilityFilter] = useState<
+    CatalogAvailability | undefined
+  >()
   const [sortMode, setSortMode] = useState<CatalogSortMode>('bookstore')
   const searchInputId = useId()
   const sortInputId = useId()
+  const availabilityInputId = useId()
 
   const genres = listGenres(books)
   const filteredBooks = filterCatalog(books, {
     searchText,
     genre: selectedGenre,
+    availability: availabilityFilter,
   })
   const visibleBooks = sortCatalogResults(filteredBooks, sortMode)
   const isFiltering =
-    searchText.trim().length > 0 || selectedGenre !== undefined
+    searchText.trim().length > 0 ||
+    selectedGenre !== undefined ||
+    availabilityFilter !== undefined
   const resultSummary = isFiltering
     ? `找到 ${visibleBooks.length} 本`
     : `共 ${visibleBooks.length} 本`
@@ -321,6 +329,7 @@ export function CatalogScreen({
   const clearFilters = () => {
     setSearchText('')
     setSelectedGenre(undefined)
+    setAvailabilityFilter(undefined)
   }
 
   return (
@@ -377,6 +386,30 @@ export function CatalogScreen({
                 {label}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div className="catalog-sort-block">
+          <label className="catalog-sort-label" htmlFor={availabilityInputId}>
+            章節可讀性
+          </label>
+          <select
+            className="catalog-sort-select"
+            id={availabilityInputId}
+            onChange={(event) =>
+              setAvailabilityFilter(
+                event.target.value === ''
+                  ? undefined
+                  : (event.target.value as CatalogAvailability),
+              )
+            }
+            value={availabilityFilter ?? ''}
+          >
+            <option value="">全部作品</option>
+            <option value="ALL_CHAPTERS_OPENABLE">所有章節皆可閱讀</option>
+            <option value="AT_LEAST_ONE_CHAPTER_OPENABLE">
+              至少一章可閱讀
+            </option>
           </select>
         </div>
 
