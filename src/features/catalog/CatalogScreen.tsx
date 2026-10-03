@@ -191,6 +191,14 @@ function GenreDiscovery({
   )
 }
 
+function formatCatalogCardDepthLabel(
+  depth: ReturnType<typeof getReadingDepth>,
+): string {
+  return depth.totalChapters === 0
+    ? '尚無章節'
+    : formatCatalogDepthLabel(depth)
+}
+
 function EditorialShelf({ books, onOpenBook }: EditorialShelfProps) {
   const editorialBooks = books.slice(0, 3)
 
@@ -216,7 +224,7 @@ function EditorialShelf({ books, onOpenBook }: EditorialShelfProps) {
       <ul className="editorial-list">
         {editorialBooks.map(({ book, chapters, description }) => {
           const depth = getReadingDepth(chapters)
-          const depthLabel = formatCatalogDepthLabel(depth)
+          const depthLabel = formatCatalogCardDepthLabel(depth)
 
           return (
             <li className="editorial-card" key={book.id}>
@@ -260,7 +268,7 @@ function BookCard({
   onOpenBook,
 }: ContentBook & { readonly onOpenBook: (bookId: string) => void }) {
   const depth = getReadingDepth(chapters)
-  const depthLabel = formatCatalogDepthLabel(depth)
+  const depthLabel = formatCatalogCardDepthLabel(depth)
 
   return (
     <article className="book-card">
