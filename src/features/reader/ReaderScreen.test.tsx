@@ -13,7 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
-import { DEFAULT_READER_PREFERENCES } from '../../domain/reading/readerPreferences'
+import {
+  DEFAULT_READER_PREFERENCES,
+  type ReaderPreferences,
+} from '../../domain/reading/readerPreferences'
 import { ReaderScreen } from './ReaderScreen'
 
 const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
@@ -286,6 +289,7 @@ describe('Reader speech controls', () => {
 
     class TestSpeechSynthesisUtterance {
       readonly text: string
+      rate = 1
       onend: SpeechSynthesisUtterance['onend'] = null
       onerror: SpeechSynthesisUtterance['onerror'] = null
 
@@ -322,6 +326,7 @@ describe('Reader speech controls', () => {
   function readerForSpeech(
     openedChapter = mockOpenedChapter,
     chapterOpenFailed = false,
+    onChangePreferences: (newPreferences: ReaderPreferences) => void = vi.fn(),
   ) {
     return (
       <ReaderScreen
@@ -332,7 +337,7 @@ describe('Reader speech controls', () => {
         bookmarks={[]}
         tableOfContents={mockTableOfContents}
         chapterPosition={mockChapterPosition}
-        onChangePreferences={vi.fn()}
+        onChangePreferences={onChangePreferences}
         onResetPreferences={vi.fn()}
         onToggleBookmark={vi.fn()}
         onSelectBookmark={vi.fn()}
@@ -356,6 +361,9 @@ describe('Reader speech controls', () => {
     expect(
       screen.queryByRole('button', { name: '開始朗讀' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: '朗讀速度' }),
+    ).not.toBeInTheDocument()
   })
 
   it('cancels existing speech, then speaks each paragraph in order and can stop', () => {
@@ -375,12 +383,55 @@ describe('Reader speech controls', () => {
       'speak:第一段內文',
       'speak:第二段內文',
     ])
+    expect(speech.utterances.map((utterance) => utterance.rate)).toEqual([1, 1])
     expect(screen.getByRole('button', { name: '停止朗讀' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '停止朗讀' }))
 
     expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
+  })
+
+  it('uses the selected speech rate without changing reading preferences', () => {
+    const speech = installSpeechRuntime()
+    const onChangePreferences = vi.fn()
+    const openedChapter = {
+      ...mockOpenedChapter,
+      prose: ['第一段內文', '第二段內文'],
+    }
+    const view = render(
+      readerForSpeech(openedChapter, false, onChangePreferences),
+    )
+    const speechRate = screen.getByRole('combobox', { name: '朗讀速度' })
+
+    expect(speechRate).toHaveValue('1')
+    fireEvent.change(speechRate, { target: { value: '1.25' } })
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+
+    expect(speech.utterances.map((utterance) => utterance.rate)).toEqual([
+      1.25,
+      1.25,
+    ])
+    expect(speechRate).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '暫停朗讀' }))
+    expect(speechRate).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '停止朗讀' }))
+    expect(speechRate).toBeEnabled()
+
+    fireEvent.change(speechRate, { target: { value: '1.5' } })
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    expect(speech.utterances.map((utterance) => utterance.rate)).toEqual([
+      1.25,
+      1.25,
+      1.5,
+      1.5,
+    ])
+    expect(onChangePreferences).not.toHaveBeenCalled()
+
+    view.unmount()
+    render(readerForSpeech(openedChapter, false, onChangePreferences))
+    expect(screen.getByRole('combobox', { name: '朗讀速度' })).toHaveValue('1')
   })
 
   it('pauses and resumes the current speech without restarting it', () => {
