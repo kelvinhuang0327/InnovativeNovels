@@ -298,6 +298,8 @@ describe('Reader speech controls', () => {
 
     const speechSynthesis = {
       cancel: vi.fn(() => events.push('cancel')),
+      pause: vi.fn(() => events.push('pause')),
+      resume: vi.fn(() => events.push('resume')),
       speak: vi.fn((utterance: SpeechSynthesisUtterance) => {
         events.push(
           `speak:${(utterance as TestSpeechSynthesisUtterance).text}`,
@@ -381,7 +383,43 @@ describe('Reader speech controls', () => {
     expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
   })
 
-  it('cancels when the current chapter changes and does not start the next chapter', () => {
+  it('pauses and resumes the current speech without restarting it', () => {
+    const speech = installSpeechRuntime()
+    const openedChapter = {
+      ...mockOpenedChapter,
+      prose: ['第一段內文', '第二段內文'],
+    }
+
+    render(readerForSpeech(openedChapter))
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '暫停朗讀' }))
+
+    expect(speech.speechSynthesis.pause).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '繼續朗讀' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '停止朗讀' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '繼續朗讀' }))
+
+    expect(speech.speechSynthesis.resume).toHaveBeenCalledTimes(1)
+    expect(speech.utterances).toHaveLength(2)
+    expect(speech.speechSynthesis.speak).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: '暫停朗讀' })).toBeInTheDocument()
+  })
+
+  it('cancels speech when stopped while paused', () => {
+    const speech = installSpeechRuntime()
+
+    render(readerForSpeech())
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '暫停朗讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '停止朗讀' }))
+
+    expect(speech.speechSynthesis.pause).toHaveBeenCalledTimes(1)
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
+  })
+
+  it('cancels paused speech when the current chapter changes and does not start the next chapter', () => {
     const speech = installSpeechRuntime()
     const nextChapter = {
       ...mockOpenedChapter,
@@ -396,9 +434,11 @@ describe('Reader speech controls', () => {
     const view = render(readerForSpeech(mockOpenedChapter))
 
     fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    fireEvent.click(screen.getByRole('button', { name: '暫停朗讀' }))
     view.rerender(readerForSpeech(nextChapter))
 
     expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(speech.speechSynthesis.resume).not.toHaveBeenCalled()
     expect(speech.events).toContain('speak:Paragraph 1')
     expect(speech.events).not.toContain('speak:下一章內文')
     expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
