@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { VitePWA, type VitePWAOptions } from 'vite-plugin-pwa'
 import { authoringGatewayVitePlugin } from './src/infrastructure/authoring/authoringGatewayVitePlugin.ts'
 
@@ -52,6 +52,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
 export default defineConfig({
   plugins: [react(), authoringGatewayVitePlugin(), VitePWA(pwaOptions)],
   test: {
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
   },
