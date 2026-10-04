@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type {
   BookmarkEntry,
+  BookTextSearchResult,
   ChapterPositionProgress,
   OpenedChapter,
   TableOfContentsEntry,
@@ -18,7 +19,9 @@ import type {
 import { calculateReadingProgress } from '../../domain/reading/readingProgressPolicy'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ReaderPreferences } from '../../domain/reading/readerPreferences'
+import { BookTextSearchModal } from './BookTextSearchModal'
 import { ChapterBookmarksModal } from './ChapterBookmarksModal'
+import { ChapterReadingNoteModal } from './ChapterReadingNoteModal'
 import { ReaderAppearanceSheet } from './ReaderAppearanceSheet'
 import { TableOfContentsModal } from './TableOfContentsModal'
 
@@ -32,6 +35,39 @@ const MOBILE_READER_CHROME_MEDIA_QUERY = `(max-width: ${MOBILE_READER_CHROME_MAX
 const SWIPE_EXCLUDED_TARGETS =
   'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
 const CHROME_TOGGLE_EXCLUDED_TARGETS = `${SWIPE_EXCLUDED_TARGETS}, dialog, [role="menu"], [role="listbox"]`
+const READER_SPEECH_RATES = [0.75, 1, 1.25, 1.5] as const
+
+interface ReaderSpeechRuntime extends Window {
+  readonly SpeechSynthesisUtterance?: new (
+    text?: string,
+  ) => SpeechSynthesisUtterance
+}
+
+function getReaderSpeechRuntime():
+  | {
+      readonly speechSynthesis: SpeechSynthesis
+      readonly SpeechSynthesisUtterance: new (
+        text?: string,
+      ) => SpeechSynthesisUtterance
+    }
+  | undefined {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+
+  const speechWindow = window as ReaderSpeechRuntime
+  const speechSynthesis = speechWindow.speechSynthesis
+  const SpeechSynthesisUtterance = speechWindow.SpeechSynthesisUtterance
+
+  if (
+    !speechSynthesis ||
+    typeof SpeechSynthesisUtterance !== 'function'
+  ) {
+    return undefined
+  }
+
+  return { speechSynthesis, SpeechSynthesisUtterance }
+}
 
 interface ReaderSwipeGesture {
   readonly pointerId: number
@@ -43,6 +79,12 @@ interface PagedReaderState {
   readonly chapterId: string
   readonly pageIndex: number
   readonly pageCount: number
+}
+
+interface LiveProgress {
+  readonly chapterId: string
+  readonly percent: number
+  readonly bookPercent: number | undefined
 }
 
 interface PagedReaderMetrics {
@@ -58,6 +100,29 @@ function isChromeToggleExcludedTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
     target.closest(CHROME_TOGGLE_EXCLUDED_TARGETS) !== null
+  )
+}
+
+function isReaderKeyboardShortcutEditableTarget(
+  target: EventTarget | null,
+): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+
+  if (
+    target.closest(
+      'input, textarea, select, [role="textbox"], [role="searchbox"]',
+    )
+  ) {
+    return true
+  }
+
+  const contentEditableTarget = target.closest('[contenteditable]')
+  return (
+    contentEditableTarget !== null &&
+    contentEditableTarget.getAttribute('contenteditable')?.toLowerCase() !==
+      'false'
   )
 }
 
@@ -97,11 +162,26 @@ function clampChapterProgress(chapterProgress: number): number {
     : 0
 }
 
+function roundedProgressPercent(
+  position: ReadingPosition,
+  chapterSequence: number,
+  totalChapters: number,
+): number | undefined {
+  const progress = calculateReadingProgress({
+    position,
+    chapterSequence,
+    totalChapters,
+  })
+
+  return progress.valid ? Math.round(progress.percent) : undefined
+}
+
 interface ReaderScreenProps {
   readonly openedChapter: OpenedChapter
   readonly recoveryStatus?: string
   readonly chapterOpenFailed?: boolean
   readonly preferences: ReaderPreferences
+  readonly isPersistentStorageAvailable?: boolean
   readonly isBookmarked: boolean
   readonly bookmarks: readonly BookmarkEntry[]
   readonly tableOfContents: readonly TableOfContentsEntry[]
@@ -111,7 +191,14 @@ interface ReaderScreenProps {
   readonly onToggleBookmark: () => void
   readonly onSelectBookmark: (position: ReadingPosition) => void
   readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
+  readonly loadChapterReadingNote?: () => string
+  readonly onSaveChapterReadingNote?: (content: string) => void
   readonly onSelectChapter: (chapterId: string) => void
+  readonly searchBookText?: (query: string) => readonly BookTextSearchResult[]
+  readonly onSelectBookTextSearchResult?: (
+    result: BookTextSearchResult,
+  ) => void
+  readonly searchTargetParagraphIndex?: number
   readonly onBackToBook: () => void
   readonly onPrevious: () => void
   readonly onNext: () => void
@@ -125,6 +212,7 @@ export function ReaderScreen({
   recoveryStatus,
   chapterOpenFailed = false,
   preferences,
+  isPersistentStorageAvailable = true,
   isBookmarked,
   bookmarks,
   tableOfContents,
@@ -134,7 +222,12 @@ export function ReaderScreen({
   onToggleBookmark,
   onSelectBookmark,
   onRemoveBookmark,
+  loadChapterReadingNote = () => '',
+  onSaveChapterReadingNote = () => {},
   onSelectChapter,
+  searchBookText,
+  onSelectBookTextSearchResult,
+  searchTargetParagraphIndex,
   onBackToBook,
   onPrevious,
   onNext,
@@ -144,17 +237,43 @@ export function ReaderScreen({
 }: ReaderScreenProps) {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false)
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
+  const [isChapterReadingNoteOpen, setIsChapterReadingNoteOpen] =
+    useState(false)
+  const [chapterReadingNoteContent, setChapterReadingNoteContent] =
+    useState('')
   const [isTocOpen, setIsTocOpen] = useState(false)
+  const [isBookTextSearchOpen, setIsBookTextSearchOpen] = useState(false)
   const [isReaderChromeVisible, setIsReaderChromeVisible] = useState(true)
+  const [speakingChapterId, setSpeakingChapterId] = useState<string | null>(
+    null,
+  )
+  const [pausedChapterId, setPausedChapterId] = useState<string | null>(null)
+  const [speechRate, setSpeechRate] = useState<number>(1)
   const isMobileReaderChrome = useSyncExternalStore(
     subscribeToMobileReaderChrome,
     getMobileReaderChromeSnapshot,
     () => false,
   )
   const isMobileChromeHidden = isMobileReaderChrome && !isReaderChromeVisible
-  const [liveProgress, setLiveProgress] = useState({
-    chapterId: openedChapter.chapter.id,
-    percent: 0,
+  const [liveProgress, setLiveProgress] = useState<LiveProgress>(() => {
+    const position: ReadingPosition = {
+      bookId: openedChapter.book.book.id,
+      chapterId: openedChapter.chapter.id,
+      paragraphIndex: 0,
+      chapterProgress: openedChapter.initialChapterProgress,
+    }
+
+    return {
+      chapterId: openedChapter.chapter.id,
+      percent: roundedProgressPercent(position, 1, 1) ?? 0,
+      bookPercent: chapterPosition
+        ? roundedProgressPercent(
+            position,
+            chapterPosition.currentPosition,
+            chapterPosition.totalChapters,
+          )
+        : undefined,
+    }
   })
   const [pagedReaderState, setPagedReaderState] = useState<PagedReaderState>({
     chapterId: openedChapter.chapter.id,
@@ -162,12 +281,17 @@ export function ReaderScreen({
     pageCount: 1,
   })
   const bookmarksTriggerRef = useRef<HTMLButtonElement>(null)
+  const chapterReadingNoteTriggerRef = useRef<HTMLButtonElement>(null)
   const tocTriggerRef = useRef<HTMLButtonElement>(null)
+  const bookTextSearchTriggerRef = useRef<HTMLButtonElement>(null)
   const readerRef = useRef<HTMLElement>(null)
   const proseRef = useRef<HTMLElement>(null)
   const pagedViewportRef = useRef<HTMLDivElement>(null)
   const readerSwipeGestureRef = useRef<ReaderSwipeGesture | null>(null)
   const suppressChromeToggleClickRef = useRef(false)
+  const speechSynthesisRef = useRef<SpeechSynthesis | null>(null)
+  const speechSessionRef = useRef(0)
+  const speechChapterIdRef = useRef(openedChapter.chapter.id)
   const pagedReaderMetricsRef = useRef<PagedReaderMetrics>({
     pageCount: 1,
     pageStep: 0,
@@ -182,6 +306,10 @@ export function ReaderScreen({
     liveProgress.chapterId === openedChapter.chapter.id
       ? liveProgress.percent
       : 0
+  const liveBookProgressPercent =
+    liveProgress.chapterId === openedChapter.chapter.id
+      ? liveProgress.bookPercent
+      : undefined
   const currentPagedState =
     pagedReaderState.chapterId === openedChapter.chapter.id
       ? pagedReaderState
@@ -190,6 +318,118 @@ export function ReaderScreen({
           pageIndex: 0,
           pageCount: 1,
         }
+
+  const speechRuntime = getReaderSpeechRuntime()
+  const hasReadableProse =
+    openedChapter.prose.length > 0 &&
+    openedChapter.prose.every(
+      (paragraph) => typeof paragraph === 'string' && paragraph.trim().length > 0,
+    )
+  const canReadAloud =
+    speechRuntime !== undefined &&
+    !chapterOpenFailed &&
+    !openedChapter.isLocked &&
+    hasReadableProse
+  const isSpeechActive = speakingChapterId === openedChapter.chapter.id
+  const isSpeechPaused =
+    isSpeechActive && pausedChapterId === openedChapter.chapter.id
+
+  const cancelReaderSpeech = useCallback((resetSpeakingState = true) => {
+    speechSessionRef.current += 1
+    const speechSynthesis =
+      speechSynthesisRef.current ?? getReaderSpeechRuntime()?.speechSynthesis
+    speechSynthesisRef.current = null
+    speechSynthesis?.cancel()
+
+    if (resetSpeakingState) {
+      setSpeakingChapterId(null)
+      setPausedChapterId(null)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (speechChapterIdRef.current === openedChapter.chapter.id) {
+      return
+    }
+
+    speechChapterIdRef.current = openedChapter.chapter.id
+    cancelReaderSpeech()
+  }, [cancelReaderSpeech, openedChapter.chapter.id])
+
+  useEffect(() => {
+    return () => {
+      cancelReaderSpeech(false)
+    }
+  }, [cancelReaderSpeech])
+
+  useEffect(() => {
+    if (!canReadAloud && speechSynthesisRef.current) {
+      cancelReaderSpeech()
+    }
+  }, [canReadAloud, cancelReaderSpeech])
+
+  const handleStartSpeech = () => {
+    const runtime = getReaderSpeechRuntime()
+
+    if (!canReadAloud || !runtime) {
+      return
+    }
+
+    speechSessionRef.current += 1
+    const session = speechSessionRef.current
+    runtime.speechSynthesis.cancel()
+    speechSynthesisRef.current = runtime.speechSynthesis
+
+    try {
+      const utterances = openedChapter.prose.map((paragraph) => {
+        const utterance = new runtime.SpeechSynthesisUtterance(paragraph)
+        utterance.rate = speechRate
+        return utterance
+      })
+
+      setSpeakingChapterId(openedChapter.chapter.id)
+      setPausedChapterId(null)
+
+      utterances.forEach((utterance, index) => {
+        utterance.onend = () => {
+          if (
+            index === utterances.length - 1 &&
+            speechSessionRef.current === session
+          ) {
+            speechSynthesisRef.current = null
+            setSpeakingChapterId(null)
+            setPausedChapterId(null)
+          }
+        }
+        utterance.onerror = () => {
+          if (speechSessionRef.current === session) {
+            cancelReaderSpeech()
+          }
+        }
+        runtime.speechSynthesis.speak(utterance)
+      })
+    } catch {
+      cancelReaderSpeech()
+    }
+  }
+
+  const handlePauseSpeech = () => {
+    if (!isSpeechActive || isSpeechPaused || !speechSynthesisRef.current) {
+      return
+    }
+
+    speechSynthesisRef.current.pause()
+    setPausedChapterId(openedChapter.chapter.id)
+  }
+
+  const handleResumeSpeech = () => {
+    if (!isSpeechPaused || !speechSynthesisRef.current) {
+      return
+    }
+
+    speechSynthesisRef.current.resume()
+    setPausedChapterId(null)
+  }
 
   useEffect(() => {
     onProgressChangeRef.current = onProgressChange
@@ -203,32 +443,46 @@ export function ReaderScreen({
     }
   }, [openedChapter.chapter.id, preferences.readingMode])
 
+  const currentChapterPosition = chapterPosition?.currentPosition
+  const totalChapterCount = chapterPosition?.totalChapters
+
   const updateLiveProgress = useCallback(
     (chapterProgress: number) => {
       latestChapterProgressRef.current = chapterProgress
 
-      const progress = calculateReadingProgress({
-        position: {
-          bookId: openedChapter.book.book.id,
-          chapterId: openedChapter.chapter.id,
-          paragraphIndex: 0,
-          chapterProgress,
-        },
-        chapterSequence: 1,
-        totalChapters: 1,
-      })
-      const percent = progress.valid ? Math.round(progress.percent) : 0
+      const position: ReadingPosition = {
+        bookId: openedChapter.book.book.id,
+        chapterId: openedChapter.chapter.id,
+        paragraphIndex: 0,
+        chapterProgress,
+      }
+      const percent = roundedProgressPercent(position, 1, 1) ?? 0
+      const bookPercent =
+        currentChapterPosition !== undefined &&
+        totalChapterCount !== undefined
+        ? roundedProgressPercent(
+            position,
+            currentChapterPosition,
+            totalChapterCount,
+          )
+        : undefined
 
       setLiveProgress((current) =>
         current.chapterId === openedChapter.chapter.id &&
-        current.percent === percent
+        current.percent === percent &&
+        current.bookPercent === bookPercent
           ? current
-          : { chapterId: openedChapter.chapter.id, percent },
+          : { chapterId: openedChapter.chapter.id, percent, bookPercent },
       )
 
       return percent
     },
-    [openedChapter.book.book.id, openedChapter.chapter.id],
+    [
+      openedChapter.book.book.id,
+      openedChapter.chapter.id,
+      currentChapterPosition,
+      totalChapterCount,
+    ],
   )
 
   const applyPagedPage = useCallback(
@@ -431,6 +685,71 @@ export function ReaderScreen({
       event.preventDefault()
       turnPagedPage(-1)
     }
+  }
+
+  const handleReaderChapterShortcut = (
+    event: ReactKeyboardEvent<HTMLElement>,
+  ) => {
+    if (
+      event.repeat ||
+      !event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isReaderKeyboardShortcutEditableTarget(event.target) ||
+      (event.target instanceof Element &&
+        event.target.closest('dialog, [role="dialog"], [role="menu"], [role="listbox"]'))
+    ) {
+      return
+    }
+
+    if (event.key === 'ArrowLeft' && openedChapter.hasPrevious) {
+      event.preventDefault()
+      onPrevious()
+    } else if (event.key === 'ArrowRight' && openedChapter.hasNext) {
+      event.preventDefault()
+      onNext()
+    }
+  }
+
+  const scrollReaderToParagraph = useCallback(
+    (paragraphIndex: number) => {
+      const paragraph = proseRef.current?.querySelectorAll('p').item(paragraphIndex)
+
+      if (!paragraph) {
+        return
+      }
+
+      const viewport = pagedViewportRef.current
+      const { pageCount, pageStep } = pagedReaderMetricsRef.current
+
+      if (
+        preferences.readingMode === 'paged' &&
+        viewport &&
+        pageStep > 0
+      ) {
+        const paragraphBounds = paragraph.getBoundingClientRect()
+        const viewportBounds = viewport.getBoundingClientRect()
+        const paragraphContentX =
+          viewport.scrollLeft + paragraphBounds.left - viewportBounds.left
+        const pageIndex = Math.floor(Math.max(paragraphContentX, 0) / pageStep)
+
+        applyPagedPage(pageIndex, pageCount, true)
+        return
+      }
+
+      paragraph.scrollIntoView({ block: 'start', inline: 'start' })
+    },
+    [applyPagedPage, preferences.readingMode],
+  )
+
+  const handleSelectBookTextSearchResult = (result: BookTextSearchResult) => {
+    if (result.chapterId === openedChapter.chapter.id) {
+      scrollReaderToParagraph(result.paragraphIndex)
+      return
+    }
+
+    onSelectBookTextSearchResult?.(result)
   }
 
   useEffect(() => {
@@ -703,6 +1022,33 @@ export function ReaderScreen({
 
   useEffect(() => {
     if (
+      searchTargetParagraphIndex === undefined ||
+      openedChapter.isLocked
+    ) {
+      return
+    }
+
+    if (typeof window.requestAnimationFrame !== 'function') {
+      scrollReaderToParagraph(searchTargetParagraphIndex)
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollReaderToParagraph(searchTargetParagraphIndex)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [
+    openedChapter.chapter.id,
+    openedChapter.isLocked,
+    searchTargetParagraphIndex,
+    scrollReaderToParagraph,
+  ])
+
+  useEffect(() => {
+    if (
       !isMobileReaderChrome ||
       preferences.readingMode !== 'continuous' ||
       openedChapter.isLocked
@@ -754,25 +1100,48 @@ export function ReaderScreen({
   ])
 
   const readingProgressIndicator = !openedChapter.isLocked ? (
-    <div
-      className="chapter-reading-progress"
-      role="progressbar"
-      aria-label="本章閱讀進度"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={liveProgressPercent}
-      aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
-    >
-      <span className="chapter-reading-progress-label" aria-hidden="true">
-        本章閱讀進度 {liveProgressPercent}%
-      </span>
-      <span className="chapter-reading-progress-track" aria-hidden="true">
-        <span
-          className="chapter-reading-progress-fill"
-          style={{ width: `${liveProgressPercent}%` }}
-        />
-      </span>
-    </div>
+    <>
+      <div
+        className="chapter-reading-progress"
+        role="progressbar"
+        aria-label="本章閱讀進度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={liveProgressPercent}
+        aria-valuetext={`本章閱讀進度 ${liveProgressPercent}%`}
+      >
+        <span className="chapter-reading-progress-label" aria-hidden="true">
+          本章閱讀進度 {liveProgressPercent}%
+        </span>
+        <span className="chapter-reading-progress-track" aria-hidden="true">
+          <span
+            className="chapter-reading-progress-fill"
+            style={{ width: `${liveProgressPercent}%` }}
+          />
+        </span>
+      </div>
+      {liveBookProgressPercent !== undefined && (
+        <div
+          className="chapter-reading-progress"
+          role="progressbar"
+          aria-label="全書閱讀進度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={liveBookProgressPercent}
+          aria-valuetext={`全書閱讀進度 ${liveBookProgressPercent}%`}
+        >
+          <span className="chapter-reading-progress-label" aria-hidden="true">
+            全書閱讀進度 {liveBookProgressPercent}%
+          </span>
+          <span className="chapter-reading-progress-track" aria-hidden="true">
+            <span
+              className="chapter-reading-progress-fill"
+              style={{ width: `${liveBookProgressPercent}%` }}
+            />
+          </span>
+        </div>
+      )}
+    </>
   ) : null
 
   const bookmarkToggleButton = !openedChapter.isLocked ? (
@@ -808,6 +1177,63 @@ export function ReaderScreen({
     </button>
   )
 
+  const speechButton = canReadAloud ? (
+    <>
+      <label
+        className="reader-speech-rate-control"
+        style={{ pointerEvents: 'auto' }}
+      >
+        速度
+        <select
+          aria-label="朗讀速度"
+          value={speechRate}
+          disabled={isSpeechActive}
+          onChange={(event) => setSpeechRate(Number(event.currentTarget.value))}
+        >
+          {READER_SPEECH_RATES.map((rate) => (
+            <option key={rate} value={rate}>
+              {rate}x
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="button-secondary button-reader-speech"
+        onClick={
+          !isSpeechActive
+            ? handleStartSpeech
+            : isSpeechPaused
+              ? handleResumeSpeech
+              : handlePauseSpeech
+        }
+        aria-label={
+          !isSpeechActive
+            ? '開始朗讀'
+            : isSpeechPaused
+              ? '繼續朗讀'
+              : '暫停朗讀'
+        }
+      >
+        {!isSpeechActive
+          ? '朗讀本章'
+          : isSpeechPaused
+            ? '繼續朗讀'
+            : '暫停朗讀'}
+      </button>
+      {isSpeechActive ? (
+        <button
+          type="button"
+          className="button-secondary button-reader-speech"
+          onClick={() => cancelReaderSpeech()}
+          aria-label="停止朗讀"
+        >
+          停止朗讀
+        </button>
+      ) : null}
+    </>
+  ) : null
+
   const bookmarksListButton = (
     <button
       ref={bookmarksTriggerRef}
@@ -822,6 +1248,29 @@ export function ReaderScreen({
     </button>
   )
 
+  const chapterReadingNoteButton =
+    !chapterOpenFailed && !openedChapter.isLocked ? (
+      <button
+        ref={chapterReadingNoteTriggerRef}
+        type="button"
+        className="button-secondary button-open-chapter-reading-note"
+        onClick={() => {
+          setChapterReadingNoteContent(loadChapterReadingNote())
+          setIsChapterReadingNoteOpen(true)
+        }}
+        aria-label="本章筆記"
+        aria-haspopup="dialog"
+        aria-expanded={isChapterReadingNoteOpen}
+      >
+        {isMobileReaderChrome ? '筆記' : '本章筆記'}
+      </button>
+    ) : null
+
+  const handleSaveChapterReadingNote = (content: string) => {
+    setChapterReadingNoteContent(content.trim().length > 0 ? content : '')
+    onSaveChapterReadingNote(content)
+  }
+
   const tocTriggerButton = (
     <button
       ref={tocTriggerRef}
@@ -834,9 +1283,27 @@ export function ReaderScreen({
     </button>
   )
 
+  const bookTextSearchButton =
+    searchBookText && !chapterOpenFailed && !openedChapter.isLocked ? (
+      <button
+        ref={bookTextSearchTriggerRef}
+        type="button"
+        className={`button-secondary button-open-book-text-search${
+          isMobileReaderChrome ? ' reader-chrome-search' : ''
+        }`}
+        onClick={() => setIsBookTextSearchOpen(true)}
+        aria-label="搜尋本書內文"
+        aria-haspopup="dialog"
+        aria-expanded={isBookTextSearchOpen}
+      >
+        {isMobileReaderChrome ? '搜尋' : '搜尋內文'}
+      </button>
+    ) : null
+
   return (
     <section
       ref={readerRef}
+      onKeyDown={handleReaderChapterShortcut}
       className="reader-screen-container"
       data-theme={preferences.theme}
       data-font-family={preferences.fontFamily}
@@ -877,14 +1344,21 @@ export function ReaderScreen({
                 </span>
               )}
             </div>
-            {bookmarkToggleButton}
+            <div className="reader-mobile-tools">
+              {speechButton}
+              {bookTextSearchButton}
+              {bookmarkToggleButton}
+            </div>
           </>
         ) : (
           <div className="reader-toolbar-actions">
             {appearanceTriggerButton}
             <div className="reader-bookmark-toolbar">
+              {speechButton}
+              {bookTextSearchButton}
               {bookmarkToggleButton}
               {bookmarksListButton}
+              {chapterReadingNoteButton}
               {tocTriggerButton}
             </div>
           </div>
@@ -1065,6 +1539,7 @@ export function ReaderScreen({
                   className="button-primary chapter-end-continue-button"
                   onClick={onNext}
                   aria-label={`繼續閱讀：${nextChapterTitle}`}
+                  aria-keyshortcuts="Shift+ArrowRight"
                 >
                   繼續閱讀
                 </button>
@@ -1107,6 +1582,7 @@ export function ReaderScreen({
                   className="button-secondary chapter-end-prev-button"
                   onClick={onPrevious}
                   aria-label="上一章"
+                  aria-keyshortcuts="Shift+ArrowLeft"
                 >
                   ← 上一章
                 </button>
@@ -1147,6 +1623,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasPrevious}
           aria-disabled={!openedChapter.hasPrevious}
           aria-label="上一章"
+          aria-keyshortcuts="Shift+ArrowLeft"
         >
           {isMobileReaderChrome ? '上章' : '上一章'}
         </button>
@@ -1156,6 +1633,7 @@ export function ReaderScreen({
             {tocTriggerButton}
             {appearanceTriggerButton}
             {bookmarksListButton}
+            {chapterReadingNoteButton}
           </>
         ) : (
           <div className="persistent-reader-context">
@@ -1180,6 +1658,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasNext}
           aria-disabled={!openedChapter.hasNext}
           aria-label="下一章"
+          aria-keyshortcuts="Shift+ArrowRight"
         >
           {isMobileReaderChrome ? '下章' : '下一章'}
         </button>
@@ -1212,6 +1691,17 @@ export function ReaderScreen({
         onRemoveBookmark={onRemoveBookmark}
       />
 
+      <ChapterReadingNoteModal
+        isOpen={isChapterReadingNoteOpen}
+        chapterTitle={openedChapter.chapter.title}
+        noteTargetKey={`${openedChapter.book.book.id}:${openedChapter.chapter.id}`}
+        initialContent={chapterReadingNoteContent}
+        isPersistentStorageAvailable={isPersistentStorageAvailable}
+        triggerRef={chapterReadingNoteTriggerRef}
+        onClose={() => setIsChapterReadingNoteOpen(false)}
+        onSave={handleSaveChapterReadingNote}
+      />
+
       <TableOfContentsModal
         isOpen={isTocOpen}
         entries={tableOfContents}
@@ -1219,6 +1709,16 @@ export function ReaderScreen({
         onClose={() => setIsTocOpen(false)}
         onSelectChapter={onSelectChapter}
       />
+
+      {searchBookText && (
+        <BookTextSearchModal
+          isOpen={isBookTextSearchOpen}
+          triggerRef={bookTextSearchTriggerRef}
+          searchBookText={searchBookText}
+          onClose={() => setIsBookTextSearchOpen(false)}
+          onSelectResult={handleSelectBookTextSearchResult}
+        />
+      )}
     </section>
   )
 }

@@ -6,8 +6,10 @@ import { decideChapterAccess } from '../../domain/access/chapterAccessPolicy'
 import type { Chapter } from '../../domain/catalog/chapter'
 import { bookId as toBookId, chapterId as toChapterId } from '../../domain/catalog/identifiers'
 import type { ChapterId } from '../../domain/catalog/identifiers'
+import type { ChapterReadingNote } from '../../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from './chapterReadingNotesRepository'
 import type { ReadingStateRepository } from './readingStateRepository'
 
 export interface ReadingDestination {
@@ -31,10 +33,37 @@ export interface BookmarkEntry {
   readonly position: ReadingPosition
 }
 
+export interface ChapterReadingNoteEntry {
+  readonly book: ContentBook
+  readonly chapter: Chapter
+  readonly note: ChapterReadingNote
+}
+
 function chaptersByExplicitOrder(book: ContentBook): readonly Chapter[] {
   return [...book.chapters].sort(
     (left, right) => left.sequence - right.sequence,
   )
+}
+
+function isChapterReadingNote(value: unknown): value is ChapterReadingNote {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return false
+    }
+
+    const candidate = value as Record<string, unknown>
+
+    return (
+      typeof candidate.bookId === 'string' &&
+      candidate.bookId.trim().length > 0 &&
+      typeof candidate.chapterId === 'string' &&
+      candidate.chapterId.trim().length > 0 &&
+      typeof candidate.content === 'string' &&
+      candidate.content.trim().length > 0
+    )
+  } catch {
+    return false
+  }
 }
 
 function chapterPosition(chapter: Chapter): ReadingPosition {
@@ -268,6 +297,93 @@ export function isChapterBookmarked(
     .some((b) => b.bookId === bookId && b.chapterId === chapterId)
 }
 
+export function getChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  bookId: string,
+  chapterId: string,
+): ChapterReadingNote | undefined {
+  return notesRepository.load(bookId, chapterId)
+}
+
+export function listChapterReadingNotes(
+  contentRepository: ContentRepository,
+  notesRepository: ChapterReadingNotesRepository,
+): readonly ChapterReadingNoteEntry[] {
+  let persistedNotes: unknown
+
+  try {
+    persistedNotes = notesRepository.list()
+  } catch {
+    return []
+  }
+
+  if (!Array.isArray(persistedNotes)) {
+    return []
+  }
+
+  const notesByChapter = new Map<string, ChapterReadingNote>()
+
+  for (const candidate of persistedNotes as readonly unknown[]) {
+    if (!isChapterReadingNote(candidate)) {
+      continue
+    }
+
+    notesByChapter.set(
+      JSON.stringify([candidate.bookId, candidate.chapterId]),
+      candidate,
+    )
+  }
+
+  const entries: ChapterReadingNoteEntry[] = []
+
+  for (const book of contentRepository.listBooks()) {
+    for (const chapter of chaptersByExplicitOrder(book)) {
+      if (
+        chapter.bookId !== book.book.id ||
+        !decideChapterAccess(chapter.access).canOpen
+      ) {
+        continue
+      }
+
+      const note = notesByChapter.get(
+        JSON.stringify([book.book.id, chapter.id]),
+      )
+
+      if (note) {
+        entries.push({ book, chapter, note })
+      }
+    }
+  }
+
+  return entries
+}
+
+export function saveChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  targetBookId: string,
+  targetChapterId: string,
+  content: string,
+): void {
+  if (content.trim().length === 0) {
+    notesRepository.remove(targetBookId, targetChapterId)
+    return
+  }
+
+  notesRepository.save({
+    bookId: toBookId(targetBookId),
+    chapterId: toChapterId(targetChapterId),
+    content,
+  })
+}
+
+export function removeChapterReadingNote(
+  notesRepository: ChapterReadingNotesRepository,
+  bookId: string,
+  chapterId: string,
+): void {
+  notesRepository.remove(bookId, chapterId)
+}
+
 export function addChapterBookmark(
   contentRepository: ContentRepository,
   readingStateRepository: ReadingStateRepository,
@@ -325,6 +441,70 @@ export interface TableOfContentsEntry {
   readonly sequence: number
   readonly isAccessible: boolean
   readonly isCurrent: boolean
+}
+
+export interface BookTextSearchResult {
+  readonly chapterId: ChapterId
+  readonly chapterTitle: string
+  readonly chapterSequence: number
+  readonly paragraphIndex: number
+  readonly paragraphText: string
+  readonly matchIndex: number
+}
+
+export function searchBookText(
+  contentRepository: ContentRepository,
+  book: ContentBook,
+  searchText: string,
+): readonly BookTextSearchResult[] {
+  const normalizedQuery = searchText.trim().toLowerCase()
+
+  if (normalizedQuery.length === 0) {
+    return []
+  }
+
+  const results: BookTextSearchResult[] = []
+
+  for (const chapter of chaptersByExplicitOrder(book)) {
+    if (!decideChapterAccess(chapter.access).canLoadProse) {
+      continue
+    }
+
+    let paragraphs: readonly string[] | undefined
+
+    try {
+      paragraphs = contentRepository.getChapterProse(chapter.id)
+    } catch {
+      continue
+    }
+
+    if (!Array.isArray(paragraphs)) {
+      continue
+    }
+
+    paragraphs.forEach((paragraphText, paragraphIndex) => {
+      if (typeof paragraphText !== 'string') {
+        return
+      }
+
+      const matchIndex = paragraphText.toLowerCase().indexOf(normalizedQuery)
+
+      if (matchIndex < 0) {
+        return
+      }
+
+      results.push({
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+        chapterSequence: chapter.sequence,
+        paragraphIndex,
+        paragraphText,
+        matchIndex,
+      })
+    })
+  }
+
+  return results
 }
 
 export function filterTableOfContents(

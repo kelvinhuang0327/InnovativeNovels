@@ -1,13 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
-import type { ContentBook } from './contentRepository'
+import type { ContentBook, ContentRepository } from './contentRepository'
 import {
   filterCatalog,
   formatBookDetailDepthSummary,
   formatCatalogDepthLabel,
   getReadingDepth,
+  listCatalog,
   listGenres,
 } from './catalogUseCases'
 
@@ -17,19 +18,31 @@ function makeBook(
   categoryLabel: string,
   description: string,
   authorName = '作者',
+  chapterCount = 1,
 ): ContentBook {
   return {
     book: { id: bookId(id), title, authorName, categoryLabel },
     description,
-    chapters: [
-      {
-        id: chapterId(`${id}-c1`),
-        bookId: bookId(id),
-        title: '第一章',
-        sequence: chapterSequence(1),
-        access: CHAPTER_ACCESS.READABLE,
-      },
-    ],
+    chapters: Array.from({ length: chapterCount }, (_, index) => ({
+      id: chapterId(`${id}-c${index + 1}`),
+      bookId: bookId(id),
+      title: index === 0 ? '第一章' : `第${index + 1}章`,
+      sequence: chapterSequence(index + 1),
+      access: CHAPTER_ACCESS.READABLE,
+    })),
+  }
+}
+
+function withChapterAccesses(
+  book: ContentBook,
+  accesses: readonly (typeof CHAPTER_ACCESS)[keyof typeof CHAPTER_ACCESS][],
+): ContentBook {
+  return {
+    ...book,
+    chapters: book.chapters.map((chapter, index) => ({
+      ...chapter,
+      access: accesses[index],
+    })),
   }
 }
 
@@ -102,6 +115,74 @@ describe('filterCatalog', () => {
   it('preserves the original catalog order among matching results', () => {
     const result = filterCatalog(books, { genre: '仙俠' })
     expect(result.map((entry) => entry.book.id)).toEqual(['book-b', 'book-b2'])
+  })
+
+  it('filters all-openable books through chapter access policy and excludes empty books', () => {
+    const catalog: readonly ContentBook[] = [
+      withChapterAccesses(
+        makeBook('all-openable', '全可讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.PREVIEW],
+      ),
+      withChapterAccesses(
+        makeBook('partly-openable', '部分可讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+      ),
+      withChapterAccesses(
+        makeBook('none-openable', '無法閱讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.LOCKED, CHAPTER_ACCESS.UNAVAILABLE],
+      ),
+      makeBook('no-chapters', '尚無章節', '懸疑', '測試', '作者', 0),
+    ]
+    expect(catalog[3].chapters).toHaveLength(0)
+    expect(getReadingDepth(catalog[3]).allOpenable).toBe(false)
+
+    expect(
+      filterCatalog(catalog, { availability: 'ALL_CHAPTERS_OPENABLE' }).map(
+        ({ book }) => book.id,
+      ),
+    ).toEqual(['all-openable'])
+  })
+
+  it('filters books with at least one chapter that can be opened', () => {
+    const catalog: readonly ContentBook[] = [
+      withChapterAccesses(
+        makeBook('all-openable', '全可讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.PREVIEW],
+      ),
+      withChapterAccesses(
+        makeBook('partly-openable', '部分可讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+      ),
+      withChapterAccesses(
+        makeBook('none-openable', '無法閱讀', '懸疑', '測試', '作者', 2),
+        [CHAPTER_ACCESS.LOCKED, CHAPTER_ACCESS.UNAVAILABLE],
+      ),
+      makeBook('no-chapters', '尚無章節', '懸疑', '測試', '作者', 0),
+    ]
+
+    expect(
+      filterCatalog(catalog, {
+        availability: 'AT_LEAST_ONE_CHAPTER_OPENABLE',
+      }).map(({ book }) => book.id),
+    ).toEqual(['all-openable', 'partly-openable'])
+  })
+
+  it('filters from catalog access metadata without requesting chapter prose', () => {
+    const getChapterProse = vi.fn((): readonly string[] => {
+      throw new Error('catalog availability must not load chapter prose')
+    })
+    const repository: ContentRepository = {
+      listBooks: () => books,
+      getBook: () => undefined,
+      getChapterProse,
+    }
+
+    expect(
+      filterCatalog(listCatalog(repository), {
+        availability: 'ALL_CHAPTERS_OPENABLE',
+      }),
+    ).toHaveLength(books.length)
+    expect(getChapterProse).not.toHaveBeenCalled()
   })
 })
 
@@ -290,13 +371,13 @@ describe('getReadingDepth', () => {
     })
   })
 
-  it('handles empty chapters gracefully', () => {
+  it('does not classify an empty book as all-openable', () => {
     const depth = getReadingDepth([])
     expect(depth).toEqual({
       totalChapters: 0,
       openableChapters: 0,
       continuousOpenableChapters: 0,
-      allOpenable: true,
+      allOpenable: false,
     })
   })
 })

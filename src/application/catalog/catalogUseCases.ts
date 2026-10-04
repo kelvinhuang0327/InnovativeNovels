@@ -33,23 +33,34 @@ export function listGenres(books: readonly ContentBook[]): readonly string[] {
 export interface CatalogQuery {
   readonly searchText?: string
   readonly genre?: string
+  readonly availability?: CatalogAvailability
 }
+
+export type CatalogAvailability =
+  | 'ALL_CHAPTERS_OPENABLE'
+  | 'AT_LEAST_ONE_CHAPTER_OPENABLE'
 
 export function filterCatalog(
   books: readonly ContentBook[],
-  { searchText, genre }: CatalogQuery,
+  { searchText, genre, availability }: CatalogQuery,
 ): readonly ContentBook[] {
   const normalizedQuery = searchText?.trim().toLowerCase() ?? ''
 
-  return books.filter(({ book, description }) => {
+  return books.filter(({ book, chapters, description }) => {
     const matchesGenre = !genre || book.categoryLabel === genre
     const matchesQuery =
       normalizedQuery.length === 0 ||
       book.title.toLowerCase().includes(normalizedQuery) ||
       book.authorName.toLowerCase().includes(normalizedQuery) ||
       description.toLowerCase().includes(normalizedQuery)
+    const depth = availability ? getReadingDepth(chapters) : undefined
+    const matchesAvailability =
+      availability === undefined ||
+      (availability === 'ALL_CHAPTERS_OPENABLE'
+        ? depth?.allOpenable === true
+        : (depth?.openableChapters ?? 0) > 0)
 
-    return matchesGenre && matchesQuery
+    return matchesGenre && matchesQuery && matchesAvailability
   })
 }
 
@@ -88,7 +99,7 @@ export function getReadingDepth(
       totalChapters: 0,
       openableChapters: 0,
       continuousOpenableChapters: 0,
-      allOpenable: true,
+      allOpenable: false,
     }
   }
 

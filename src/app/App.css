@@ -1072,6 +1072,10 @@ button:focus-visible {
   background: var(--library-paper);
 }
 
+.library-recent-item.library-reading-note-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .library-book-cover,
 .library-recent-cover {
   display: flex;
@@ -1146,6 +1150,14 @@ button:focus-visible {
 
 .library-recent-chapter {
   margin-top: 0.55rem;
+}
+
+.library-reading-note-content {
+  margin: 0.55rem 0 0;
+  color: var(--library-ink);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .library-book-actions {
@@ -2252,6 +2264,68 @@ button:focus-visible {
   font-size: 0.85rem;
 }
 
+.chapter-reading-note-modal {
+  width: min(100%, 42rem);
+}
+
+.chapter-reading-note-chapter {
+  margin: 0 0 0.9rem;
+  color: #8d3f2f;
+  font-weight: 700;
+}
+
+.storage-fallback-notice,
+.chapter-reading-note-storage-warning {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(141, 63, 47, 0.32);
+  border-radius: 0.65rem;
+  color: #713125;
+  background: #fff4e8;
+  line-height: 1.5;
+}
+
+.storage-fallback-notice {
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+}
+
+.chapter-reading-note-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.chapter-reading-note-editor {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid #b9aea0;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #2b221a;
+  font: inherit;
+  line-height: 1.55;
+}
+
+.chapter-reading-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.chapter-reading-note-clear {
+  margin-right: auto;
+}
+
 /* Table of Contents Modal */
 .toc-search {
   margin-bottom: 1.25rem;
@@ -2339,6 +2413,60 @@ button:focus-visible {
   background: transparent;
   color: inherit;
   opacity: 0.55;
+}
+
+.book-text-search-modal {
+  width: min(100%, 44rem);
+}
+
+.book-text-search-count {
+  margin-bottom: 0.65rem;
+  color: #65594d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.book-text-search-result {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #ded8cd;
+  border-radius: 0.85rem;
+  background: #fff;
+  color: #2b221a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.book-text-search-result:hover {
+  border-color: #c69b6d;
+  background: #fffaf1;
+}
+
+.book-text-search-result:focus-visible {
+  outline: 3px solid #e1a867;
+  outline-offset: 2px;
+}
+
+.book-text-search-chapter {
+  color: #8d3f2f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.book-text-search-snippet {
+  line-height: 1.6;
+}
+
+.book-text-search-snippet mark {
+  border-radius: 0.2rem;
+  background: #ffe6a8;
+  color: inherit;
 }
 
 .toc-locked-label {
@@ -3131,7 +3259,7 @@ button:focus-visible {
     left: 0;
     z-index: 220;
     display: grid;
-    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.35rem;
     box-sizing: border-box;
@@ -3170,11 +3298,22 @@ button:focus-visible {
   }
 
   .reader-chrome-back,
-  .reader-chrome-bookmark {
+  .reader-chrome-bookmark,
+  .reader-chrome-search {
     min-width: 2.75rem;
     min-height: 2.75rem;
     padding: 0;
     font-size: 0.9rem;
+  }
+
+  .reader-mobile-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .reader-chrome-search {
+    font-size: 0.72rem;
   }
 
   .reader-chrome-context {

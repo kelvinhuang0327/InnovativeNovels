@@ -6,7 +6,10 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
+import {
+  CHAPTER_ACCESS,
+  type ChapterAccess,
+} from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ContentBook } from '../../application/catalog/contentRepository'
@@ -48,6 +51,76 @@ const sortingBooks: readonly ContentBook[] = [
   makeBook('sort-b', '來源第二本', '仙俠', '排序測試 B', '作者乙', 1),
   makeBook('sort-c', '來源第三本', '懸疑', '排序測試 C', '作者丙', 3),
   makeBook('sort-d', '來源第四本', '仙俠', '排序測試 D', '作者丁', 2),
+]
+
+const metadataSortingBooks: readonly ContentBook[] = [
+  makeBook('metadata-zulu', 'Zulu', '懸疑', '排序測試 Zulu', 'Wendy'),
+  makeBook('metadata-alpha', 'Alpha', '懸疑', '排序測試 Alpha', 'Bao'),
+  makeBook('metadata-echo', 'Echo', '懸疑', '排序測試 Echo', 'Ann'),
+  makeBook('metadata-bravo', 'Bravo', '懸疑', '排序測試 Bravo', 'Wendy'),
+]
+
+function withChapterAccesses(
+  book: ContentBook,
+  accesses: readonly ChapterAccess[],
+): ContentBook {
+  return {
+    ...book,
+    chapters: book.chapters.map((chapter, index) => ({
+      ...chapter,
+      access: accesses[index],
+    })),
+  }
+}
+
+const readabilitySortingBooks: readonly ContentBook[] = [
+  withChapterAccesses(
+    makeBook('readability-high', '可讀三章', '懸疑', '可讀排序樣本', '作者', 4),
+    [
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+    ],
+  ),
+  withChapterAccesses(
+    makeBook('readability-tie-first', '可讀兩章先', '懸疑', '可讀排序樣本', '作者', 3),
+    [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+  ),
+  withChapterAccesses(
+    makeBook('readability-tie-second', '可讀兩章後', '懸疑', '可讀排序樣本', '作者', 4),
+    [
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+    ],
+  ),
+  withChapterAccesses(
+    makeBook('readability-low', '可讀一章', '懸疑', '可讀排序樣本', '作者', 2),
+    [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+  ),
+  withChapterAccesses(
+    makeBook('readability-locked', '目前零章可讀', '懸疑', '可讀排序樣本', '作者', 2),
+    [CHAPTER_ACCESS.LOCKED, CHAPTER_ACCESS.UNAVAILABLE],
+  ),
+  makeBook('readability-empty', '尚無章節', '懸疑', '可讀排序樣本', '作者', 0),
+  makeBook(
+    'readability-other-genre',
+    '其他分類可讀四章',
+    '仙俠',
+    '可讀排序樣本',
+    '作者',
+    4,
+  ),
+  makeBook(
+    'readability-outside-search',
+    '搜尋外四章',
+    '懸疑',
+    '其他描述',
+    '作者',
+    4,
+  ),
 ]
 
 function getResultTitles(heading = '探索更多故事') {
@@ -131,6 +204,240 @@ describe('CatalogScreen', () => {
     expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
   })
 
+  it('sorts by openable chapter count in both directions with stable ties and zero-chapter books', () => {
+    const inputOrder = readabilitySortingBooks.map(({ book }) => book.id)
+
+    render(
+      <CatalogScreen
+        books={readabilitySortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(
+      screen.getByRole('option', { name: '可讀章節較多優先' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: '可讀章節較少優先' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles()).toEqual([
+      '其他分類可讀四章',
+      '搜尋外四章',
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+      '目前零章可讀',
+      '尚無章節',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles()).toEqual([
+      '目前零章可讀',
+      '尚無章節',
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+      '其他分類可讀四章',
+      '搜尋外四章',
+    ])
+    expect(readabilitySortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+
+    fireEvent.click(screen.getByRole('button', { name: '懸疑' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '可讀排序' },
+    })
+    fireEvent.change(screen.getByLabelText('章節可讀性'), {
+      target: { value: 'AT_LEAST_ONE_CHAPTER_OPENABLE' },
+    })
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+    ])
+  })
+
+  it('sorts by title and author in both directions while preserving default and tie order', () => {
+    const onOpenBook = vi.fn()
+
+    render(
+      <CatalogScreen
+        books={metadataSortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
+    expect(screen.getByRole('option', { name: '書名升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '書名降冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '作者升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '作者降冪' })).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+
+    fireEvent.change(sortControl, { target: { value: 'title-desc' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Echo', 'Bravo', 'Alpha'])
+
+    fireEvent.change(sortControl, { target: { value: 'author-asc' } })
+    expect(getResultTitles()).toEqual(['Echo', 'Alpha', 'Zulu', 'Bravo'])
+
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    fireEvent.click(
+      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+    )
+    expect(onOpenBook).toHaveBeenCalledWith('metadata-echo')
+
+    fireEvent.change(sortControl, { target: { value: 'author-desc' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Bravo', 'Alpha', 'Echo'])
+
+    fireEvent.change(sortControl, { target: { value: 'bookstore' } })
+    expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
+  })
+
+  it('sorts in either direction after genre and search filters and restores bookstore order when cleared', () => {
+    const filteredBooks: readonly ContentBook[] = [
+      ...metadataSortingBooks,
+      makeBook(
+        'metadata-other-genre',
+        'Outside Genre',
+        '仙俠',
+        '排序測試 Genre',
+        'Aaron',
+      ),
+      makeBook(
+        'metadata-other-search',
+        'Outside Search',
+        '懸疑',
+        '其他描述',
+        'Aaron',
+      ),
+    ]
+
+    render(
+      <CatalogScreen
+        books={filteredBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '懸疑' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '排序測試' },
+    })
+    const sortControl = screen.getByLabelText('排序方式')
+
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'author-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Echo',
+      'Alpha',
+      'Zulu',
+      'Bravo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'author-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Bravo',
+      'Alpha',
+      'Echo',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Alpha',
+      'Bravo',
+      'Echo',
+      'Zulu',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'title-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Echo',
+      'Bravo',
+      'Alpha',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'bookstore' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+
+    expect(getResultTitles()).toEqual([
+      'Zulu',
+      'Alpha',
+      'Echo',
+      'Bravo',
+      'Outside Genre',
+      'Outside Search',
+    ])
+    expect(sortControl).toHaveValue('bookstore')
+  })
+
+  it('keeps title sorting through search, whitespace, and clearing filters', () => {
+    render(
+      <CatalogScreen
+        books={metadataSortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const searchInput = screen.getByLabelText('搜尋小說')
+    const sortControl = screen.getByLabelText('排序方式')
+    fireEvent.change(searchInput, { target: { value: 'Wendy' } })
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+
+    expect(getResultTitles('篩選結果')).toEqual(['Bravo', 'Zulu'])
+
+    fireEvent.change(searchInput, { target: { value: '  \t  ' } })
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+    expect(sortControl).toHaveValue('title-asc')
+
+    fireEvent.change(searchInput, { target: { value: 'Ann' } })
+    expect(getResultTitles('篩選結果')).toEqual(['Echo'])
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+    expect(searchInput).toHaveValue('')
+    expect(sortControl).toHaveValue('title-asc')
+  })
+
   it('sorts after title, author, and description search filtering', () => {
     const searchableBooks: readonly ContentBook[] = [
       makeBook(
@@ -210,6 +517,56 @@ describe('CatalogScreen', () => {
     expect(screen.getByText('找到 2 本')).toBeInTheDocument()
   })
 
+  it('filters by chapter availability using access metadata and excludes zero-chapter books from all-openable', () => {
+    const availabilityBooks: readonly ContentBook[] = [
+      withChapterAccesses(
+        makeBook('all-openable', '全章開放', '懸疑', '可讀測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.PREVIEW],
+      ),
+      withChapterAccesses(
+        makeBook('partly-openable', '部分開放', '懸疑', '可讀測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+      ),
+      withChapterAccesses(
+        makeBook('none-openable', '尚未開放', '懸疑', '可讀測試', '作者', 1),
+        [CHAPTER_ACCESS.UNAVAILABLE],
+      ),
+      makeBook('empty-book', '尚無章節', '懸疑', '可讀測試', '作者', 0),
+    ]
+
+    render(
+      <CatalogScreen
+        books={availabilityBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const availabilityControl = screen.getByLabelText('章節可讀性')
+    expect(availabilityControl).toHaveValue('')
+    fireEvent.change(availabilityControl, {
+      target: { value: 'ALL_CHAPTERS_OPENABLE' },
+    })
+    expect(getResultTitles('篩選結果')).toEqual(['全章開放'])
+    expect(screen.getByText('找到 1 本')).toBeInTheDocument()
+
+    fireEvent.change(availabilityControl, {
+      target: { value: 'AT_LEAST_ONE_CHAPTER_OPENABLE' },
+    })
+    expect(getResultTitles('篩選結果')).toEqual(['全章開放', '部分開放'])
+    expect(screen.getByText('找到 2 本')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+    expect(getResultTitles()).toEqual([
+      '全章開放',
+      '部分開放',
+      '尚未開放',
+      '尚無章節',
+    ])
+    expect(availabilityControl).toHaveValue('')
+  })
+
   it('keeps sort-only state outside filtering and preserves callbacks and stable IDs', () => {
     const onContinueBook = vi.fn()
     const onOpenAuthoring = vi.fn()
@@ -237,7 +594,7 @@ describe('CatalogScreen', () => {
     )
 
     fireEvent.change(screen.getByLabelText('排序方式'), {
-      target: { value: 'chapters-desc' },
+      target: { value: 'title-asc' },
     })
 
     expect(screen.getByRole('heading', { name: '探索故事' })).toBeInTheDocument()
@@ -256,8 +613,14 @@ describe('CatalogScreen', () => {
     expect(onOpenAuthoring).not.toHaveBeenCalled()
 
     const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    const selectedBookCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '來源第一本' })
+      .closest('article')
+    expect(selectedBookCard).not.toBeNull()
     fireEvent.click(
-      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+      within(selectedBookCard as HTMLElement).getByRole('button', {
+        name: '查看書籍',
+      }),
     )
 
     expect(onOpenBook).toHaveBeenCalledTimes(1)
@@ -649,7 +1012,7 @@ describe('CatalogScreen', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders accurate readable depth labels for fully openable and partially accessible books', () => {
+  it('renders accurate readability labels and an explicit no-chapters state', () => {
     const mixedBooks: readonly ContentBook[] = [
       {
         book: {
@@ -708,6 +1071,7 @@ describe('CatalogScreen', () => {
           },
         ],
       },
+      makeBook('empty-book', '尚無章節小說', '懸疑', '尚無章節描述', '作者', 0),
     ]
 
     render(
@@ -727,15 +1091,23 @@ describe('CatalogScreen', () => {
     const partialCard = within(resultsRegion)
       .getByRole('heading', { level: 3, name: '部分解鎖小說' })
       .closest('article')
+    const emptyCard = within(resultsRegion)
+      .getByRole('heading', { level: 3, name: '尚無章節小說' })
+      .closest('article')
 
     expect(fullCard).not.toBeNull()
     expect(partialCard).not.toBeNull()
+    expect(emptyCard).not.toBeNull()
     expect(within(fullCard as HTMLElement).getByText('2 章可讀')).toBeInTheDocument()
     expect(within(partialCard as HTMLElement).getByText('可讀 2 / 3 章')).toBeInTheDocument()
+    expect(within(emptyCard as HTMLElement).getByText('尚無章節')).toBeInTheDocument()
+    expect(within(emptyCard as HTMLElement).queryByText(/0\s*\/\s*0/)).not.toBeInTheDocument()
 
     // Verify editorial shelf
     const editorialShelf = screen.getByRole('region', { name: '編輯精選' })
     expect(within(editorialShelf).getByText('沈墨 · 2 章可讀')).toBeInTheDocument()
     expect(within(editorialShelf).getByText('岑海 · 可讀 2 / 3 章')).toBeInTheDocument()
+    expect(within(editorialShelf).getByText('作者 · 尚無章節')).toBeInTheDocument()
+    expect(within(editorialShelf).queryByText(/0\s*\/\s*0/)).not.toBeInTheDocument()
   })
 })

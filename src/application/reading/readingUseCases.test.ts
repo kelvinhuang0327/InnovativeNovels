@@ -3,24 +3,31 @@ import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
 import { chapterSequence, type Chapter } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ChapterBookmark } from '../../domain/reading/chapterBookmark'
+import type { ChapterReadingNote } from '../../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type {
   ContentBook,
   ContentRepository,
 } from '../catalog/contentRepository'
 import type { ChapterBookmarksRepository } from './chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from './chapterReadingNotesRepository'
 import {
   addChapterBookmark,
   canNavigateToAdjacentChapter,
   describeChapterPosition,
+  getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
+  listChapterReadingNotes,
   listContinueReading,
   listTableOfContents,
   navigateToAdjacentChapter,
   openReadingChapter,
   recoverActiveReaderSession,
   removeChapterBookmark,
+  removeChapterReadingNote,
+  searchBookText,
+  saveChapterReadingNote,
   updateReadingProgress,
 } from './readingUseCases'
 import type { ReadingStateRepository } from './readingStateRepository'
@@ -45,6 +52,29 @@ function makeBook(id: string, chapters: readonly Chapter[]): ContentBook {
     book: { id: bookId(id), title: `Title ${id}`, authorName: 'Author', categoryLabel: 'Genre' },
     description: 'Description',
     chapters,
+  }
+}
+
+function makeSearchRepository(
+  books: readonly ContentBook[],
+  proseByChapterId: ReadonlyMap<string, unknown>,
+  onReadChapterProse?: (chapterId: string) => void,
+): ContentRepository {
+  return {
+    listBooks: () => books,
+    getBook: (requestedBookId) =>
+      books.find((entry) => entry.book.id === requestedBookId),
+    getChapterProse: (requestedChapterId) => {
+      onReadChapterProse?.(requestedChapterId)
+
+      if (requestedChapterId === 'broken') {
+        throw new Error('Malformed chapter prose')
+      }
+
+      return proseByChapterId.get(requestedChapterId) as
+        | readonly string[]
+        | undefined
+    },
   }
 }
 
@@ -136,6 +166,34 @@ class FakeBookmarksRepository implements ChapterBookmarksRepository {
     this.items = this.items.filter(
       (b) => !(b.bookId === targetBookId && b.chapterId === targetChapterId),
     )
+  }
+}
+
+class FakeChapterReadingNotesRepository
+  implements ChapterReadingNotesRepository
+{
+  private readonly notes = new Map<string, unknown>()
+
+  list(): readonly ChapterReadingNote[] {
+    return [...this.notes.values()] as readonly ChapterReadingNote[]
+  }
+
+  load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
+    return this.notes.get(
+      JSON.stringify([targetBookId, targetChapterId]),
+    ) as ChapterReadingNote | undefined
+  }
+
+  save(note: ChapterReadingNote): void {
+    this.notes.set(JSON.stringify([note.bookId, note.chapterId]), note)
+  }
+
+  remove(targetBookId: string, targetChapterId: string): void {
+    this.notes.delete(JSON.stringify([targetBookId, targetChapterId]))
+  }
+
+  addPersisted(value: unknown): void {
+    this.notes.set(`malformed-${this.notes.size}`, value)
   }
 }
 
@@ -318,6 +376,122 @@ describe('Chapter Bookmarks Use Cases', () => {
 
     const list = listChapterBookmarks(repo, bookmarksRepo)
     expect(list).toEqual([])
+  })
+})
+
+describe('chapter reading notes', () => {
+  it('keeps notes independent by book and chapter and preserves plain text', () => {
+    const repository = new FakeChapterReadingNotesRepository()
+
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', 'first\nline')
+    saveChapterReadingNote(repository, 'book-a', 'chapter-2', 'second chapter')
+    saveChapterReadingNote(repository, 'book-b', 'chapter-1', 'other book')
+
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')?.content).toBe(
+      'first\nline',
+    )
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'second chapter',
+    )
+    expect(getChapterReadingNote(repository, 'book-b', 'chapter-1')?.content).toBe(
+      'other book',
+    )
+
+    removeChapterReadingNote(repository, 'book-a', 'chapter-1')
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')).toBeUndefined()
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'second chapter',
+    )
+    expect(getChapterReadingNote(repository, 'book-b', 'chapter-1')?.content).toBe(
+      'other book',
+    )
+  })
+
+  it('treats whitespace-only content as clearing the current chapter note', () => {
+    const repository = new FakeChapterReadingNotesRepository()
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', 'saved note')
+    saveChapterReadingNote(repository, 'book-a', 'chapter-2', 'keep this note')
+
+    saveChapterReadingNote(repository, 'book-a', 'chapter-1', ' \n  ')
+
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-1')).toBeUndefined()
+    expect(getChapterReadingNote(repository, 'book-a', 'chapter-2')?.content).toBe(
+      'keep this note',
+    )
+  })
+
+  it('lists notes in content-book and canonical chapter order, including books outside the shelf', () => {
+    const firstBook = makeBook('book-a', [
+      chapter('book-a', 'a-3', 3, CHAPTER_ACCESS.READABLE),
+      chapter('book-a', 'a-2', 2, CHAPTER_ACCESS.PREVIEW),
+      chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const secondBook = makeBook('book-b', [
+      chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = new FakeContentRepository([firstBook, secondBook])
+    const notesRepository = new FakeChapterReadingNotesRepository()
+
+    saveChapterReadingNote(notesRepository, 'book-b', 'b-1', '最後一書')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-3', '第三章')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-2', '第二章')
+    saveChapterReadingNote(notesRepository, 'book-a', 'a-1', '第一章')
+
+    const entries = listChapterReadingNotes(contentRepository, notesRepository)
+
+    expect(
+      entries.map(({ book, chapter, note }) => [
+        book.book.id,
+        chapter.id,
+        note.content,
+      ]),
+    ).toEqual([
+      ['book-a', 'a-1', '第一章'],
+      ['book-a', 'a-2', '第二章'],
+      ['book-a', 'a-3', '第三章'],
+      ['book-b', 'b-1', '最後一書'],
+    ])
+  })
+
+  it('ignores locked, unavailable, orphaned, and malformed notes without throwing', () => {
+    const book = makeBook('book-a', [
+      chapter('book-a', 'a-readable', 1, CHAPTER_ACCESS.READABLE),
+      chapter('book-a', 'a-locked', 2, CHAPTER_ACCESS.LOCKED),
+      chapter('book-a', 'a-unavailable', 3, CHAPTER_ACCESS.UNAVAILABLE),
+    ])
+    const notesRepository = new FakeChapterReadingNotesRepository()
+    const validNote: ChapterReadingNote = {
+      bookId: bookId('book-a'),
+      chapterId: chapterId('a-readable'),
+      content: '可讀筆記',
+    }
+
+    notesRepository.addPersisted(validNote)
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'a-locked',
+      content: '鎖定筆記',
+    })
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'a-unavailable',
+      content: '暫不可用筆記',
+    })
+    notesRepository.addPersisted({
+      bookId: 'book-a',
+      chapterId: 'missing-chapter',
+      content: '孤立筆記',
+    })
+    notesRepository.addPersisted({ bookId: 'book-a', chapterId: 'a-readable', content: ' \n ' })
+    notesRepository.addPersisted({ bookId: 5, chapterId: 'a-readable', content: 'bad id' })
+    notesRepository.addPersisted(null)
+
+    expect(
+      listChapterReadingNotes(
+        new FakeContentRepository([book]),
+        notesRepository,
+      ).map((entry) => entry.note),
+    ).toEqual([validNote])
   })
 })
 
@@ -773,5 +947,123 @@ describe('updateReadingProgress', () => {
       paragraphIndex: 0,
       chapterProgress: 0.66,
     })
+  })
+})
+
+describe('searchBookText', () => {
+  it('returns no results for whitespace-only queries and searches only the current book', () => {
+    const currentBook = makeBook('book-a', [
+      chapter('book-a', 'a-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const otherBook = makeBook('book-b', [
+      chapter('book-b', 'b-1', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const readChapterProse = vi.fn()
+    const contentRepository = makeSearchRepository(
+      [currentBook, otherBook],
+      new Map([
+        ['a-1', ['A distant STORM crosses the harbor.']],
+        ['b-1', ['A distant storm crosses another harbor.']],
+      ]),
+      readChapterProse,
+    )
+
+    expect(searchBookText(contentRepository, currentBook, ' \n\t ')).toEqual(
+      [],
+    )
+    expect(searchBookText(contentRepository, currentBook, 'sToRm')).toEqual([
+      expect.objectContaining({
+        chapterId: 'a-1',
+        paragraphIndex: 0,
+        paragraphText: 'A distant STORM crosses the harbor.',
+      }),
+    ])
+    expect(readChapterProse).toHaveBeenCalledTimes(1)
+    expect(readChapterProse).toHaveBeenCalledWith('a-1')
+  })
+
+  it('returns one result per matching paragraph in chapter and paragraph order', () => {
+    const earlyParagraphs = [
+      'A TARGET appears, then target appears again.',
+      'target in the next paragraph',
+    ]
+    const book = makeBook('ordered-book', [
+      chapter('ordered-book', 'later', 2, CHAPTER_ACCESS.READABLE),
+      chapter('ordered-book', 'earlier', 1, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map([
+        ['earlier', earlyParagraphs],
+        ['later', ['Target in chapter two']],
+      ]),
+    )
+
+    const results = searchBookText(contentRepository, book, 'tArGeT')
+
+    expect(
+      results.map(({ chapterId: id, paragraphIndex, matchIndex }) => [
+        id,
+        paragraphIndex,
+        matchIndex,
+      ]),
+    ).toEqual([
+      ['earlier', 0, earlyParagraphs[0].toLowerCase().indexOf('target')],
+      ['earlier', 1, 0],
+      ['later', 0, 0],
+    ])
+  })
+
+  it('does not read prose from locked or unavailable chapters', () => {
+    const book = makeBook('access-book', [
+      chapter('access-book', 'readable', 1, CHAPTER_ACCESS.READABLE),
+      chapter('access-book', 'locked', 2, CHAPTER_ACCESS.LOCKED),
+      chapter('access-book', 'unavailable', 3, CHAPTER_ACCESS.UNAVAILABLE),
+    ])
+    const readChapterProse = vi.fn()
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map([
+        ['readable', ['A safe paragraph.']],
+        ['locked', ['Restricted prose must not leak.']],
+        ['unavailable', ['Unavailable prose must not leak.']],
+      ]),
+      readChapterProse,
+    )
+
+    expect(searchBookText(contentRepository, book, 'prose')).toEqual([])
+    expect(readChapterProse).toHaveBeenCalledTimes(1)
+    expect(readChapterProse).toHaveBeenCalledWith('readable')
+  })
+
+  it('skips missing, malformed, unusable, or failing chapter prose', () => {
+    const book = makeBook('malformed-book', [
+      chapter('malformed-book', 'missing', 1, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'malformed', 2, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'unusable', 3, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'broken', 4, CHAPTER_ACCESS.READABLE),
+      chapter('malformed-book', 'valid', 5, CHAPTER_ACCESS.READABLE),
+    ])
+    const contentRepository = makeSearchRepository(
+      [book],
+      new Map<string, unknown>([
+        ['malformed', { prose: ['target in a non-array payload'] }],
+        ['unusable', [null, 7, 'usable target paragraph']],
+        ['valid', ['valid target paragraph']],
+      ]),
+    )
+
+    const results = searchBookText(contentRepository, book, 'target')
+
+    expect(
+      results.map(({ chapterId: id, paragraphIndex, paragraphText }) => [
+        id,
+        paragraphIndex,
+        paragraphText,
+      ]),
+    ).toEqual([
+      ['unusable', 2, 'usable target paragraph'],
+      ['valid', 0, 'valid target paragraph'],
+    ])
   })
 })

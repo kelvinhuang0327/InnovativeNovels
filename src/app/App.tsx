@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import {
   getBookDetail,
   listCatalog,
@@ -23,22 +23,29 @@ import {
 import type { BookShelfRepository } from '../application/library/bookShelfRepository'
 import type { RecentReadingRepository } from '../application/library/recentReadingRepository'
 import type { ChapterBookmarksRepository } from '../application/reading/chapterBookmarksRepository'
+import type { ChapterReadingNotesRepository } from '../application/reading/chapterReadingNotesRepository'
 import type { ReaderPreferencesRepository } from '../application/reading/readerPreferencesRepository'
 import {
   addChapterBookmark,
   canNavigateToAdjacentChapter,
   describeChapterPosition,
+  getChapterReadingNote,
   isChapterBookmarked,
   listChapterBookmarks,
+  listChapterReadingNotes,
   listContinueReading,
   listTableOfContents,
   navigateToAdjacentChapter,
   openReadingChapter,
   recoverActiveReaderSession,
   removeChapterBookmark,
+  removeChapterReadingNote,
   resolveStartOrContinue,
+  saveChapterReadingNote,
+  searchBookText,
   updateReadingProgress,
   type BookmarkEntry,
+  type BookTextSearchResult,
   type OpenedChapter,
 } from '../application/reading/readingUseCases'
 import type { ActiveReaderSessionRepository } from '../application/reading/activeReaderSessionRepository'
@@ -47,6 +54,7 @@ import type { PwaDependencies } from '../application/pwa/pwaPorts'
 import { usePwaController } from '../application/pwa/usePwaController'
 import { bookId as toBookId, chapterId as toChapterId } from '../domain/catalog/identifiers'
 import type { ChapterBookmark } from '../domain/reading/chapterBookmark'
+import type { ChapterReadingNote } from '../domain/reading/chapterReadingNote'
 import type { ReadingPosition } from '../domain/reading/readingPosition'
 import {
   DEFAULT_READER_PREFERENCES,
@@ -68,9 +76,11 @@ import { LocalStorageAuthoringSessionRepository } from '../infrastructure/persis
 import { LocalStorageAuthoringProjectRepository } from '../infrastructure/persistence/localStorageAuthoringProjectRepository'
 import { LocalStorageBookShelfRepository } from '../infrastructure/persistence/localStorageBookShelfRepository'
 import { LocalStorageChapterBookmarksRepository } from '../infrastructure/persistence/localStorageChapterBookmarksRepository'
+import { LocalStorageChapterReadingNotesRepository } from '../infrastructure/persistence/localStorageChapterReadingNotesRepository'
 import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageRecentReadingRepository } from '../infrastructure/persistence/localStorageRecentReadingRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
+import { ResilientBrowserStorage } from '../infrastructure/persistence/resilientBrowserStorage'
 import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
 import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
 import './App.css'
@@ -82,6 +92,7 @@ export interface AppDependencies {
   readonly recentReadingRepository?: RecentReadingRepository
   readonly readerPreferencesRepository?: ReaderPreferencesRepository
   readonly chapterBookmarksRepository?: ChapterBookmarksRepository
+  readonly chapterReadingNotesRepository?: ChapterReadingNotesRepository
   readonly activeReaderSessionRepository?: ActiveReaderSessionRepository
   readonly authoringGatewayClient?: AuthoringGatewayClient
   readonly authoringProjectRepository?: AuthoringProjectRepository
@@ -110,6 +121,7 @@ type Screen =
       readonly openedChapter: OpenedChapter
       readonly returnTo?: 'catalog' | 'library'
       readonly recoveryStatus?: string
+      readonly searchTargetParagraphIndex?: number
       readonly chapterOpenFailure?: {
         readonly position: ReadingPosition
       }
@@ -117,6 +129,7 @@ type Screen =
 
 const defaultContentRepository = new StaticContentRepository()
 const defaultAuthoringGatewayClient = new AuthoringGatewayClientAdapter()
+const defaultBrowserStorage = new ResilientBrowserStorage(() => window.localStorage)
 const defaultPwaDependencies: PwaDependencies = {
   browser: new BrowserPwaAdapter(window, window.navigator),
   serviceWorker: new ViteServiceWorkerAdapter(),
@@ -150,6 +163,28 @@ class MemoryBookmarksRepository implements ChapterBookmarksRepository {
     this.items = this.items.filter(
       (i) => !(i.bookId === bookId && i.chapterId === chapterId),
     )
+  }
+}
+
+class MemoryChapterReadingNotesRepository
+  implements ChapterReadingNotesRepository
+{
+  private readonly notes = new Map<string, ChapterReadingNote>()
+
+  list(): readonly ChapterReadingNote[] {
+    return [...this.notes.values()]
+  }
+
+  load(targetBookId: string, targetChapterId: string): ChapterReadingNote | undefined {
+    return this.notes.get(JSON.stringify([targetBookId, targetChapterId]))
+  }
+
+  save(note: ChapterReadingNote): void {
+    this.notes.set(JSON.stringify([note.bookId, note.chapterId]), note)
+  }
+
+  remove(targetBookId: string, targetChapterId: string): void {
+    this.notes.delete(JSON.stringify([targetBookId, targetChapterId]))
   }
 }
 
@@ -222,46 +257,52 @@ class MemoryAuthoringSessionRepository implements AuthoringSessionRepository {
 }
 
 function createDefaultDependencies(): AppDependencies {
+  const storage = defaultBrowserStorage
+
   return {
     contentRepository: defaultContentRepository,
     readingStateRepository: new LocalStorageReadingStateRepository(
-      window.localStorage,
+      storage,
     ),
     bookShelfRepository: new LocalStorageBookShelfRepository(
-      window.localStorage,
+      storage,
     ),
     recentReadingRepository: new LocalStorageRecentReadingRepository(
-      window.localStorage,
+      storage,
     ),
     readerPreferencesRepository: new LocalStorageReaderPreferencesRepository(
-      window.localStorage,
+      storage,
     ),
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
-      window.localStorage,
+      storage,
     ),
+    chapterReadingNotesRepository:
+      new LocalStorageChapterReadingNotesRepository(storage),
     activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
-      window.localStorage,
+      storage,
     ),
-    authoringSessionRepository: new LocalStorageAuthoringSessionRepository(
-      window.localStorage,
-    ),
-    authoringProjectRepository: new LocalStorageAuthoringProjectRepository(
-      window.localStorage,
-    ),
+    authoringSessionRepository: new LocalStorageAuthoringSessionRepository(storage),
+    authoringProjectRepository: new LocalStorageAuthoringProjectRepository(storage),
     clipboardPort: new BrowserClipboardAdapter(window.navigator.clipboard),
     portableProjectFilePort: new BrowserPortableProjectFileAdapter(),
   }
 }
 
 function App({
-  dependencies = createDefaultDependencies(),
+  dependencies: providedDependencies,
   pwaDependencies = defaultPwaDependencies,
 }: AppProps) {
+  const dependencies = providedDependencies ?? createDefaultDependencies()
   const prefRepo =
     dependencies.readerPreferencesRepository ??
     new MemoryPreferencesRepository()
   const bookmarkRepo =
     dependencies.chapterBookmarksRepository ?? new MemoryBookmarksRepository()
+  const [memoryChapterReadingNotesRepo] = useState(
+    () => new MemoryChapterReadingNotesRepository(),
+  )
+  const chapterReadingNotesRepo =
+    dependencies.chapterReadingNotesRepository ?? memoryChapterReadingNotesRepo
   const activeSessionRepo =
     dependencies.activeReaderSessionRepository ??
     new MemoryActiveReaderSessionRepository()
@@ -315,6 +356,13 @@ function App({
     savedBookIds: [...bookShelfRepo.list()],
     recentBookIds: [...recentReadingRepo.list()],
   }))
+  const storageIsPersistent = useSyncExternalStore(
+    defaultBrowserStorage.subscribe,
+    defaultBrowserStorage.getSnapshot,
+    () => true,
+  )
+  const isPersistentStorageAvailable =
+    providedDependencies !== undefined || storageIsPersistent
 
   const pwa = usePwaController(pwaDependencies)
 
@@ -359,6 +407,11 @@ function App({
       savedBookIds: [...bookShelfRepo.list()],
       recentBookIds: [...recentReadingRepo.list()],
     })
+  }
+
+  const handleRemoveReadingNote = (bookId: string, chapterId: string) => {
+    removeChapterReadingNote(chapterReadingNotesRepo, bookId, chapterId)
+    refreshLibraryState()
   }
 
   const handleToggleBookshelf = (bookId: string) => {
@@ -408,6 +461,7 @@ function App({
   const openReaderChapter = (
     position: ReadingPosition,
     returnTo: 'catalog' | 'library' = 'catalog',
+    searchTargetParagraphIndex?: number,
   ) => {
     const openedChapter = openReadingChapter(
       dependencies.contentRepository,
@@ -418,17 +472,40 @@ function App({
     if (openedChapter) {
       activeSessionRepo.save(openedChapter.book.book.id)
       recordRecentReading(openedChapter.book.book.id)
-      setScreen({ name: 'reader', openedChapter, returnTo })
+      setScreen({
+        name: 'reader',
+        openedChapter,
+        returnTo,
+        searchTargetParagraphIndex,
+      })
     } else {
       showReaderChapterOpenFailure(position)
     }
   }
 
   const handleJumpBookmark = (position: ReadingPosition) => {
-    openReaderChapter(
-      position,
-      screen.name === 'reader' ? screen.returnTo : 'catalog',
-    )
+    const returnTo: 'catalog' | 'library' =
+      screen.name === 'reader'
+        ? screen.returnTo ?? 'catalog'
+        : screen.name === 'library'
+          ? 'library'
+          : 'catalog'
+    openReaderChapter(position, returnTo)
+  }
+
+  const handleOpenReadingNote = (bookId: string, chapterId: string) => {
+    const savedPosition = dependencies.readingStateRepository.load(bookId)
+    const position =
+      savedPosition?.bookId === bookId && savedPosition.chapterId === chapterId
+        ? savedPosition
+        : {
+            bookId: toBookId(bookId),
+            chapterId: toChapterId(chapterId),
+            paragraphIndex: 0,
+            chapterProgress: 0,
+          }
+
+    openReaderChapter(position, 'library')
   }
 
   const openBookDetail = (
@@ -535,6 +612,11 @@ function App({
     >
       <p className="eyebrow">InnovativeNovels</p>
       <PwaControls {...pwa} />
+      {providedDependencies === undefined && !storageIsPersistent && (
+        <p className="storage-fallback-notice" role="status">
+          瀏覽器永久儲存目前不可用。閱讀進度、閱讀設定、書架、書籤與章節筆記只會暫存在目前分頁，重新整理或關閉後將無法還原。
+        </p>
+      )}
 
       {screen.name === 'catalog' && (
         <CatalogScreen
@@ -552,13 +634,22 @@ function App({
       {screen.name === 'library' && (
         <LibraryScreen
           books={bookshelfBooks}
+          bookmarks={bookmarks}
+          notes={listChapterReadingNotes(
+            dependencies.contentRepository,
+            chapterReadingNotesRepo,
+          )}
           continueReading={listContinueReading(
             dependencies.contentRepository,
             dependencies.readingStateRepository,
           )}
           onBackToBookstore={() => setScreen({ name: 'catalog' })}
           onContinueBook={(bookId) => openReader(bookId, 'library')}
+          onOpenBookmark={handleJumpBookmark}
+          onOpenReadingNote={handleOpenReadingNote}
           onOpenBook={(bookId) => openBookDetail(bookId, 'library')}
+          onRemoveBookmark={handleRemoveBookmark}
+          onRemoveReadingNote={handleRemoveReadingNote}
           onRemoveFromBookshelf={handleToggleBookshelf}
           recentReading={recentReading}
         />
@@ -677,6 +768,7 @@ function App({
           )}
           onChangePreferences={handleUpdatePreferences}
           onResetPreferences={handleResetPreferences}
+          isPersistentStorageAvailable={isPersistentStorageAvailable}
           onToggleBookmark={() =>
             handleToggleBookmark(
               screen.openedChapter.book.book.id,
@@ -685,6 +777,21 @@ function App({
           }
           onSelectBookmark={handleJumpBookmark}
           onRemoveBookmark={handleRemoveBookmark}
+          loadChapterReadingNote={() =>
+            getChapterReadingNote(
+              chapterReadingNotesRepo,
+              screen.openedChapter.book.book.id,
+              screen.openedChapter.chapter.id,
+            )?.content ?? ''
+          }
+          onSaveChapterReadingNote={(content) =>
+            saveChapterReadingNote(
+              chapterReadingNotesRepo,
+              screen.openedChapter.book.book.id,
+              screen.openedChapter.chapter.id,
+              content,
+            )
+          }
           onSelectChapter={(targetChapterId) =>
             openReaderChapter(
               {
@@ -696,6 +803,26 @@ function App({
               screen.returnTo,
             )
           }
+          searchBookText={(query) =>
+            searchBookText(
+              dependencies.contentRepository,
+              screen.openedChapter.book,
+              query,
+            )
+          }
+          onSelectBookTextSearchResult={(result: BookTextSearchResult) =>
+            openReaderChapter(
+              {
+                bookId: toBookId(screen.openedChapter.book.book.id),
+                chapterId: toChapterId(result.chapterId),
+                paragraphIndex: result.paragraphIndex,
+                chapterProgress: 0,
+              },
+              screen.returnTo,
+              result.paragraphIndex,
+            )
+          }
+          searchTargetParagraphIndex={screen.searchTargetParagraphIndex}
           onBackToBook={() => {
             activeSessionRepo.clear()
             setScreen({

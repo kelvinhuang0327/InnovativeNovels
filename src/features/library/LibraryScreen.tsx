@@ -1,21 +1,34 @@
 import { useState } from 'react'
 import type { ContentBook } from '../../application/catalog/contentRepository'
-import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
+import type {
+  BookmarkEntry,
+  ChapterReadingNoteEntry,
+  ContinueReadingEntry,
+} from '../../application/reading/readingUseCases'
 import {
   filterBookshelfBooks,
   type RecentReadingEntry,
 } from '../../application/library/libraryUseCases'
+import { serializeReadingDataExport } from '../../application/reading/readingDataExport'
 import { ContinueReadingShelf } from './ContinueReadingShelf'
 
 interface LibraryScreenProps {
   readonly books: readonly ContentBook[]
+  readonly bookmarks: readonly BookmarkEntry[]
+  readonly notes: readonly ChapterReadingNoteEntry[]
   readonly recentReading: readonly RecentReadingEntry[]
   readonly continueReading: readonly ContinueReadingEntry[]
   readonly onBackToBookstore: () => void
   readonly onOpenBook: (bookId: string) => void
   readonly onContinueBook: (bookId: string) => void
+  readonly onOpenBookmark: (position: BookmarkEntry['position']) => void
+  readonly onRemoveBookmark: (bookId: string, chapterId: string) => void
+  readonly onOpenReadingNote: (bookId: string, chapterId: string) => void
+  readonly onRemoveReadingNote: (bookId: string, chapterId: string) => void
   readonly onRemoveFromBookshelf: (bookId: string) => void
 }
+
+type SavedItemsScope = 'all' | 'bookmarks' | 'notes'
 
 function chapterProgressPercentage(chapterProgress: number): number {
   if (!Number.isFinite(chapterProgress)) {
@@ -134,16 +147,80 @@ function RecentReadingCard({
 
 export function LibraryScreen({
   books,
+  bookmarks,
+  notes,
   recentReading,
   continueReading,
   onBackToBookstore,
   onOpenBook,
   onContinueBook,
+  onOpenBookmark,
+  onRemoveBookmark,
+  onOpenReadingNote,
+  onRemoveReadingNote,
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
+  const [savedItemsSearch, setSavedItemsSearch] = useState('')
+  const [savedItemsScope, setSavedItemsScope] = useState<SavedItemsScope>('all')
   const hasBookshelfSearch = bookshelfSearch.trim().length > 0
   const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
+  const normalizedSavedItemsSearch = savedItemsSearch.trim().toLowerCase()
+  const hasSavedItemsSearch = normalizedSavedItemsSearch.length > 0
+  const searchFilteredBookmarks = hasSavedItemsSearch
+    ? bookmarks.filter(({ book, chapter }) =>
+        [book.book.title, chapter.title].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : bookmarks
+  const searchFilteredNotes = hasSavedItemsSearch
+    ? notes.filter(({ book, chapter, note }) =>
+        [book.book.title, chapter.title, note.content].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : notes
+  const visibleBookmarks =
+    savedItemsScope === 'notes' ? [] : searchFilteredBookmarks
+  const visibleNotes =
+    savedItemsScope === 'bookmarks' ? [] : searchFilteredNotes
+  const hasExportableSavedItems =
+    visibleBookmarks.length > 0 || visibleNotes.length > 0
+  const savedItemsScopeLabel =
+    savedItemsScope === 'bookmarks'
+      ? '書籤'
+      : savedItemsScope === 'notes'
+        ? '筆記'
+        : '書籤或筆記'
+  const exportButtonLabel =
+    savedItemsScope === 'all' ? '匯出書籤與筆記' : `匯出${savedItemsScopeLabel}`
+  const exportEmptyState = hasSavedItemsSearch
+    ? `目前沒有符合搜尋條件可匯出的${savedItemsScopeLabel}。`
+    : `目前沒有可匯出的${savedItemsScopeLabel}。`
+
+  function handleExportSavedItems() {
+    if (!hasExportableSavedItems) {
+      return
+    }
+
+    const serialized = serializeReadingDataExport(visibleBookmarks, visibleNotes)
+
+    if (serialized.length === 0) {
+      return
+    }
+
+    const file = new Blob([serialized], { type: 'text/plain;charset=utf-8' })
+    const objectUrl = URL.createObjectURL(file)
+    const downloadLink = document.createElement('a')
+    downloadLink.href = objectUrl
+    downloadLink.download = 'reading-data.txt'
+    downloadLink.hidden = true
+    document.body.append(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
 
   return (
     <section
@@ -162,12 +239,233 @@ export function LibraryScreen({
         </div>
       </header>
 
+      <div className="library-search">
+        <label
+          className="library-search-label"
+          htmlFor="library-saved-items-search"
+        >
+          搜尋已保存內容
+        </label>
+        <div className="library-search-controls">
+          <input
+            className="library-search-input"
+            id="library-saved-items-search"
+            placeholder="搜尋書名、章名或筆記文字"
+            type="search"
+            value={savedItemsSearch}
+            onChange={(event) => setSavedItemsSearch(event.target.value)}
+          />
+          {hasSavedItemsSearch && (
+            <button
+              className="button-secondary library-search-clear"
+              type="button"
+              onClick={() => setSavedItemsSearch('')}
+            >
+              清除搜尋
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="library-search">
+        <p
+          className="library-search-label"
+          id="library-saved-items-scope-label"
+        >
+          類型範圍
+        </p>
+        <div
+          aria-labelledby="library-saved-items-scope-label"
+          className="library-search-controls"
+          role="group"
+        >
+          <button
+            aria-pressed={savedItemsScope === 'all'}
+            className={savedItemsScope === 'all' ? undefined : 'button-secondary'}
+            type="button"
+            onClick={() => setSavedItemsScope('all')}
+          >
+            全部
+          </button>
+          <button
+            aria-pressed={savedItemsScope === 'bookmarks'}
+            className={
+              savedItemsScope === 'bookmarks' ? undefined : 'button-secondary'
+            }
+            type="button"
+            onClick={() => setSavedItemsScope('bookmarks')}
+          >
+            書籤
+          </button>
+          <button
+            aria-pressed={savedItemsScope === 'notes'}
+            className={savedItemsScope === 'notes' ? undefined : 'button-secondary'}
+            type="button"
+            onClick={() => setSavedItemsScope('notes')}
+          >
+            筆記
+          </button>
+        </div>
+      </div>
+
+      <div className="library-book-actions">
+        {hasExportableSavedItems ? (
+          <button type="button" onClick={handleExportSavedItems}>
+            {exportButtonLabel}
+          </button>
+        ) : (
+          <p role="status">{exportEmptyState}</p>
+        )}
+      </div>
+
       {continueReading.length > 0 && (
         <ContinueReadingShelf
           entries={continueReading}
           onContinueBook={onContinueBook}
         />
       )}
+
+      <section
+        aria-labelledby="bookmarks-heading"
+        className="library-section"
+        hidden={savedItemsScope === 'notes'}
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">儲存的閱讀位置</p>
+            <h2 className="section-heading" id="bookmarks-heading">
+              章節書籤
+            </h2>
+          </div>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${bookmarks.length} 個`
+              : `${visibleBookmarks.length} / ${bookmarks.length} 個`}
+          </p>
+        </div>
+
+        {bookmarks.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>
+              {hasSavedItemsSearch
+                ? '目前沒有符合搜尋條件的章節書籤。'
+                : '還沒有章節書籤。'}
+            </p>
+          </div>
+        ) : visibleBookmarks.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>
+              {savedItemsScope === 'all'
+                ? '找不到符合條件的章節書籤'
+                : '找不到符合目前範圍與搜尋條件的章節書籤'}
+            </p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {visibleBookmarks.map(({ book, chapter, position }) => (
+              <li
+                className="library-recent-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <p className="book-meta">{book.book.categoryLabel}</p>
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() => onOpenBookmark(position)}
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveBookmark(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="reading-notes-heading"
+        className="library-section"
+        hidden={savedItemsScope === 'bookmarks'}
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">閱讀時留下的想法</p>
+            <h2 className="section-heading" id="reading-notes-heading">
+              章節筆記
+            </h2>
+          </div>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${notes.length} 則`
+              : `${visibleNotes.length} / ${notes.length} 則`}
+          </p>
+        </div>
+
+        {notes.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>
+              {hasSavedItemsSearch
+                ? '目前沒有符合搜尋條件的章節筆記。'
+                : '還沒有章節筆記。'}
+            </p>
+          </div>
+        ) : visibleNotes.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>
+              {savedItemsScope === 'all'
+                ? '找不到符合條件的章節筆記'
+                : '找不到符合目前範圍與搜尋條件的章節筆記'}
+            </p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {visibleNotes.map(({ book, chapter, note }) => (
+              <li
+                className="library-recent-item library-reading-note-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <p className="library-reading-note-content">{note.content}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenReadingNote(book.book.id, chapter.id)
+                      }
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveReadingNote(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section
         aria-labelledby="bookshelf-heading"

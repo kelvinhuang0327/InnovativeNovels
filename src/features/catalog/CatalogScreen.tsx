@@ -5,6 +5,7 @@ import {
   getReadingDepth,
   listGenres,
 } from '../../application/catalog/catalogUseCases'
+import type { CatalogAvailability } from '../../application/catalog/catalogUseCases'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { ContinueReadingEntry } from '../../application/reading/readingUseCases'
 import { ContinueReadingShelf } from '../library/ContinueReadingShelf'
@@ -33,16 +34,33 @@ interface EditorialShelfProps {
   readonly onOpenBook: (bookId: string) => void
 }
 
-type CatalogSortMode = 'bookstore' | 'chapters-desc' | 'chapters-asc'
+type CatalogSortMode =
+  | 'bookstore'
+  | 'title-asc'
+  | 'title-desc'
+  | 'author-asc'
+  | 'author-desc'
+  | 'chapters-desc'
+  | 'chapters-asc'
+  | 'readable-desc'
+  | 'readable-asc'
 
 const CATALOG_SORT_OPTIONS: readonly {
   readonly value: CatalogSortMode
   readonly label: string
 }[] = [
   { value: 'bookstore', label: '書庫順序' },
+  { value: 'title-asc', label: '書名升冪' },
+  { value: 'title-desc', label: '書名降冪' },
+  { value: 'author-asc', label: '作者升冪' },
+  { value: 'author-desc', label: '作者降冪' },
   { value: 'chapters-desc', label: '章節較多優先' },
   { value: 'chapters-asc', label: '章節較少優先' },
+  { value: 'readable-desc', label: '可讀章節較多優先' },
+  { value: 'readable-asc', label: '可讀章節較少優先' },
 ]
+
+const CATALOG_TEXT_COLLATOR = new Intl.Collator('zh-Hant')
 
 function sortCatalogResults(
   entries: readonly ContentBook[],
@@ -52,19 +70,39 @@ function sortCatalogResults(
     return entries
   }
 
-  return entries
-    .map((entry, index) => ({ entry, index }))
-    .sort((left, right) => {
-      const chapterDifference =
-        left.entry.chapters.length - right.entry.chapters.length
+  const isReadabilitySort = sortMode.startsWith('readable-')
 
-      if (chapterDifference === 0) {
+  return entries
+    .map((entry, index) => ({
+      entry,
+      index,
+      openableChapterCount: isReadabilitySort
+        ? getReadingDepth(entry.chapters).openableChapters
+        : 0,
+    }))
+    .sort((left, right) => {
+      const difference =
+        sortMode.startsWith('title-')
+          ? CATALOG_TEXT_COLLATOR.compare(
+              left.entry.book.title,
+              right.entry.book.title,
+            )
+          : sortMode.startsWith('author-')
+            ? CATALOG_TEXT_COLLATOR.compare(
+              left.entry.book.authorName,
+              right.entry.book.authorName,
+            )
+            : isReadabilitySort
+              ? left.openableChapterCount - right.openableChapterCount
+              : left.entry.chapters.length - right.entry.chapters.length
+
+      if (difference === 0) {
         return left.index - right.index
       }
 
-      return sortMode === 'chapters-desc'
-        ? -chapterDifference
-        : chapterDifference
+      return sortMode.endsWith('-desc')
+        ? -difference
+        : difference
     })
     .map(({ entry }) => entry)
 }
@@ -167,6 +205,14 @@ function GenreDiscovery({
   )
 }
 
+function formatCatalogCardDepthLabel(
+  depth: ReturnType<typeof getReadingDepth>,
+): string {
+  return depth.totalChapters === 0
+    ? '尚無章節'
+    : formatCatalogDepthLabel(depth)
+}
+
 function EditorialShelf({ books, onOpenBook }: EditorialShelfProps) {
   const editorialBooks = books.slice(0, 3)
 
@@ -192,7 +238,7 @@ function EditorialShelf({ books, onOpenBook }: EditorialShelfProps) {
       <ul className="editorial-list">
         {editorialBooks.map(({ book, chapters, description }) => {
           const depth = getReadingDepth(chapters)
-          const depthLabel = formatCatalogDepthLabel(depth)
+          const depthLabel = formatCatalogCardDepthLabel(depth)
 
           return (
             <li className="editorial-card" key={book.id}>
@@ -236,7 +282,7 @@ function BookCard({
   onOpenBook,
 }: ContentBook & { readonly onOpenBook: (bookId: string) => void }) {
   const depth = getReadingDepth(chapters)
-  const depthLabel = formatCatalogDepthLabel(depth)
+  const depthLabel = formatCatalogCardDepthLabel(depth)
 
   return (
     <article className="book-card">
@@ -279,18 +325,25 @@ export function CatalogScreen({
   const [selectedGenre, setSelectedGenre] = useState<string | undefined>(
     undefined,
   )
+  const [availabilityFilter, setAvailabilityFilter] = useState<
+    CatalogAvailability | undefined
+  >()
   const [sortMode, setSortMode] = useState<CatalogSortMode>('bookstore')
   const searchInputId = useId()
   const sortInputId = useId()
+  const availabilityInputId = useId()
 
   const genres = listGenres(books)
   const filteredBooks = filterCatalog(books, {
     searchText,
     genre: selectedGenre,
+    availability: availabilityFilter,
   })
   const visibleBooks = sortCatalogResults(filteredBooks, sortMode)
   const isFiltering =
-    searchText.trim().length > 0 || selectedGenre !== undefined
+    searchText.trim().length > 0 ||
+    selectedGenre !== undefined ||
+    availabilityFilter !== undefined
   const resultSummary = isFiltering
     ? `找到 ${visibleBooks.length} 本`
     : `共 ${visibleBooks.length} 本`
@@ -298,6 +351,7 @@ export function CatalogScreen({
   const clearFilters = () => {
     setSearchText('')
     setSelectedGenre(undefined)
+    setAvailabilityFilter(undefined)
   }
 
   return (
@@ -354,6 +408,30 @@ export function CatalogScreen({
                 {label}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div className="catalog-sort-block">
+          <label className="catalog-sort-label" htmlFor={availabilityInputId}>
+            章節可讀性
+          </label>
+          <select
+            className="catalog-sort-select"
+            id={availabilityInputId}
+            onChange={(event) =>
+              setAvailabilityFilter(
+                event.target.value === ''
+                  ? undefined
+                  : (event.target.value as CatalogAvailability),
+              )
+            }
+            value={availabilityFilter ?? ''}
+          >
+            <option value="">全部作品</option>
+            <option value="ALL_CHAPTERS_OPENABLE">所有章節皆可閱讀</option>
+            <option value="AT_LEAST_ONE_CHAPTER_OPENABLE">
+              至少一章可閱讀
+            </option>
           </select>
         </div>
 
