@@ -2274,6 +2274,22 @@ button:focus-visible {
   font-weight: 700;
 }
 
+.storage-fallback-notice,
+.chapter-reading-note-storage-warning {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(141, 63, 47, 0.32);
+  border-radius: 0.65rem;
+  color: #713125;
+  background: #fff4e8;
+  line-height: 1.5;
+}
+
+.storage-fallback-notice {
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+}
+
 .chapter-reading-note-label {
   display: block;
   margin-bottom: 0.4rem;

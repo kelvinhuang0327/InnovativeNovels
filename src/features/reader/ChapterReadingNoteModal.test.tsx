@@ -5,10 +5,15 @@ import { ChapterReadingNoteModal } from './ChapterReadingNoteModal'
 
 interface HarnessProps {
   readonly initialContent?: string
+  readonly isPersistentStorageAvailable?: boolean
   readonly onSave: (content: string) => void
 }
 
-function Harness({ initialContent = '', onSave }: HarnessProps) {
+function Harness({
+  initialContent = '',
+  isPersistentStorageAvailable = true,
+  onSave,
+}: HarnessProps) {
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
@@ -25,6 +30,7 @@ function Harness({ initialContent = '', onSave }: HarnessProps) {
         isOpen={isOpen}
         chapterTitle="第一章：潮聲來信"
         initialContent={initialContent}
+        isPersistentStorageAvailable={isPersistentStorageAvailable}
         triggerRef={triggerRef}
         onClose={() => setIsOpen(false)}
         onSave={onSave}
@@ -33,10 +39,17 @@ function Harness({ initialContent = '', onSave }: HarnessProps) {
   )
 }
 
-function renderHarness(initialContent = '') {
+function renderHarness(
+  initialContent = '',
+  isPersistentStorageAvailable = true,
+) {
   const onSave = vi.fn()
   const view = render(
-    <Harness initialContent={initialContent} onSave={onSave} />,
+    <Harness
+      initialContent={initialContent}
+      isPersistentStorageAvailable={isPersistentStorageAvailable}
+      onSave={onSave}
+    />,
   )
 
   return { ...view, onSave }
@@ -83,6 +96,16 @@ describe('ChapterReadingNoteModal', () => {
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith('')
     expect(screen.queryByRole('dialog', { name: '本章筆記' })).not.toBeInTheDocument()
+  })
+
+  it('states that notes are session-only when persistent browser storage is unavailable', () => {
+    renderHarness('', false)
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟本章筆記' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '本章筆記只暫存在目前分頁，重新整理或關閉分頁後會遺失。',
+    )
   })
 
   it('closes on Escape and returns focus to its trigger without saving', () => {

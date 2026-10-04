@@ -9,6 +9,7 @@
     "generate:pwa-assets": "pwa-assets-generator --preset minimal-2023 public/novel-mark.svg",
     "lint": "eslint .",
     "test": "vitest",
+    "test:e2e": "playwright test",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "validate:content": "vitest run src/infrastructure/content/catalogContentLoader.test.ts",
@@ -36,6 +37,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.2",

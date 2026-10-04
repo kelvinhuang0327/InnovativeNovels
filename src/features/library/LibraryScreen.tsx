@@ -28,6 +28,8 @@ interface LibraryScreenProps {
   readonly onRemoveFromBookshelf: (bookId: string) => void
 }
 
+type SavedItemsScope = 'all' | 'bookmarks' | 'notes'
+
 function chapterProgressPercentage(chapterProgress: number): number {
   if (!Number.isFinite(chapterProgress)) {
     return 0
@@ -160,27 +162,42 @@ export function LibraryScreen({
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
   const [savedItemsSearch, setSavedItemsSearch] = useState('')
+  const [savedItemsScope, setSavedItemsScope] = useState<SavedItemsScope>('all')
   const hasBookshelfSearch = bookshelfSearch.trim().length > 0
   const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
   const normalizedSavedItemsSearch = savedItemsSearch.trim().toLowerCase()
   const hasSavedItemsSearch = normalizedSavedItemsSearch.length > 0
-  const visibleBookmarks = hasSavedItemsSearch
+  const searchFilteredBookmarks = hasSavedItemsSearch
     ? bookmarks.filter(({ book, chapter }) =>
         [book.book.title, chapter.title].some((value) =>
           value.toLowerCase().includes(normalizedSavedItemsSearch),
         ),
       )
     : bookmarks
-  const visibleNotes = hasSavedItemsSearch
+  const searchFilteredNotes = hasSavedItemsSearch
     ? notes.filter(({ book, chapter, note }) =>
         [book.book.title, chapter.title, note.content].some((value) =>
           value.toLowerCase().includes(normalizedSavedItemsSearch),
         ),
       )
     : notes
+  const visibleBookmarks =
+    savedItemsScope === 'notes' ? [] : searchFilteredBookmarks
+  const visibleNotes =
+    savedItemsScope === 'bookmarks' ? [] : searchFilteredNotes
   const hasExportableSavedItems =
     visibleBookmarks.length > 0 || visibleNotes.length > 0
-  const hasSavedItems = bookmarks.length > 0 || notes.length > 0
+  const savedItemsScopeLabel =
+    savedItemsScope === 'bookmarks'
+      ? '書籤'
+      : savedItemsScope === 'notes'
+        ? '筆記'
+        : '書籤或筆記'
+  const exportButtonLabel =
+    savedItemsScope === 'all' ? '匯出書籤與筆記' : `匯出${savedItemsScopeLabel}`
+  const exportEmptyState = hasSavedItemsSearch
+    ? `目前沒有符合搜尋條件可匯出的${savedItemsScopeLabel}。`
+    : `目前沒有可匯出的${savedItemsScopeLabel}。`
 
   function handleExportSavedItems() {
     if (!hasExportableSavedItems) {
@@ -250,17 +267,54 @@ export function LibraryScreen({
         </div>
       </div>
 
+      <div className="library-search">
+        <p
+          className="library-search-label"
+          id="library-saved-items-scope-label"
+        >
+          類型範圍
+        </p>
+        <div
+          aria-labelledby="library-saved-items-scope-label"
+          className="library-search-controls"
+          role="group"
+        >
+          <button
+            aria-pressed={savedItemsScope === 'all'}
+            className={savedItemsScope === 'all' ? undefined : 'button-secondary'}
+            type="button"
+            onClick={() => setSavedItemsScope('all')}
+          >
+            全部
+          </button>
+          <button
+            aria-pressed={savedItemsScope === 'bookmarks'}
+            className={
+              savedItemsScope === 'bookmarks' ? undefined : 'button-secondary'
+            }
+            type="button"
+            onClick={() => setSavedItemsScope('bookmarks')}
+          >
+            書籤
+          </button>
+          <button
+            aria-pressed={savedItemsScope === 'notes'}
+            className={savedItemsScope === 'notes' ? undefined : 'button-secondary'}
+            type="button"
+            onClick={() => setSavedItemsScope('notes')}
+          >
+            筆記
+          </button>
+        </div>
+      </div>
+
       <div className="library-book-actions">
         {hasExportableSavedItems ? (
           <button type="button" onClick={handleExportSavedItems}>
-            匯出書籤與筆記
+            {exportButtonLabel}
           </button>
         ) : (
-          <p role="status">
-            {hasSavedItems && hasSavedItemsSearch
-              ? '目前沒有符合搜尋條件可匯出的書籤或筆記。'
-              : '目前沒有可匯出的書籤或筆記。'}
-          </p>
+          <p role="status">{exportEmptyState}</p>
         )}
       </div>
 
@@ -274,6 +328,7 @@ export function LibraryScreen({
       <section
         aria-labelledby="bookmarks-heading"
         className="library-section"
+        hidden={savedItemsScope === 'notes'}
       >
         <div className="section-heading-row">
           <div>
@@ -291,11 +346,19 @@ export function LibraryScreen({
 
         {bookmarks.length === 0 ? (
           <div className="library-empty-state" role="status">
-            <p>還沒有章節書籤。</p>
+            <p>
+              {hasSavedItemsSearch
+                ? '目前沒有符合搜尋條件的章節書籤。'
+                : '還沒有章節書籤。'}
+            </p>
           </div>
         ) : visibleBookmarks.length === 0 ? (
           <div className="library-empty-state library-search-empty-state" role="status">
-            <p>找不到符合條件的章節書籤</p>
+            <p>
+              {savedItemsScope === 'all'
+                ? '找不到符合條件的章節書籤'
+                : '找不到符合目前範圍與搜尋條件的章節書籤'}
+            </p>
           </div>
         ) : (
           <ul className="library-recent-list">
@@ -335,6 +398,7 @@ export function LibraryScreen({
       <section
         aria-labelledby="reading-notes-heading"
         className="library-section"
+        hidden={savedItemsScope === 'bookmarks'}
       >
         <div className="section-heading-row">
           <div>
@@ -352,11 +416,19 @@ export function LibraryScreen({
 
         {notes.length === 0 ? (
           <div className="library-empty-state" role="status">
-            <p>還沒有章節筆記。</p>
+            <p>
+              {hasSavedItemsSearch
+                ? '目前沒有符合搜尋條件的章節筆記。'
+                : '還沒有章節筆記。'}
+            </p>
           </div>
         ) : visibleNotes.length === 0 ? (
           <div className="library-empty-state library-search-empty-state" role="status">
-            <p>找不到符合條件的章節筆記</p>
+            <p>
+              {savedItemsScope === 'all'
+                ? '找不到符合條件的章節筆記'
+                : '找不到符合目前範圍與搜尋條件的章節筆記'}
+            </p>
           </div>
         ) : (
           <ul className="library-recent-list">

@@ -35,6 +35,7 @@ const MOBILE_READER_CHROME_MEDIA_QUERY = `(max-width: ${MOBILE_READER_CHROME_MAX
 const SWIPE_EXCLUDED_TARGETS =
   'a, button, input, select, textarea, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="dialog"]'
 const CHROME_TOGGLE_EXCLUDED_TARGETS = `${SWIPE_EXCLUDED_TARGETS}, dialog, [role="menu"], [role="listbox"]`
+const READER_SPEECH_RATES = [0.75, 1, 1.25, 1.5] as const
 
 interface ReaderSpeechRuntime extends Window {
   readonly SpeechSynthesisUtterance?: new (
@@ -180,6 +181,7 @@ interface ReaderScreenProps {
   readonly recoveryStatus?: string
   readonly chapterOpenFailed?: boolean
   readonly preferences: ReaderPreferences
+  readonly isPersistentStorageAvailable?: boolean
   readonly isBookmarked: boolean
   readonly bookmarks: readonly BookmarkEntry[]
   readonly tableOfContents: readonly TableOfContentsEntry[]
@@ -210,6 +212,7 @@ export function ReaderScreen({
   recoveryStatus,
   chapterOpenFailed = false,
   preferences,
+  isPersistentStorageAvailable = true,
   isBookmarked,
   bookmarks,
   tableOfContents,
@@ -245,6 +248,7 @@ export function ReaderScreen({
     null,
   )
   const [pausedChapterId, setPausedChapterId] = useState<string | null>(null)
+  const [speechRate, setSpeechRate] = useState<number>(1)
   const isMobileReaderChrome = useSyncExternalStore(
     subscribeToMobileReaderChrome,
     getMobileReaderChromeSnapshot,
@@ -377,9 +381,11 @@ export function ReaderScreen({
     speechSynthesisRef.current = runtime.speechSynthesis
 
     try {
-      const utterances = openedChapter.prose.map(
-        (paragraph) => new runtime.SpeechSynthesisUtterance(paragraph),
-      )
+      const utterances = openedChapter.prose.map((paragraph) => {
+        const utterance = new runtime.SpeechSynthesisUtterance(paragraph)
+        utterance.rate = speechRate
+        return utterance
+      })
 
       setSpeakingChapterId(openedChapter.chapter.id)
       setPausedChapterId(null)
@@ -437,6 +443,9 @@ export function ReaderScreen({
     }
   }, [openedChapter.chapter.id, preferences.readingMode])
 
+  const currentChapterPosition = chapterPosition?.currentPosition
+  const totalChapterCount = chapterPosition?.totalChapters
+
   const updateLiveProgress = useCallback(
     (chapterProgress: number) => {
       latestChapterProgressRef.current = chapterProgress
@@ -448,11 +457,13 @@ export function ReaderScreen({
         chapterProgress,
       }
       const percent = roundedProgressPercent(position, 1, 1) ?? 0
-      const bookPercent = chapterPosition
+      const bookPercent =
+        currentChapterPosition !== undefined &&
+        totalChapterCount !== undefined
         ? roundedProgressPercent(
             position,
-            chapterPosition.currentPosition,
-            chapterPosition.totalChapters,
+            currentChapterPosition,
+            totalChapterCount,
           )
         : undefined
 
@@ -469,8 +480,8 @@ export function ReaderScreen({
     [
       openedChapter.book.book.id,
       openedChapter.chapter.id,
-      chapterPosition?.currentPosition,
-      chapterPosition?.totalChapters,
+      currentChapterPosition,
+      totalChapterCount,
     ],
   )
 
@@ -1168,6 +1179,24 @@ export function ReaderScreen({
 
   const speechButton = canReadAloud ? (
     <>
+      <label
+        className="reader-speech-rate-control"
+        style={{ pointerEvents: 'auto' }}
+      >
+        速度
+        <select
+          aria-label="朗讀速度"
+          value={speechRate}
+          disabled={isSpeechActive}
+          onChange={(event) => setSpeechRate(Number(event.currentTarget.value))}
+        >
+          {READER_SPEECH_RATES.map((rate) => (
+            <option key={rate} value={rate}>
+              {rate}x
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         className="button-secondary button-reader-speech"
@@ -1665,7 +1694,9 @@ export function ReaderScreen({
       <ChapterReadingNoteModal
         isOpen={isChapterReadingNoteOpen}
         chapterTitle={openedChapter.chapter.title}
+        noteTargetKey={`${openedChapter.book.book.id}:${openedChapter.chapter.id}`}
         initialContent={chapterReadingNoteContent}
+        isPersistentStorageAvailable={isPersistentStorageAvailable}
         triggerRef={chapterReadingNoteTriggerRef}
         onClose={() => setIsChapterReadingNoteOpen(false)}
         onSave={handleSaveChapterReadingNote}

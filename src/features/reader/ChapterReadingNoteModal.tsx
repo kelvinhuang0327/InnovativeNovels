@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 interface ChapterReadingNoteModalProps {
   readonly isOpen: boolean
   readonly chapterTitle: string
+  readonly noteTargetKey?: string
   readonly initialContent: string
+  readonly isPersistentStorageAvailable?: boolean
   readonly triggerRef: React.RefObject<HTMLButtonElement | null>
   readonly onClose: () => void
   readonly onSave: (content: string) => void
@@ -11,25 +13,31 @@ interface ChapterReadingNoteModalProps {
 
 export function ChapterReadingNoteModal({
   isOpen,
+  ...dialogProps
+}: ChapterReadingNoteModalProps) {
+  if (!isOpen) {
+    return null
+  }
+
+  const dialogKey = `${dialogProps.noteTargetKey ?? dialogProps.chapterTitle}\u0000${dialogProps.initialContent}`
+
+  return <OpenChapterReadingNoteDialog key={dialogKey} {...dialogProps} />
+}
+
+function OpenChapterReadingNoteDialog({
   chapterTitle,
   initialContent,
+  isPersistentStorageAvailable = true,
   triggerRef,
   onClose,
   onSave,
-}: ChapterReadingNoteModalProps) {
+}: Omit<ChapterReadingNoteModalProps, 'isOpen'>) {
   const [draft, setDraft] = useState(initialContent)
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft(initialContent)
-      dialogRef.current?.focus()
-    }
-  }, [initialContent, isOpen])
-
-  if (!isOpen) {
-    return null
-  }
+    dialogRef.current?.focus()
+  }, [])
 
   const closeAndRestoreFocus = () => {
     onClose()
@@ -92,6 +100,11 @@ export function ChapterReadingNoteModal({
           rows={8}
           spellCheck
         />
+        {!isPersistentStorageAvailable && (
+          <p className="chapter-reading-note-storage-warning" role="status">
+            永久儲存目前不可用；本章筆記只暫存在目前分頁，重新整理或關閉分頁後會遺失。
+          </p>
+        )}
 
         <div className="chapter-reading-note-actions">
           <button

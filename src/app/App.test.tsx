@@ -3162,3 +3162,55 @@ describe('Reader chapter notes', () => {
     )
   })
 })
+
+describe('Default browser storage failure recovery', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('keeps reading and same-session resume available while warning that data is not durable', () => {
+    window.localStorage.clear()
+    const localStorageDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      'localStorage',
+    )
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Storage access is blocked', 'SecurityError')
+      },
+    })
+
+    try {
+      const firstMount = render(<App />)
+      expect(
+        screen.getByText(
+          '瀏覽器永久儲存目前不可用。閱讀進度、閱讀設定、書架、書籤與章節筆記只會暫存在目前分頁，重新整理或關閉後將無法還原。',
+        ),
+      ).toBeInTheDocument()
+
+      openBookDetail()
+      fireEvent.click(screen.getByRole('button', { name: '開始閱讀' }))
+      expect(
+        screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+      ).toBeInTheDocument()
+
+      firstMount.unmount()
+      render(<App />)
+
+      expect(screen.getByRole('region', { name: '閱讀器' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: '第一章：潮聲來信' }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/重新整理或關閉後將無法還原/),
+      ).toBeInTheDocument()
+    } finally {
+      if (localStorageDescriptor) {
+        Object.defineProperty(window, 'localStorage', localStorageDescriptor)
+      } else {
+        Reflect.deleteProperty(window, 'localStorage')
+      }
+    }
+  })
+})

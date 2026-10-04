@@ -73,6 +73,56 @@ function withChapterAccesses(
   }
 }
 
+const readabilitySortingBooks: readonly ContentBook[] = [
+  withChapterAccesses(
+    makeBook('readability-high', '可讀三章', '懸疑', '可讀排序樣本', '作者', 4),
+    [
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+    ],
+  ),
+  withChapterAccesses(
+    makeBook('readability-tie-first', '可讀兩章先', '懸疑', '可讀排序樣本', '作者', 3),
+    [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+  ),
+  withChapterAccesses(
+    makeBook('readability-tie-second', '可讀兩章後', '懸疑', '可讀排序樣本', '作者', 4),
+    [
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+      CHAPTER_ACCESS.READABLE,
+      CHAPTER_ACCESS.LOCKED,
+    ],
+  ),
+  withChapterAccesses(
+    makeBook('readability-low', '可讀一章', '懸疑', '可讀排序樣本', '作者', 2),
+    [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+  ),
+  withChapterAccesses(
+    makeBook('readability-locked', '目前零章可讀', '懸疑', '可讀排序樣本', '作者', 2),
+    [CHAPTER_ACCESS.LOCKED, CHAPTER_ACCESS.UNAVAILABLE],
+  ),
+  makeBook('readability-empty', '尚無章節', '懸疑', '可讀排序樣本', '作者', 0),
+  makeBook(
+    'readability-other-genre',
+    '其他分類可讀四章',
+    '仙俠',
+    '可讀排序樣本',
+    '作者',
+    4,
+  ),
+  makeBook(
+    'readability-outside-search',
+    '搜尋外四章',
+    '懸疑',
+    '其他描述',
+    '作者',
+    4,
+  ),
+]
+
 function getResultTitles(heading = '探索更多故事') {
   return within(
     screen.getByRole('region', { name: heading }),
@@ -152,6 +202,76 @@ describe('CatalogScreen', () => {
       '來源第三本',
     ])
     expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+  })
+
+  it('sorts by openable chapter count in both directions with stable ties and zero-chapter books', () => {
+    const inputOrder = readabilitySortingBooks.map(({ book }) => book.id)
+
+    render(
+      <CatalogScreen
+        books={readabilitySortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(
+      screen.getByRole('option', { name: '可讀章節較多優先' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: '可讀章節較少優先' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles()).toEqual([
+      '其他分類可讀四章',
+      '搜尋外四章',
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+      '目前零章可讀',
+      '尚無章節',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles()).toEqual([
+      '目前零章可讀',
+      '尚無章節',
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+      '其他分類可讀四章',
+      '搜尋外四章',
+    ])
+    expect(readabilitySortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+
+    fireEvent.click(screen.getByRole('button', { name: '懸疑' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '可讀排序' },
+    })
+    fireEvent.change(screen.getByLabelText('章節可讀性'), {
+      target: { value: 'AT_LEAST_ONE_CHAPTER_OPENABLE' },
+    })
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+    ])
   })
 
   it('sorts by title and author in both directions while preserving default and tie order', () => {

@@ -586,6 +586,154 @@ describe('LibraryScreen', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('filters saved items by the selected type and combines type with text search', () => {
+    const silverBook = makeBook('scope-silver', 'Silver Orchard')
+    const copperBook = makeBook('scope-copper', 'Copper Station')
+    const silverBookmark = makeBookmarkEntry(silverBook, 1, 0.2)
+    const copperBookmark = makeBookmarkEntry(copperBook, 2, 0.6)
+    const silverNote = makeReadingNoteEntry(silverBook, 'A quiet ocean note.')
+    const copperNote = makeReadingNoteEntry(copperBook, 'A midnight train note.')
+    const onOpenBookmark = vi.fn()
+    const onRemoveBookmark = vi.fn()
+    const onOpenReadingNote = vi.fn()
+    const onRemoveReadingNote = vi.fn()
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        books={[]}
+        bookmarks={[silverBookmark, copperBookmark]}
+        notes={[silverNote, copperNote]}
+        recentReading={[]}
+        onOpenBookmark={onOpenBookmark}
+        onRemoveBookmark={onRemoveBookmark}
+        onOpenReadingNote={onOpenReadingNote}
+        onRemoveReadingNote={onRemoveReadingNote}
+      />,
+    )
+
+    const allScope = screen.getByRole('button', { name: '全部' })
+    const bookmarkScope = screen.getByRole('button', {
+      name: '書籤',
+    })
+    const noteScope = screen.getByRole('button', { name: '筆記' })
+    const search = screen.getByRole('searchbox', { name: '搜尋已保存內容' })
+
+    expect(allScope).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(screen.getByRole('region', { name: '章節書籤' })).getAllByRole(
+        'listitem',
+      ),
+    ).toHaveLength(2)
+    expect(
+      within(screen.getByRole('region', { name: '章節筆記' })).getAllByRole(
+        'listitem',
+      ),
+    ).toHaveLength(2)
+
+    fireEvent.click(bookmarkScope)
+
+    expect(bookmarkScope).toHaveAttribute('aria-pressed', 'true')
+    expect(noteScope).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      screen.queryByRole('region', { name: '章節筆記' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '章節書籤' })).getAllByRole(
+        'listitem',
+      ),
+    ).toHaveLength(2)
+
+    fireEvent.change(search, { target: { value: '  sIlVeR  ' } })
+
+    const bookmarkSection = screen.getByRole('region', { name: '章節書籤' })
+    expect(within(bookmarkSection).getByText('1 / 2 個')).toBeInTheDocument()
+    const silverBookmarkItem = within(bookmarkSection).getByRole('listitem')
+    expect(
+      within(silverBookmarkItem).getByRole('heading', {
+        name: 'Silver Orchard',
+      }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(silverBookmarkItem).getByRole('button', { name: '移至章節' }),
+    )
+    fireEvent.click(within(silverBookmarkItem).getByRole('button', { name: '移除' }))
+    expect(onOpenBookmark).toHaveBeenCalledWith(silverBookmark.position)
+    expect(onRemoveBookmark).toHaveBeenCalledWith(
+      silverBook.book.id,
+      silverBook.chapters[0].id,
+    )
+
+    fireEvent.change(search, { target: { value: 'midnight' } })
+    expect(within(bookmarkSection).getByRole('status')).toHaveTextContent(
+      '找不到符合目前範圍與搜尋條件的章節書籤',
+    )
+
+    fireEvent.click(noteScope)
+
+    expect(bookmarkScope).toHaveAttribute('aria-pressed', 'false')
+    expect(noteScope).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.queryByRole('region', { name: '章節書籤' }),
+    ).not.toBeInTheDocument()
+    const notesSection = screen.getByRole('region', { name: '章節筆記' })
+    expect(within(notesSection).getByText('1 / 2 則')).toBeInTheDocument()
+    const copperNoteItem = within(notesSection).getByRole('listitem')
+    expect(within(copperNoteItem).getByText('A midnight train note.')).toBeInTheDocument()
+    fireEvent.click(
+      within(copperNoteItem).getByRole('button', { name: '移至章節' }),
+    )
+    fireEvent.click(within(copperNoteItem).getByRole('button', { name: '移除' }))
+    expect(onOpenReadingNote).toHaveBeenCalledWith(
+      copperBook.book.id,
+      copperBook.chapters[0].id,
+    )
+    expect(onRemoveReadingNote).toHaveBeenCalledWith(
+      copperBook.book.id,
+      copperBook.chapters[0].id,
+    )
+  })
+
+  it('exports only the saved-item type selected by the current scope', async () => {
+    const bookmark = makeBookmarkEntry(bookA, 3, 0.5)
+    const noteContent = 'Only this saved note should be exported.'
+    const note = makeReadingNoteEntry(bookB, noteContent)
+    const downloadedFiles: Blob[] = []
+    const createObjectURL = vi.fn((file: Blob) => {
+      downloadedFiles.push(file)
+      return 'blob:reading-data'
+    })
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        bookmarks={[bookmark]}
+        notes={[note]}
+        recentReading={[]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '書籤' }))
+    fireEvent.click(screen.getByRole('button', { name: '匯出書籤' }))
+    expect(downloadedFiles).toHaveLength(1)
+    const bookmarkExport = await downloadedFiles[0].text()
+    expect(bookmarkExport).toContain(`bookId：${bookmark.position.bookId}`)
+    expect(bookmarkExport).not.toContain(noteContent)
+    expect(bookmarkExport).not.toContain(`bookId：${note.note.bookId}`)
+
+    fireEvent.click(screen.getByRole('button', { name: '筆記' }))
+    fireEvent.click(screen.getByRole('button', { name: '匯出筆記' }))
+    expect(downloadedFiles).toHaveLength(2)
+    const noteExport = await downloadedFiles[1].text()
+    expect(noteExport).toContain(
+      `筆記內容：\n${noteContent}\n—— 筆記結束 ——`,
+    )
+    expect(noteExport).not.toContain(`bookId：${bookmark.position.bookId}`)
+  })
+
   it('shows an explicit empty state when there are no chapter bookmarks', () => {
     render(<LibraryScreen {...baseProps} books={[]} bookmarks={[]} recentReading={[]} />)
 

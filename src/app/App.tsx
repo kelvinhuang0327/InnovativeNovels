@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import {
   getBookDetail,
   listCatalog,
@@ -80,6 +80,7 @@ import { LocalStorageChapterReadingNotesRepository } from '../infrastructure/per
 import { LocalStorageReaderPreferencesRepository } from '../infrastructure/persistence/localStorageReaderPreferencesRepository'
 import { LocalStorageRecentReadingRepository } from '../infrastructure/persistence/localStorageRecentReadingRepository'
 import { LocalStorageReadingStateRepository } from '../infrastructure/persistence/localStorageReadingStateRepository'
+import { ResilientBrowserStorage } from '../infrastructure/persistence/resilientBrowserStorage'
 import { BrowserPwaAdapter } from '../infrastructure/pwa/browserPwaAdapter'
 import { ViteServiceWorkerAdapter } from '../infrastructure/pwa/viteServiceWorkerAdapter'
 import './App.css'
@@ -128,6 +129,7 @@ type Screen =
 
 const defaultContentRepository = new StaticContentRepository()
 const defaultAuthoringGatewayClient = new AuthoringGatewayClientAdapter()
+const defaultBrowserStorage = new ResilientBrowserStorage(() => window.localStorage)
 const defaultPwaDependencies: PwaDependencies = {
   browser: new BrowserPwaAdapter(window, window.navigator),
   serviceWorker: new ViteServiceWorkerAdapter(),
@@ -255,43 +257,42 @@ class MemoryAuthoringSessionRepository implements AuthoringSessionRepository {
 }
 
 function createDefaultDependencies(): AppDependencies {
+  const storage = defaultBrowserStorage
+
   return {
     contentRepository: defaultContentRepository,
     readingStateRepository: new LocalStorageReadingStateRepository(
-      window.localStorage,
+      storage,
     ),
     bookShelfRepository: new LocalStorageBookShelfRepository(
-      window.localStorage,
+      storage,
     ),
     recentReadingRepository: new LocalStorageRecentReadingRepository(
-      window.localStorage,
+      storage,
     ),
     readerPreferencesRepository: new LocalStorageReaderPreferencesRepository(
-      window.localStorage,
+      storage,
     ),
     chapterBookmarksRepository: new LocalStorageChapterBookmarksRepository(
-      window.localStorage,
+      storage,
     ),
     chapterReadingNotesRepository:
-      new LocalStorageChapterReadingNotesRepository(window.localStorage),
+      new LocalStorageChapterReadingNotesRepository(storage),
     activeReaderSessionRepository: new LocalStorageActiveReaderSessionRepository(
-      window.localStorage,
+      storage,
     ),
-    authoringSessionRepository: new LocalStorageAuthoringSessionRepository(
-      window.localStorage,
-    ),
-    authoringProjectRepository: new LocalStorageAuthoringProjectRepository(
-      window.localStorage,
-    ),
+    authoringSessionRepository: new LocalStorageAuthoringSessionRepository(storage),
+    authoringProjectRepository: new LocalStorageAuthoringProjectRepository(storage),
     clipboardPort: new BrowserClipboardAdapter(window.navigator.clipboard),
     portableProjectFilePort: new BrowserPortableProjectFileAdapter(),
   }
 }
 
 function App({
-  dependencies = createDefaultDependencies(),
+  dependencies: providedDependencies,
   pwaDependencies = defaultPwaDependencies,
 }: AppProps) {
+  const dependencies = providedDependencies ?? createDefaultDependencies()
   const prefRepo =
     dependencies.readerPreferencesRepository ??
     new MemoryPreferencesRepository()
@@ -355,6 +356,13 @@ function App({
     savedBookIds: [...bookShelfRepo.list()],
     recentBookIds: [...recentReadingRepo.list()],
   }))
+  const storageIsPersistent = useSyncExternalStore(
+    defaultBrowserStorage.subscribe,
+    defaultBrowserStorage.getSnapshot,
+    () => true,
+  )
+  const isPersistentStorageAvailable =
+    providedDependencies !== undefined || storageIsPersistent
 
   const pwa = usePwaController(pwaDependencies)
 
@@ -604,6 +612,11 @@ function App({
     >
       <p className="eyebrow">InnovativeNovels</p>
       <PwaControls {...pwa} />
+      {providedDependencies === undefined && !storageIsPersistent && (
+        <p className="storage-fallback-notice" role="status">
+          瀏覽器永久儲存目前不可用。閱讀進度、閱讀設定、書架、書籤與章節筆記只會暫存在目前分頁，重新整理或關閉後將無法還原。
+        </p>
+      )}
 
       {screen.name === 'catalog' && (
         <CatalogScreen
@@ -755,6 +768,7 @@ function App({
           )}
           onChangePreferences={handleUpdatePreferences}
           onResetPreferences={handleResetPreferences}
+          isPersistentStorageAvailable={isPersistentStorageAvailable}
           onToggleBookmark={() =>
             handleToggleBookmark(
               screen.openedChapter.book.book.id,
