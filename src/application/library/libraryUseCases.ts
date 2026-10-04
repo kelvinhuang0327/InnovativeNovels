@@ -5,6 +5,10 @@ import type {
 import type { ReadingPosition } from '../../domain/reading/readingPosition'
 import type { BookShelfRepository } from './bookShelfRepository'
 import type { RecentReadingRepository } from './recentReadingRepository'
+import type {
+  BookmarkEntry,
+  ChapterReadingNoteEntry,
+} from '../reading/readingUseCases'
 import type { ReadingStateRepository } from '../reading/readingStateRepository'
 
 export interface RecentReadingEntry {
@@ -28,6 +32,33 @@ export function filterBookshelfBooks(
       field.toLowerCase().includes(normalizedQuery),
     ),
   )
+}
+
+export function filterSavedReadingItems(
+  bookmarks: readonly BookmarkEntry[],
+  notes: readonly ChapterReadingNoteEntry[],
+  searchText?: string,
+): {
+  readonly bookmarks: readonly BookmarkEntry[]
+  readonly notes: readonly ChapterReadingNoteEntry[]
+} {
+  const normalizedQuery = searchText?.trim().toLowerCase() ?? ''
+
+  if (normalizedQuery.length === 0) {
+    return { bookmarks, notes }
+  }
+
+  const matchesQuery = (fields: readonly string[]) =>
+    fields.some((field) => field.toLowerCase().includes(normalizedQuery))
+
+  return {
+    bookmarks: bookmarks.filter(({ book, chapter }) =>
+      matchesQuery([book.book.title, chapter.title]),
+    ),
+    notes: notes.filter(({ book, chapter, note }) =>
+      matchesQuery([book.book.title, chapter.title, note.content]),
+    ),
+  }
 }
 
 function uniqueBookIds(bookIds: readonly string[]): readonly string[] {

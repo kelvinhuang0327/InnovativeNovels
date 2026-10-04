@@ -7,10 +7,15 @@ import type {
   ContentBook,
   ContentRepository,
 } from '../catalog/contentRepository'
+import type {
+  BookmarkEntry,
+  ChapterReadingNoteEntry,
+} from '../reading/readingUseCases'
 import type { ReadingStateRepository } from '../reading/readingStateRepository'
 import type { BookShelfRepository } from './bookShelfRepository'
 import {
   addBookToBookshelf,
+  filterSavedReadingItems,
   listBookshelf,
   listRecentReading,
   removeBookFromBookshelf,
@@ -150,6 +155,53 @@ describe('Bookshelf use cases', () => {
     removeBookFromBookshelf(repository, 'book-a')
 
     expect(repository.list()).toEqual([])
+  })
+})
+
+describe('Saved reading item search', () => {
+  const chapterA = bookA.chapters[0]!
+  const chapterB = bookB.chapters[0]!
+  const bookmarks: readonly BookmarkEntry[] = [
+    {
+      book: bookA,
+      chapter: chapterA,
+      position: {
+        bookId: bookA.book.id,
+        chapterId: chapterA.id,
+        paragraphIndex: 0,
+        chapterProgress: 0.25,
+      },
+    },
+  ]
+  const notes: readonly ChapterReadingNoteEntry[] = [
+    {
+      book: bookB,
+      chapter: chapterB,
+      note: {
+        bookId: bookB.book.id,
+        chapterId: chapterB.id,
+        content: 'Reader note needle',
+      },
+    },
+  ]
+
+  it('returns the original lists for an empty query', () => {
+    const result = filterSavedReadingItems(bookmarks, notes, '  ')
+
+    expect(result.bookmarks).toBe(bookmarks)
+    expect(result.notes).toBe(notes)
+  })
+
+  it('matches book titles, chapter titles, and note content case-insensitively', () => {
+    expect(filterSavedReadingItems(bookmarks, notes, ' 海邊 ').bookmarks).toEqual(
+      bookmarks,
+    )
+    expect(filterSavedReadingItems(bookmarks, notes, '第一章').bookmarks).toEqual(
+      bookmarks,
+    )
+    expect(filterSavedReadingItems(bookmarks, notes, 'NEEDLE').notes).toEqual(
+      notes,
+    )
   })
 })
 
