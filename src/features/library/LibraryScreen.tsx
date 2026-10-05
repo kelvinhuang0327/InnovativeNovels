@@ -9,6 +9,7 @@ import {
   filterBookshelfBooks,
   type RecentReadingEntry,
 } from '../../application/library/libraryUseCases'
+import { serializeReadingDataExport } from '../../application/reading/readingDataExport'
 import { ContinueReadingShelf } from './ContinueReadingShelf'
 
 interface LibraryScreenProps {
@@ -177,6 +178,30 @@ export function LibraryScreen({
         ),
       )
     : notes
+  const hasExportableSavedItems = bookmarks.length > 0 || notes.length > 0
+
+  function handleExportSavedItems() {
+    if (!hasExportableSavedItems) {
+      return
+    }
+
+    const serialized = serializeReadingDataExport(bookmarks, notes)
+
+    if (serialized.length === 0) {
+      return
+    }
+
+    const file = new Blob([serialized], { type: 'text/plain;charset=utf-8' })
+    const objectUrl = URL.createObjectURL(file)
+    const downloadLink = document.createElement('a')
+    downloadLink.href = objectUrl
+    downloadLink.download = 'reading-data.txt'
+    downloadLink.hidden = true
+    document.body.append(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
 
   return (
     <section
@@ -221,6 +246,16 @@ export function LibraryScreen({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="library-book-actions">
+        {hasExportableSavedItems ? (
+          <button type="button" onClick={handleExportSavedItems}>
+            匯出書籤與筆記
+          </button>
+        ) : (
+          <p role="status">目前沒有可匯出的書籤或筆記。</p>
+        )}
       </div>
 
       {continueReading.length > 0 && (
