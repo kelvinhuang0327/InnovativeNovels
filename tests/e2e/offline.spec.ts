@@ -1,14 +1,16 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Journey 8 — Offline / PWA Service Worker', () => {
-  test('Chromium offline PWA caching allows viewing cached reader content offline', async ({ page, context, browserName }) => {
-    test.skip(browserName === 'webkit', 'WebKit offline emulation via Playwright context.setOffline is not supported by WebKit engine')
+  test('Chromium offline PWA caching allows viewing cached reader content offline', async ({ page, context }) => {
 
     // Service Worker testing requires full registration & caching cycle
     await page.goto('/')
 
     // Wait for PWA service worker registration & cache readiness
     await page.waitForLoadState('networkidle')
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined))
+    await page.reload()
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true)
 
     // Navigate into book and chapter to prime service worker runtime caches
     await page.locator('article.book-card').first().getByRole('button', { name: '查看書籍' }).click()
