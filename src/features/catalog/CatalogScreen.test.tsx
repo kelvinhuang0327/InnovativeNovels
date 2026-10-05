@@ -1110,4 +1110,34 @@ describe('CatalogScreen', () => {
     expect(within(editorialShelf).getByText('作者 · 尚無章節')).toBeInTheDocument()
     expect(within(editorialShelf).queryByText(/0\s*\/\s*0/)).not.toBeInTheDocument()
   })
+
+  it('sorts by title and author ascending while preserving default and tie order', () => {
+    const onOpenBook = vi.fn()
+
+    render(
+      <CatalogScreen
+        books={metadataSortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={onOpenBook}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(getResultTitles()).toEqual(['Zulu', 'Alpha', 'Echo', 'Bravo'])
+    expect(screen.getByRole('option', { name: '書名升冪' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '作者升冪' })).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'title-asc' } })
+    expect(getResultTitles()).toEqual(['Alpha', 'Bravo', 'Echo', 'Zulu'])
+
+    fireEvent.change(sortControl, { target: { value: 'author-asc' } })
+    expect(getResultTitles()).toEqual(['Echo', 'Alpha', 'Zulu', 'Bravo'])
+
+    const resultsRegion = screen.getByRole('region', { name: '探索更多故事' })
+    fireEvent.click(
+      within(resultsRegion).getAllByRole('button', { name: '查看書籍' })[0],
+    )
+    expect(onOpenBook).toHaveBeenCalledWith('metadata-echo')
+  })
 })

@@ -1133,4 +1133,32 @@ describe('LibraryScreen', () => {
     ).not.toBeInTheDocument()
     expect(baseProps.onBackToBookstore).not.toHaveBeenCalled()
   })
+
+  it('creates a UTF-8 plain-text download only after the export button is clicked', () => {
+    const bookmark = makeBookmarkEntry(bookA, 2, 0.4)
+    const note = makeReadingNoteEntry(bookB, '第一行\n第二行')
+    const createObjectURL = vi.fn(() => 'blob:reading-data')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <LibraryScreen
+        {...baseProps}
+        bookmarks={[bookmark]}
+        notes={[note]}
+        recentReading={[]}
+      />,
+    )
+
+    expect(createObjectURL).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '匯出書籤與筆記' }))
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(createObjectURL).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'text/plain;charset=utf-8' }),
+    )
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
+  })
 })

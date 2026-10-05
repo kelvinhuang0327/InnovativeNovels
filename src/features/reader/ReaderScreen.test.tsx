@@ -536,6 +536,29 @@ describe('Reader speech controls', () => {
 
     expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
   })
+
+  it('cancels when the current chapter changes and does not start the next chapter', () => {
+    const speech = installSpeechRuntime()
+    const nextChapter = {
+      ...mockOpenedChapter,
+      chapter: {
+        ...mockOpenedChapter.chapter,
+        id: chapterId('c2'),
+        title: 'Chapter 2',
+        sequence: chapterSequence(2),
+      },
+      prose: ['下一章內文'],
+    }
+    const view = render(readerForSpeech(mockOpenedChapter))
+
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    view.rerender(readerForSpeech(nextChapter))
+
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(speech.events).toContain('speak:Paragraph 1')
+    expect(speech.events).not.toContain('speak:下一章內文')
+    expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
+  })
 })
 
 describe('Reader Table of Contents & Chapter Position Progress', () => {
