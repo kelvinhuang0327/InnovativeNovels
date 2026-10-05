@@ -204,6 +204,76 @@ describe('CatalogScreen', () => {
     expect(sortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
   })
 
+  it('sorts by openable chapter count in both directions with stable ties and zero-chapter books', () => {
+    const inputOrder = readabilitySortingBooks.map(({ book }) => book.id)
+
+    render(
+      <CatalogScreen
+        books={readabilitySortingBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const sortControl = screen.getByLabelText('排序方式')
+    expect(
+      screen.getByRole('option', { name: '可讀章節較多優先' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: '可讀章節較少優先' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles()).toEqual([
+      '其他分類可讀四章',
+      '搜尋外四章',
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+      '目前零章可讀',
+      '尚無章節',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles()).toEqual([
+      '目前零章可讀',
+      '尚無章節',
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+      '其他分類可讀四章',
+      '搜尋外四章',
+    ])
+    expect(readabilitySortingBooks.map(({ book }) => book.id)).toEqual(inputOrder)
+
+    fireEvent.click(screen.getByRole('button', { name: '懸疑' }))
+    fireEvent.change(screen.getByLabelText('搜尋小說'), {
+      target: { value: '可讀排序' },
+    })
+    fireEvent.change(screen.getByLabelText('章節可讀性'), {
+      target: { value: 'AT_LEAST_ONE_CHAPTER_OPENABLE' },
+    })
+
+    fireEvent.change(sortControl, { target: { value: 'readable-asc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀一章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀三章',
+    ])
+
+    fireEvent.change(sortControl, { target: { value: 'readable-desc' } })
+    expect(getResultTitles('篩選結果')).toEqual([
+      '可讀三章',
+      '可讀兩章先',
+      '可讀兩章後',
+      '可讀一章',
+    ])
+  })
+
   it('sorts by title and author in both directions while preserving default and tie order', () => {
     const onOpenBook = vi.fn()
 
