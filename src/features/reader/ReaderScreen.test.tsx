@@ -20,6 +20,14 @@ const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
   'scrollIntoView',
 )
+const originalSpeechSynthesisDescriptor = Object.getOwnPropertyDescriptor(
+  window,
+  'speechSynthesis',
+)
+const originalSpeechSynthesisUtteranceDescriptor = Object.getOwnPropertyDescriptor(
+  window,
+  'SpeechSynthesisUtterance',
+)
 
 beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -37,6 +45,26 @@ afterEach(() => {
     )
   } else {
     Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+  }
+
+  if (originalSpeechSynthesisDescriptor) {
+    Object.defineProperty(
+      window,
+      'speechSynthesis',
+      originalSpeechSynthesisDescriptor,
+    )
+  } else {
+    Reflect.deleteProperty(window, 'speechSynthesis')
+  }
+
+  if (originalSpeechSynthesisUtteranceDescriptor) {
+    Object.defineProperty(
+      window,
+      'SpeechSynthesisUtterance',
+      originalSpeechSynthesisUtteranceDescriptor,
+    )
+  } else {
+    Reflect.deleteProperty(window, 'SpeechSynthesisUtterance')
   }
 })
 
@@ -238,6 +266,184 @@ describe('ReaderScreen Comfort & Bookmarks UI', () => {
 
     expect(openBookmarksButton).toHaveAttribute('aria-expanded', 'false')
     expect(openBookmarksButton).toHaveFocus()
+  })
+})
+
+describe('Reader speech controls', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  function installSpeechRuntime({
+    includeSynthesis = true,
+    includeUtterance = true,
+  }: {
+    readonly includeSynthesis?: boolean
+    readonly includeUtterance?: boolean
+  } = {}) {
+    const events: string[] = []
+    const utterances: TestSpeechSynthesisUtterance[] = []
+
+    class TestSpeechSynthesisUtterance {
+      readonly text: string
+      onend: SpeechSynthesisUtterance['onend'] = null
+      onerror: SpeechSynthesisUtterance['onerror'] = null
+
+      constructor(text = '') {
+        this.text = text
+        utterances.push(this)
+        events.push(`construct:${text}`)
+      }
+    }
+
+    const speechSynthesis = {
+      cancel: vi.fn(() => events.push('cancel')),
+      speak: vi.fn((utterance: SpeechSynthesisUtterance) => {
+        events.push(
+          `speak:${(utterance as TestSpeechSynthesisUtterance).text}`,
+        )
+      }),
+    } as unknown as SpeechSynthesis
+
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: includeSynthesis ? speechSynthesis : undefined,
+    })
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: includeUtterance ? TestSpeechSynthesisUtterance : undefined,
+    })
+
+    return { events, speechSynthesis, utterances }
+  }
+
+  function readerForSpeech(
+    openedChapter = mockOpenedChapter,
+    chapterOpenFailed = false,
+  ) {
+    return (
+      <ReaderScreen
+        openedChapter={openedChapter}
+        chapterOpenFailed={chapterOpenFailed}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={mockTableOfContents}
+        chapterPosition={mockChapterPosition}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+      />
+    )
+  }
+
+  it.each([
+    ['speechSynthesis', { includeSynthesis: false }],
+    ['SpeechSynthesisUtterance', { includeUtterance: false }],
+  ])('requires %s to offer speech controls', (_missingApi, runtimeOptions) => {
+    installSpeechRuntime(runtimeOptions)
+
+    render(readerForSpeech())
+
+    expect(
+      screen.queryByRole('button', { name: '開始朗讀' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('cancels existing speech, then speaks each paragraph in order and can stop', () => {
+    const speech = installSpeechRuntime()
+    const openedChapter = {
+      ...mockOpenedChapter,
+      prose: ['第一段內文', '第二段內文'],
+    }
+
+    render(readerForSpeech(openedChapter))
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+
+    expect(speech.events).toEqual([
+      'cancel',
+      'construct:第一段內文',
+      'construct:第二段內文',
+      'speak:第一段內文',
+      'speak:第二段內文',
+    ])
+    expect(screen.getByRole('button', { name: '停止朗讀' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '停止朗讀' }))
+
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
+  })
+
+  it('cancels when the current chapter changes and does not start the next chapter', () => {
+    const speech = installSpeechRuntime()
+    const nextChapter = {
+      ...mockOpenedChapter,
+      chapter: {
+        ...mockOpenedChapter.chapter,
+        id: chapterId('c2'),
+        title: 'Chapter 2',
+        sequence: chapterSequence(2),
+      },
+      prose: ['下一章內文'],
+    }
+    const view = render(readerForSpeech(mockOpenedChapter))
+
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    view.rerender(readerForSpeech(nextChapter))
+
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(speech.events).toContain('speak:Paragraph 1')
+    expect(speech.events).not.toContain('speak:下一章內文')
+    expect(screen.getByRole('button', { name: '開始朗讀' })).toBeInTheDocument()
+  })
+
+  it('stops speech if the current chapter becomes unavailable', () => {
+    const speech = installSpeechRuntime()
+    const view = render(readerForSpeech())
+
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    view.rerender(readerForSpeech(mockOpenedChapter, true))
+
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
+    expect(
+      screen.queryByRole('button', { name: '停止朗讀' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['an open failure', mockOpenedChapter, true],
+    [
+      'a locked chapter',
+      { ...mockOpenedChapter, isLocked: true },
+      false,
+    ],
+    ['empty prose', { ...mockOpenedChapter, prose: [] }, false],
+    ['blank prose', { ...mockOpenedChapter, prose: ['  '] }, false],
+  ])('does not offer speech for %s', (_caseName, openedChapter, openFailed) => {
+    installSpeechRuntime()
+
+    render(readerForSpeech(openedChapter, openFailed))
+
+    expect(
+      screen.queryByRole('button', { name: '開始朗讀' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('cancels speech when the reader unmounts', () => {
+    const speech = installSpeechRuntime()
+    const view = render(readerForSpeech())
+
+    fireEvent.click(screen.getByRole('button', { name: '開始朗讀' }))
+    view.unmount()
+
+    expect(speech.speechSynthesis.cancel).toHaveBeenCalledTimes(2)
   })
 })
 
