@@ -6,7 +6,10 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHAPTER_ACCESS } from '../../domain/access/chapterAccess'
+import {
+  CHAPTER_ACCESS,
+  type ChapterAccess,
+} from '../../domain/access/chapterAccess'
 import { chapterSequence } from '../../domain/catalog/chapter'
 import { bookId, chapterId } from '../../domain/catalog/identifiers'
 import type { ContentBook } from '../../application/catalog/contentRepository'
@@ -56,6 +59,19 @@ const metadataSortingBooks: readonly ContentBook[] = [
   makeBook('metadata-echo', 'Echo', '懸疑', '排序測試 Echo', 'Ann'),
   makeBook('metadata-bravo', 'Bravo', '懸疑', '排序測試 Bravo', 'Wendy'),
 ]
+
+function withChapterAccesses(
+  book: ContentBook,
+  accesses: readonly ChapterAccess[],
+): ContentBook {
+  return {
+    ...book,
+    chapters: book.chapters.map((chapter, index) => ({
+      ...chapter,
+      access: accesses[index],
+    })),
+  }
+}
 
 function getResultTitles(heading = '探索更多故事') {
   return within(
@@ -379,6 +395,56 @@ describe('CatalogScreen', () => {
 
     expect(getResultTitles('篩選結果')).toEqual(['來源第四本', '來源第二本'])
     expect(screen.getByText('找到 2 本')).toBeInTheDocument()
+  })
+
+  it('filters by chapter availability using access metadata and excludes zero-chapter books from all-openable', () => {
+    const availabilityBooks: readonly ContentBook[] = [
+      withChapterAccesses(
+        makeBook('all-openable', '全章開放', '懸疑', '可讀測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.PREVIEW],
+      ),
+      withChapterAccesses(
+        makeBook('partly-openable', '部分開放', '懸疑', '可讀測試', '作者', 2),
+        [CHAPTER_ACCESS.READABLE, CHAPTER_ACCESS.LOCKED],
+      ),
+      withChapterAccesses(
+        makeBook('none-openable', '尚未開放', '懸疑', '可讀測試', '作者', 1),
+        [CHAPTER_ACCESS.UNAVAILABLE],
+      ),
+      makeBook('empty-book', '尚無章節', '懸疑', '可讀測試', '作者', 0),
+    ]
+
+    render(
+      <CatalogScreen
+        books={availabilityBooks}
+        continueReading={[]}
+        onContinueBook={vi.fn()}
+        onOpenBook={vi.fn()}
+      />,
+    )
+
+    const availabilityControl = screen.getByLabelText('章節可讀性')
+    expect(availabilityControl).toHaveValue('')
+    fireEvent.change(availabilityControl, {
+      target: { value: 'ALL_CHAPTERS_OPENABLE' },
+    })
+    expect(getResultTitles('篩選結果')).toEqual(['全章開放'])
+    expect(screen.getByText('找到 1 本')).toBeInTheDocument()
+
+    fireEvent.change(availabilityControl, {
+      target: { value: 'AT_LEAST_ONE_CHAPTER_OPENABLE' },
+    })
+    expect(getResultTitles('篩選結果')).toEqual(['全章開放', '部分開放'])
+    expect(screen.getByText('找到 2 本')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '清除篩選' }))
+    expect(getResultTitles()).toEqual([
+      '全章開放',
+      '部分開放',
+      '尚未開放',
+      '尚無章節',
+    ])
+    expect(availabilityControl).toHaveValue('')
   })
 
   it('keeps sort-only state outside filtering and preserves callbacks and stable IDs', () => {
