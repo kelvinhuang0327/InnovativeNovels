@@ -50,3 +50,7 @@ ExportOptions.plist
 /tests/fable-nightly/dashboard-data/nightly-data.json
 /tests/fable-nightly/dashboard-data/nightly-data.js
 .gstack/
+
+/test-results/
+/playwright-report/
+/playwright/.cache/

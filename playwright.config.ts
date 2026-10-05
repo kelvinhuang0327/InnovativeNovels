@@ -7,7 +7,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   reporter: 'list',
-  outputDir: '/tmp/InnovativeNovels-playwright-results-20261003',
+  outputDir: './test-results/reader',
   timeout: 60_000,
   expect: {
     timeout: 8_000,

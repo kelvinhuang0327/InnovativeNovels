@@ -52,7 +52,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
 export default defineConfig({
   plugins: [react(), authoringGatewayVitePlugin(), VitePWA(pwaOptions)],
   test: {
-    exclude: [...configDefaults.exclude, 'e2e/**'],
+    exclude: [...configDefaults.exclude, 'e2e/**', 'tests/e2e/**'],
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
   },

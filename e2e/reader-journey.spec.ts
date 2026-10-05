@@ -18,7 +18,7 @@ const tideCityFixture = JSON.parse(
 
 test('finds a book, searches, saves a note, and restores the exact reader passage after reload', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/')
   await page.getByLabel('搜尋小說').fill('潮汐之城')
   await page.getByRole('button', { name: '查看書籍', exact: true }).click()
@@ -83,7 +83,7 @@ test('finds a book, searches, saves a note, and restores the exact reader passag
     'Playwright 續讀驗收筆記。',
   )
   await page.screenshot({
-    path: '/tmp/InnovativeNovels-reader-resume-20261003.png',
+    path: testInfo.outputPath('reader-resume.png'),
   })
 })
 
@@ -145,7 +145,7 @@ test('keeps a locked chapter out of the reader and cross-chapter search', async 
 
 test('warns when local storage is blocked and keeps the reader usable at 390px', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.addInitScript(() => {
     Object.defineProperty(window, 'localStorage', {
@@ -183,6 +183,6 @@ test('warns when local storage is blocked and keeps the reader usable at 390px',
     page.getByText(/本章筆記只暫存在目前分頁/, { exact: false }),
   ).toBeVisible()
   await page.screenshot({
-    path: '/tmp/InnovativeNovels-reader-mobile-storage-20261003.png',
+    path: testInfo.outputPath('reader-mobile-storage.png'),
   })
 })
