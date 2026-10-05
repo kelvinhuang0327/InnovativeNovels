@@ -163,3 +163,343 @@ export function LibraryScreen({
 }: LibraryScreenProps) {
   const [bookshelfSearch, setBookshelfSearch] = useState('')
   const [savedItemsSearch, setSavedItemsSearch] = useState('')
+  const hasBookshelfSearch = bookshelfSearch.trim().length > 0
+  const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
+  const normalizedSavedItemsSearch = savedItemsSearch.trim().toLowerCase()
+  const hasSavedItemsSearch = normalizedSavedItemsSearch.length > 0
+  const visibleBookmarks = hasSavedItemsSearch
+    ? bookmarks.filter(({ book, chapter }) =>
+        [book.book.title, chapter.title].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : bookmarks
+  const visibleNotes = hasSavedItemsSearch
+    ? notes.filter(({ book, chapter, note }) =>
+        [book.book.title, chapter.title, note.content].some((value) =>
+          value.toLowerCase().includes(normalizedSavedItemsSearch),
+        ),
+      )
+    : notes
+  const hasExportableSavedItems =
+    visibleBookmarks.length > 0 || visibleNotes.length > 0
+  const hasSavedItems = bookmarks.length > 0 || notes.length > 0
+
+  function handleExportSavedItems() {
+    if (!hasExportableSavedItems) {
+      return
+    }
+
+    const serialized = serializeReadingDataExport(visibleBookmarks, visibleNotes)
+
+    if (serialized.length === 0) {
+      return
+    }
+
+    const file = new Blob([serialized], { type: 'text/plain;charset=utf-8' })
+    const objectUrl = URL.createObjectURL(file)
+    const downloadLink = document.createElement('a')
+    downloadLink.href = objectUrl
+    downloadLink.download = 'reading-data.txt'
+    downloadLink.hidden = true
+    document.body.append(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+
+  return (
+    <section
+      aria-label="個人閱讀中心"
+      className="library-screen"
+    >
+      <header className="library-header">
+        <div>
+          <p className="section-kicker">個人閱讀</p>
+          <h1 className="screen-heading" id="library-heading">
+            我的書架
+          </h1>
+          <p className="library-supporting-copy">
+            把想讀的故事留在身邊，回來就能接著讀。
+          </p>
+        </div>
+      </header>
+
+      <div className="library-search">
+        <label
+          className="library-search-label"
+          htmlFor="library-saved-items-search"
+        >
+          搜尋已保存內容
+        </label>
+        <div className="library-search-controls">
+          <input
+            className="library-search-input"
+            id="library-saved-items-search"
+            placeholder="搜尋書名、章名或筆記文字"
+            type="search"
+            value={savedItemsSearch}
+            onChange={(event) => setSavedItemsSearch(event.target.value)}
+          />
+          {hasSavedItemsSearch && (
+            <button
+              className="button-secondary library-search-clear"
+              type="button"
+              onClick={() => setSavedItemsSearch('')}
+            >
+              清除搜尋
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="library-book-actions">
+        {hasExportableSavedItems ? (
+          <button type="button" onClick={handleExportSavedItems}>
+            匯出書籤與筆記
+          </button>
+        ) : (
+          <p role="status">
+            {hasSavedItems && hasSavedItemsSearch
+              ? '目前沒有符合搜尋條件可匯出的書籤或筆記。'
+              : '目前沒有可匯出的書籤或筆記。'}
+          </p>
+        )}
+      </div>
+
+      {continueReading.length > 0 && (
+        <ContinueReadingShelf
+          entries={continueReading}
+          onContinueBook={onContinueBook}
+        />
+      )}
+
+      <section
+        aria-labelledby="bookmarks-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">儲存的閱讀位置</p>
+            <h2 className="section-heading" id="bookmarks-heading">
+              章節書籤
+            </h2>
+          </div>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${bookmarks.length} 個`
+              : `${visibleBookmarks.length} / ${bookmarks.length} 個`}
+          </p>
+        </div>
+
+        {bookmarks.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>還沒有章節書籤。</p>
+          </div>
+        ) : visibleBookmarks.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的章節書籤</p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {visibleBookmarks.map(({ book, chapter, position }) => (
+              <li
+                className="library-recent-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <p className="book-meta">{book.book.categoryLabel}</p>
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() => onOpenBookmark(position)}
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveBookmark(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="reading-notes-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">閱讀時留下的想法</p>
+            <h2 className="section-heading" id="reading-notes-heading">
+              章節筆記
+            </h2>
+          </div>
+          <p className="section-heading-note">
+            {!hasSavedItemsSearch
+              ? `${notes.length} 則`
+              : `${visibleNotes.length} / ${notes.length} 則`}
+          </p>
+        </div>
+
+        {notes.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>還沒有章節筆記。</p>
+          </div>
+        ) : visibleNotes.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的章節筆記</p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {visibleNotes.map(({ book, chapter, note }) => (
+              <li
+                className="library-recent-item library-reading-note-item"
+                key={`${book.book.id}:${chapter.id}`}
+              >
+                <div className="library-recent-copy">
+                  <h3>{book.book.title}</h3>
+                  <p className="library-recent-chapter">{chapter.title}</p>
+                  <p className="library-reading-note-content">{note.content}</p>
+                  <div className="library-book-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenReadingNote(book.book.id, chapter.id)
+                      }
+                    >
+                      移至章節
+                    </button>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() =>
+                        onRemoveReadingNote(book.book.id, chapter.id)
+                      }
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="bookshelf-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">收藏的故事</p>
+            <h2 className="section-heading" id="bookshelf-heading">
+              我的書架
+            </h2>
+          </div>
+          <p className="section-heading-note">
+            {!hasBookshelfSearch
+              ? `${books.length} 本`
+              : `${visibleBooks.length} / ${books.length} 本`}
+          </p>
+        </div>
+
+        <div className="library-search">
+          <label
+            className="library-search-label"
+            htmlFor="library-bookshelf-search"
+          >
+            搜尋我的書架
+          </label>
+          <div className="library-search-controls">
+            <input
+              className="library-search-input"
+              id="library-bookshelf-search"
+              placeholder="搜尋書名或作者"
+              type="search"
+              value={bookshelfSearch}
+              onChange={(event) => setBookshelfSearch(event.target.value)}
+            />
+            {hasBookshelfSearch && (
+              <button
+                className="button-secondary library-search-clear"
+                type="button"
+                onClick={() => setBookshelfSearch('')}
+              >
+                清除搜尋
+              </button>
+            )}
+          </div>
+        </div>
+
+        {books.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>還沒有收藏小說，從書城挑一本加入書架。</p>
+            <button type="button" onClick={onBackToBookstore}>
+              前往書城
+            </button>
+          </div>
+        ) : visibleBooks.length === 0 ? (
+          <div className="library-empty-state library-search-empty-state" role="status">
+            <p>找不到符合條件的收藏</p>
+          </div>
+        ) : (
+          <ul className="library-book-list">
+            {visibleBooks.map((book) => (
+              <LibraryBookCard
+                book={book}
+                key={book.book.id}
+                onOpenBook={onOpenBook}
+                onRemoveFromBookshelf={onRemoveFromBookshelf}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="recent-reading-heading"
+        className="library-section"
+      >
+        <div className="section-heading-row">
+          <div>
+            <p className="section-kicker">回到最近打開的故事</p>
+            <h2 className="section-heading" id="recent-reading-heading">
+              最近閱讀
+            </h2>
+          </div>
+          <p className="section-heading-note">依最近開啟排序</p>
+        </div>
+
+        {recentReading.length === 0 ? (
+          <div className="library-empty-state" role="status">
+            <p>開始閱讀後，最近看過的故事會出現在這裡。</p>
+          </div>
+        ) : (
+          <ul className="library-recent-list">
+            {recentReading.map((entry) => (
+              <RecentReadingCard
+                entry={entry}
+                key={entry.book.book.id}
+                onContinueBook={onContinueBook}
+                onOpenBook={onOpenBook}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+    </section>
+  )
+}
