@@ -166,22 +166,11 @@ export function LibraryScreen({
   const [savedItemsScope, setSavedItemsScope] = useState<SavedItemsScope>('all')
   const hasBookshelfSearch = bookshelfSearch.trim().length > 0
   const visibleBooks = filterBookshelfBooks(books, bookshelfSearch)
-  const normalizedSavedItemsSearch = savedItemsSearch.trim().toLowerCase()
-  const hasSavedItemsSearch = normalizedSavedItemsSearch.length > 0
-  const searchFilteredBookmarks = hasSavedItemsSearch
-    ? bookmarks.filter(({ book, chapter }) =>
-        [book.book.title, chapter.title].some((value) =>
-          value.toLowerCase().includes(normalizedSavedItemsSearch),
-        ),
-      )
-    : bookmarks
-  const searchFilteredNotes = hasSavedItemsSearch
-    ? notes.filter(({ book, chapter, note }) =>
-        [book.book.title, chapter.title, note.content].some((value) =>
-          value.toLowerCase().includes(normalizedSavedItemsSearch),
-        ),
-      )
-    : notes
+  const hasSavedItemsSearch = savedItemsSearch.trim().length > 0
+  const {
+    bookmarks: searchFilteredBookmarks,
+    notes: searchFilteredNotes,
+  } = filterSavedReadingItems(bookmarks, notes, savedItemsSearch)
   const visibleBookmarks =
     savedItemsScope === 'notes' ? [] : searchFilteredBookmarks
   const visibleNotes =

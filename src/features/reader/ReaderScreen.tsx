@@ -443,6 +443,9 @@ export function ReaderScreen({
     }
   }, [openedChapter.chapter.id, preferences.readingMode])
 
+  const currentChapterPosition = chapterPosition?.currentPosition
+  const totalChapterCount = chapterPosition?.totalChapters
+
   const updateLiveProgress = useCallback(
     (chapterProgress: number) => {
       latestChapterProgressRef.current = chapterProgress
@@ -454,11 +457,13 @@ export function ReaderScreen({
         chapterProgress,
       }
       const percent = roundedProgressPercent(position, 1, 1) ?? 0
-      const bookPercent = chapterPosition
+      const bookPercent =
+        currentChapterPosition !== undefined &&
+        totalChapterCount !== undefined
         ? roundedProgressPercent(
             position,
-            chapterPosition.currentPosition,
-            chapterPosition.totalChapters,
+            currentChapterPosition,
+            totalChapterCount,
           )
         : undefined
 
@@ -475,8 +480,8 @@ export function ReaderScreen({
     [
       openedChapter.book.book.id,
       openedChapter.chapter.id,
-      chapterPosition?.currentPosition,
-      chapterPosition?.totalChapters,
+      currentChapterPosition,
+      totalChapterCount,
     ],
   )
 
@@ -1689,7 +1694,9 @@ export function ReaderScreen({
       <ChapterReadingNoteModal
         isOpen={isChapterReadingNoteOpen}
         chapterTitle={openedChapter.chapter.title}
+        noteTargetKey={`${openedChapter.book.book.id}:${openedChapter.chapter.id}`}
         initialContent={chapterReadingNoteContent}
+        isPersistentStorageAvailable={isPersistentStorageAvailable}
         triggerRef={chapterReadingNoteTriggerRef}
         onClose={() => setIsChapterReadingNoteOpen(false)}
         onSave={handleSaveChapterReadingNote}
