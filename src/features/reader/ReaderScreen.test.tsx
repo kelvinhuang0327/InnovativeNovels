@@ -1441,10 +1441,23 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
 
     expect(prevBtn).toBeDisabled()
     expect(prevBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(prevBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowLeft')
     expect(nextBtn).not.toBeDisabled()
+    expect(nextBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowRight')
+    expect(nextBtn).toHaveAttribute('type', 'button')
+    expect(nextBtn).not.toHaveAttribute('tabindex', '-1')
+
+    nextBtn.focus()
+    expect(nextBtn).toHaveFocus()
+    fireEvent.keyDown(nextBtn, { key: 'ArrowLeft', shiftKey: true })
+    expect(onPrevious).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(nextBtn, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(nextBtn).toHaveFocus()
 
     fireEvent.click(nextBtn)
-    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onNext).toHaveBeenCalledTimes(2)
 
     fireEvent.click(prevBtn)
     expect(onPrevious).not.toHaveBeenCalled()
@@ -1480,10 +1493,147 @@ describe('ReaderScreen Persistent Chapter Navigation', () => {
 
     expect(nextBtn).toBeDisabled()
     expect(nextBtn).toHaveAttribute('aria-disabled', 'true')
+    expect(prevBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowLeft')
+    expect(nextBtn).toHaveAttribute('aria-keyshortcuts', 'Shift+ArrowRight')
     expect(prevBtn).not.toBeDisabled()
 
-    fireEvent.click(prevBtn)
+    prevBtn.focus()
+    expect(prevBtn).toHaveFocus()
+    fireEvent.keyDown(prevBtn, { key: 'ArrowRight', shiftKey: true })
+    expect(onNext).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(prevBtn, { key: 'ArrowLeft', shiftKey: true })
     expect(onPrevious).toHaveBeenCalledTimes(1)
+    expect(prevBtn).toHaveFocus()
+
+    fireEvent.click(prevBtn)
+    expect(onPrevious).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['input', 'textarea', 'contenteditable'] as const)(
+    'ignores chapter shortcuts from %s targets',
+    (targetKind) => {
+      const onPrevious = vi.fn()
+      const onNext = vi.fn()
+
+      render(
+        <ReaderScreen
+          openedChapter={lastChapter}
+          preferences={DEFAULT_READER_PREFERENCES}
+          isBookmarked={false}
+          bookmarks={[]}
+          tableOfContents={[]}
+          chapterPosition={{ currentPosition: 2, totalChapters: 2 }}
+          onChangePreferences={vi.fn()}
+          onResetPreferences={vi.fn()}
+          onToggleBookmark={vi.fn()}
+          onSelectBookmark={vi.fn()}
+          onRemoveBookmark={vi.fn()}
+          onSelectChapter={vi.fn()}
+          onBackToBook={vi.fn()}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />,
+      )
+
+      let editableTarget: HTMLElement
+      if (targetKind === 'input') {
+        editableTarget = document.createElement('input')
+        editableTarget.setAttribute('type', 'text')
+      } else if (targetKind === 'textarea') {
+        editableTarget = document.createElement('textarea')
+      } else {
+        editableTarget = document.createElement('div')
+        editableTarget.setAttribute('contenteditable', 'true')
+      }
+
+      screen.getByLabelText('閱讀器').append(editableTarget)
+      fireEvent.keyDown(editableTarget, { key: 'ArrowLeft', shiftKey: true })
+      fireEvent.keyDown(editableTarget, { key: 'ArrowRight', shiftKey: true })
+
+      expect(onPrevious).not.toHaveBeenCalled()
+      expect(onNext).not.toHaveBeenCalled()
+    },
+  )
+
+  it('keeps persistent navigation focus after the next shortcut changes chapter props', () => {
+    const nextChapter = {
+      ...lastChapter,
+      hasNext: true,
+    }
+    let updateToNextChapter = () => {}
+    const onNext = vi.fn(() => updateToNextChapter())
+
+    const renderReader = (openedChapter: typeof firstChapter | typeof nextChapter) => (
+      <ReaderScreen
+        openedChapter={openedChapter}
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+      />
+    )
+
+    const view = render(renderReader(firstChapter))
+    updateToNextChapter = () => view.rerender(renderReader(nextChapter))
+
+    const nextButton = screen.getByRole('button', { name: '下一章' })
+    nextButton.focus()
+    fireEvent.keyDown(nextButton, { key: 'ArrowRight', shiftKey: true })
+
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('heading', { level: 1, name: 'Chapter 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一章' })).toBe(nextButton)
+    expect(nextButton).toHaveFocus()
+  })
+
+  it('preserves chapter-open failure and retry behavior when a shortcut is used', () => {
+    const onNext = vi.fn()
+    const onRetryChapterOpen = vi.fn()
+
+    render(
+      <ReaderScreen
+        openedChapter={firstChapter}
+        chapterOpenFailed
+        preferences={DEFAULT_READER_PREFERENCES}
+        isBookmarked={false}
+        bookmarks={[]}
+        tableOfContents={[]}
+        chapterPosition={{ currentPosition: 1, totalChapters: 2 }}
+        onChangePreferences={vi.fn()}
+        onResetPreferences={vi.fn()}
+        onToggleBookmark={vi.fn()}
+        onSelectBookmark={vi.fn()}
+        onRemoveBookmark={vi.fn()}
+        onSelectChapter={vi.fn()}
+        onBackToBook={vi.fn()}
+        onPrevious={vi.fn()}
+        onNext={onNext}
+        onRetryChapterOpen={onRetryChapterOpen}
+      />,
+    )
+
+    fireEvent.keyDown(screen.getByLabelText('閱讀器'), {
+      key: 'ArrowRight',
+      shiftKey: true,
+    })
+
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onRetryChapterOpen).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('章節內容暫時無法載入')
+
+    fireEvent.click(screen.getByRole('button', { name: '重試載入章節' }))
+    expect(onRetryChapterOpen).toHaveBeenCalledTimes(1)
   })
 
   it('provides an accessible polite live region announcing chapter change', () => {

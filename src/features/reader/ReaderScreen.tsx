@@ -61,6 +61,29 @@ function isChromeToggleExcludedTarget(target: EventTarget | null): boolean {
   )
 }
 
+function isReaderKeyboardShortcutEditableTarget(
+  target: EventTarget | null,
+): boolean {
+  if (!(target instanceof Element)) {
+    return false
+  }
+
+  if (
+    target.closest(
+      'input, textarea, select, [role="textbox"], [role="searchbox"]',
+    )
+  ) {
+    return true
+  }
+
+  const contentEditableTarget = target.closest('[contenteditable]')
+  return (
+    contentEditableTarget !== null &&
+    contentEditableTarget.getAttribute('contenteditable')?.toLowerCase() !==
+      'false'
+  )
+}
+
 function subscribeToMobileReaderChrome(onStoreChange: () => void) {
   if (typeof window.matchMedia !== 'function') {
     return () => {}
@@ -430,6 +453,31 @@ export function ReaderScreen({
     } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
       event.preventDefault()
       turnPagedPage(-1)
+    }
+  }
+
+  const handleReaderChapterShortcut = (
+    event: ReactKeyboardEvent<HTMLElement>,
+  ) => {
+    if (
+      event.repeat ||
+      !event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isReaderKeyboardShortcutEditableTarget(event.target) ||
+      (event.target instanceof Element &&
+        event.target.closest('dialog, [role="dialog"], [role="menu"], [role="listbox"]'))
+    ) {
+      return
+    }
+
+    if (event.key === 'ArrowLeft' && openedChapter.hasPrevious) {
+      event.preventDefault()
+      onPrevious()
+    } else if (event.key === 'ArrowRight' && openedChapter.hasNext) {
+      event.preventDefault()
+      onNext()
     }
   }
 
@@ -837,6 +885,7 @@ export function ReaderScreen({
   return (
     <section
       ref={readerRef}
+      onKeyDown={handleReaderChapterShortcut}
       className="reader-screen-container"
       data-theme={preferences.theme}
       data-font-family={preferences.fontFamily}
@@ -1065,6 +1114,7 @@ export function ReaderScreen({
                   className="button-primary chapter-end-continue-button"
                   onClick={onNext}
                   aria-label={`繼續閱讀：${nextChapterTitle}`}
+                  aria-keyshortcuts="Shift+ArrowRight"
                 >
                   繼續閱讀
                 </button>
@@ -1107,6 +1157,7 @@ export function ReaderScreen({
                   className="button-secondary chapter-end-prev-button"
                   onClick={onPrevious}
                   aria-label="上一章"
+                  aria-keyshortcuts="Shift+ArrowLeft"
                 >
                   ← 上一章
                 </button>
@@ -1147,6 +1198,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasPrevious}
           aria-disabled={!openedChapter.hasPrevious}
           aria-label="上一章"
+          aria-keyshortcuts="Shift+ArrowLeft"
         >
           {isMobileReaderChrome ? '上章' : '上一章'}
         </button>
@@ -1180,6 +1232,7 @@ export function ReaderScreen({
           disabled={!openedChapter.hasNext}
           aria-disabled={!openedChapter.hasNext}
           aria-label="下一章"
+          aria-keyshortcuts="Shift+ArrowRight"
         >
           {isMobileReaderChrome ? '下章' : '下一章'}
         </button>
