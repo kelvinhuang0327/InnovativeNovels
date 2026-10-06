@@ -1,4 +1,4 @@
-import type { AuthoringSpec, Draft } from '../../domain/authoring/authoringContracts'
+import type { AuthoringSpec, Draft, DraftChapter } from '../../domain/authoring/authoringContracts'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
 import { createEmptyStoryBible, type StoryBibleV1 } from '../../domain/authoring/storyBible'
 import { buildStoryBiblePromptSection } from './storyBiblePrompt'
@@ -19,6 +19,7 @@ export interface ContinuationContext {
     readonly sequence: number
     readonly title: string
     readonly prose: string
+    readonly metadata?: DraftChapter['metadata']
   }[]
 }
 
@@ -60,6 +61,7 @@ export function buildContinuationContext(
       sequence: chapter.sequence,
       title: chapter.title,
       prose: chapter.prose.join('\n\n'),
+      ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
     })),
   }
 }
@@ -116,6 +118,7 @@ export function buildContinuationPrompt(
     '- Output raw JSON only: no Markdown code fence, no preface, no explanation, and no text after the object.',
     `- Return exactly ${requestedChapterCount} new chapters with continuous integer sequences ${expectedStartSequence} through ${expectedStartSequence + requestedChapterCount - 1}.`,
     '- Continue the existing story coherently using the supplied bounded context.',
+    '- Each new chapter may optionally include metadata: summary, keyEvents, characterStates, setups, payoffs, worldStateChanges, mainGoal, endingHook. Lists contain strings; characterStates maps names to string observations. Omit unavailable observations; never invent future payoff or treat these notes as canon.',
     '- Do not rewrite, repeat, or return any previous chapter.',
     '- Do not claim publication or create production identifiers.',
     '',

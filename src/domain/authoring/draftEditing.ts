@@ -36,9 +36,15 @@ export function updateDraftChapter(
   sequence: number,
   patch: DraftChapterPatch,
 ): GeneratedDraft {
-  const chapters = draft.chapters.map((chapter) =>
-    chapter.sequence === sequence ? { ...chapter, ...patch } : chapter,
-  )
+  const chapters = draft.chapters.map((chapter) => {
+    if (chapter.sequence !== sequence) return chapter
+    const next = { ...chapter, ...patch }
+    // Observations attached to old prose must not silently describe edited text.
+    if (patch.prose && JSON.stringify(patch.prose) !== JSON.stringify(chapter.prose)) {
+      return { sequence: next.sequence, title: next.title, prose: next.prose }
+    }
+    return next
+  })
   return withChapters(draft, chapters)
 }
 

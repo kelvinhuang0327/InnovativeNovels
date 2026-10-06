@@ -11,6 +11,7 @@ export function mapGeneratedDraftToAgentDraftExchange(
       sequence: index + 1,
       title: chapter.title,
       prose: chapter.prose.join('\n\n'),
+      ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
     })),
   }
 }

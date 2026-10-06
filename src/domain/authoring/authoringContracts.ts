@@ -1,4 +1,5 @@
 import type { DraftQualityResult } from './qualityEvaluator'
+import type { ChapterContinuityMetadata } from './batchContinuityReview'
 
 export const DEFAULT_REQUESTED_CHAPTER_COUNT = 3
 export const MAX_REQUESTED_CHAPTER_COUNT = 6
@@ -23,6 +24,7 @@ export interface DraftChapter {
   readonly sequence: number
   readonly title: string
   readonly prose: readonly string[]
+  readonly metadata?: ChapterContinuityMetadata
 }
 
 export interface GeneratedDraft {

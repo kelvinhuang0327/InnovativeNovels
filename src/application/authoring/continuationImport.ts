@@ -56,6 +56,7 @@ export function importContinuation(
     sequence: chapter.sequence,
     title: chapter.title,
     prose: proseToParagraphs(chapter.prose),
+    ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
   }))
 
   return {

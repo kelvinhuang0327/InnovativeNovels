@@ -9,6 +9,7 @@ import {
   type PublishedAppendCandidate,
 } from '../../domain/authoring/publishedAppendCandidate'
 import { evaluateDraftQuality } from '../../domain/authoring/qualityEvaluator'
+import { parseChapterContinuityMetadata } from '../../domain/authoring/batchContinuityReview'
 import { parseContinuityReviewBatch, type ContinuityReviewBatchV1 } from '../../domain/authoring/continuityReview'
 import {
   createEmptyStoryBible,
@@ -60,7 +61,7 @@ const SPEC_FIELDS = new Set([
   'requestedChapterCount',
 ])
 const DRAFT_FIELDS = new Set(['title', 'categoryLabel', 'chapters'])
-const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose'])
+const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose', 'metadata'])
 const PUBLICATION_PREPARATION_FIELDS = new Set([
   'publicationSlug',
   'authorName',
@@ -145,10 +146,13 @@ function parseGeneratedDraft(value: unknown): GeneratedDraft | undefined {
       return undefined
     }
 
+    const metadata = chapter.metadata === undefined ? undefined : parseChapterContinuityMetadata(chapter.metadata)
+    if (chapter.metadata !== undefined && !metadata) return undefined
     return {
       sequence: chapter.sequence as number,
       title: chapter.title,
       prose: chapter.prose as string[],
+      ...(metadata ? { metadata } : {}),
     }
   })
 

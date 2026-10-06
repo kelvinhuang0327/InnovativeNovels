@@ -37,6 +37,8 @@ export interface PublicationCandidateWarning {
   readonly code: DraftQualityIssue['code']
   readonly message: string
   readonly chapterSequence?: number
+  readonly sourceChapterSequences?: DraftQualityIssue['sourceChapterSequences']
+  readonly evidence?: DraftQualityIssue['evidence']
 }
 
 export type PublicationCandidateReadiness =
@@ -165,6 +167,8 @@ export function buildPublicationCandidate(
     code: qualityWarning.code,
     message: qualityWarning.message,
     chapterSequence: qualityWarning.chapterSequence,
+    ...(qualityWarning.sourceChapterSequences ? { sourceChapterSequences: qualityWarning.sourceChapterSequences } : {}),
+    ...(qualityWarning.evidence ? { evidence: qualityWarning.evidence } : {}),
   }))
 
   if (issues.length > 0 || !bookId) {

@@ -1,4 +1,5 @@
 import type { GeneratedDraft } from './authoringContracts'
+import { evaluateBatchContinuity, type BatchContinuityWarning } from './batchContinuityReview'
 
 export const MIN_USEFUL_PROSE_PARAGRAPHS = 5
 
@@ -12,8 +13,11 @@ export interface DraftQualityIssue {
     | 'CHAPTER_PROSE_REQUIRED'
     | 'DUPLICATE_CHAPTER_PROSE'
     | 'PROSE_TOO_SHORT'
+    | BatchContinuityWarning['code']
   readonly message: string
   readonly chapterSequence?: number
+  readonly sourceChapterSequences?: readonly number[]
+  readonly evidence?: BatchContinuityWarning['evidence']
 }
 
 export type DraftQualityStatus = 'PASS' | 'WARNING' | 'FAIL'
@@ -101,6 +105,8 @@ export function evaluateDraftQuality(
       })
     }
   })
+
+  warnings.push(...evaluateBatchContinuity(draft.chapters).warnings)
 
   return {
     status:

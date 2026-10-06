@@ -12,6 +12,7 @@ import {
   evaluateDraftQuality,
 } from '../../domain/authoring/qualityEvaluator'
 import type { GenerationProvider } from './generationProvider'
+import { parseChapterContinuityMetadata } from '../../domain/authoring/batchContinuityReview'
 
 export type CreateDraftResult =
   | {
@@ -35,11 +36,16 @@ function normalizeGeneratedDraft(generated: GeneratedDraft): GeneratedDraft {
   return {
     title: generated.title.trim(),
     categoryLabel: generated.categoryLabel.trim(),
-    chapters: generated.chapters.map((chapter) => ({
-      sequence: chapter.sequence,
-      title: chapter.title.trim(),
-      prose: chapter.prose.map((paragraph) => paragraph.trim()),
-    })),
+    chapters: generated.chapters.map((chapter) => {
+      const metadata = chapter.metadata === undefined ? undefined : parseChapterContinuityMetadata(chapter.metadata)
+      if (chapter.metadata !== undefined && !metadata) throw new Error('章節 metadata 無效。')
+      return {
+        sequence: chapter.sequence,
+        title: chapter.title.trim(),
+        prose: chapter.prose.map((paragraph) => paragraph.trim()),
+        ...(metadata ? { metadata } : {}),
+      }
+    }),
   }
 }
 

@@ -1,4 +1,5 @@
 import type { Draft, DraftChapter } from './authoringContracts'
+import { evaluateBatchContinuity } from './batchContinuityReview'
 import {
   STORY_BIBLE_LIMITS,
   validateStoryBible,
@@ -429,6 +430,7 @@ function serializeDraftChapter(chapter: DraftChapter) {
     sequence: chapter.sequence,
     title: chapter.title,
     prose: [...chapter.prose],
+    ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
   }
 }
 
@@ -529,6 +531,7 @@ export function buildContinuityReviewPrompt(
     sequence: chapter.sequence,
     title: chapter.title,
     prose: chapter.prose.join('\n\n'),
+    ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
   }))
   const prompt = [
     'Role: Novel Story Bible Continuity Review Agent',
@@ -546,6 +549,10 @@ export function buildContinuityReviewPrompt(
     `Exact review range: chapters ${reviewedFromSequence} through ${reviewedToSequence}.`,
     'Exact reviewed Draft chapters:',
     JSON.stringify(selectedChapterPayload, null, 2),
+    '',
+    'Local batch continuity observations (literal metadata signals only; not canon, not proof of correctness):',
+    JSON.stringify(evaluateBatchContinuity(selected, storyBible), null, 2),
+    'Verify every observation against the reviewed prose. Missing literal matches can be paraphrases or intentionally deferred payoffs. Never turn an observation into a Story Bible fact without prose evidence.',
     '',
     'Allowed proposal operations exactly:',
     '- ADD_CHARACTER: name, notes, reason',

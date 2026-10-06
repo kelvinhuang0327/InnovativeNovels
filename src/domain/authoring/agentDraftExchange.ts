@@ -1,7 +1,10 @@
+import { parseChapterContinuityMetadata, type ChapterContinuityMetadata } from './batchContinuityReview'
+
 export interface AgentDraftExchangeChapter {
   readonly sequence: number
   readonly title: string
   readonly prose: string
+  readonly metadata?: ChapterContinuityMetadata
 }
 
 export interface AgentDraftExchange {
@@ -21,6 +24,7 @@ export type AgentDraftValidationErrorCode =
   | 'CHAPTER_SEQUENCE_INVALID'
   | 'CHAPTER_TITLE_REQUIRED'
   | 'CHAPTER_PROSE_REQUIRED'
+  | 'CHAPTER_METADATA_INVALID'
   | 'DUPLICATE_SEQUENCE'
   | 'SEQUENCE_GAP'
 
@@ -41,7 +45,7 @@ export type AgentDraftExchangeParseResult =
     }
 
 const ROOT_FIELDS = new Set(['title', 'genre', 'chapters'])
-const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose'])
+const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose', 'metadata'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -85,6 +89,10 @@ function parseChapter(
   const sequence = value.sequence
   const title = value.title
   const prose = value.prose
+  const metadata = value.metadata === undefined ? undefined : parseChapterContinuityMetadata(value.metadata)
+  if (value.metadata !== undefined && metadata === undefined) {
+    errors.push({ code: 'CHAPTER_METADATA_INVALID', message: `${path}.metadata 必須符合有界的章節觀察欄位；不得包含發佈或存取設定。`, path: `${path}.metadata` })
+  }
 
   if (!Number.isInteger(sequence) || (sequence as number) < 1) {
     errors.push({
@@ -119,6 +127,7 @@ function parseChapter(
       sequence: sequence as number,
       title: (title as string).trim(),
       prose: (prose as string).trim(),
+      ...(metadata ? { metadata } : {}),
     },
     errors,
   }

@@ -52,6 +52,8 @@ export interface PublishedAppendCandidateWarning {
   readonly code: DraftQualityIssue['code']
   readonly message: string
   readonly chapterSequence?: number
+  readonly sourceChapterSequences?: DraftQualityIssue['sourceChapterSequences']
+  readonly evidence?: DraftQualityIssue['evidence']
 }
 
 export interface PublishedAppendCandidateValidation {
@@ -250,6 +252,7 @@ function serializeDraftForFingerprint(
       sequence: chapter.sequence,
       title: chapter.title,
       prose: [...chapter.prose],
+      ...(chapter.metadata ? { metadata: chapter.metadata } : {}),
     })),
   })
 }
@@ -285,6 +288,8 @@ function mapWarnings(
     code: warning.code,
     message: warning.message,
     chapterSequence: warning.chapterSequence,
+    ...(warning.sourceChapterSequences ? { sourceChapterSequences: warning.sourceChapterSequences } : {}),
+    ...(warning.evidence ? { evidence: warning.evidence } : {}),
   }))
 }
 
@@ -660,7 +665,11 @@ function isQualityIssue(value: unknown): value is DraftQualityIssue {
     isRecord(value) &&
     typeof value.code === 'string' &&
     typeof value.message === 'string' &&
-    (value.chapterSequence === undefined || typeof value.chapterSequence === 'number')
+    (value.chapterSequence === undefined || typeof value.chapterSequence === 'number') &&
+    (value.sourceChapterSequences === undefined || (Array.isArray(value.sourceChapterSequences) &&
+      value.sourceChapterSequences.every((sequence) => Number.isSafeInteger(sequence) && sequence > 0))) &&
+    (value.evidence === undefined || (Array.isArray(value.evidence) && value.evidence.every((entry) =>
+      isRecord(entry) && typeof entry.field === 'string' && typeof entry.text === 'string')))
   )
 }
 

@@ -16,6 +16,7 @@ import {
 } from '../../domain/authoring/continuityReview'
 import type { Draft } from '../../domain/authoring/authoringContracts'
 import type { StoryBibleV1 } from '../../domain/authoring/storyBible'
+import { evaluateBatchContinuity } from '../../domain/authoring/batchContinuityReview'
 
 interface ContinuityReviewPanelProps {
   readonly draft?: Draft
@@ -54,6 +55,7 @@ export function ContinuityReviewPanel({
   const [copyState, setCopyState] = useState<CopyState>()
 
   const status = getContinuityReviewStatus(draft, checkpoint, batchSize)
+  const batchAdvisory = draft ? evaluateBatchContinuity(draft.chapters, storyBible) : undefined
 
   useEffect(() => {
     if (!batch || !draft || batch.status === 'STALE' || batch.status === 'COMPLETED') {
@@ -194,6 +196,34 @@ export function ContinuityReviewPanel({
       <p>
         Continuity review 只提出 Story Bible 變更；外部 Agent 不會連線，任何變更都必須由你明確決定。
       </p>
+      {batchAdvisory && (
+        <section aria-labelledby="batch-continuity-heading">
+          <h3 id="batch-continuity-heading">跨章因果／伏筆提示</h3>
+          <p>只比對章節觀察與字面訊號，不證明故事正確。未找到相同文字可能是改寫或延後回收；不會自動更改 Story Bible。編輯正文後，舊 metadata 會失效，需重新提供觀察。</p>
+          <p role="status">
+            {batchAdvisory.status === 'INSUFFICIENT_DATA'
+              ? '資料不足：至少兩章及前章觀察 metadata 才能檢查跨章承接。可在 Agent JSON 章節加入 metadata。'
+              : `已檢查 ${batchAdvisory.checkedTransitions} 個章節承接；${batchAdvisory.warnings.length} 項需人工複核。`}
+          </p>
+          <ul>
+            {batchAdvisory.warnings.map((warning) => (
+              <li key={`${warning.code}-${warning.chapterSequence}`}>
+                <p>{warning.message}</p>
+                <p>來源章節：{warning.sourceChapterSequences.join('、')}；檢視章節：{warning.chapterSequence}</p>
+                <ul>{warning.evidence.map((entry, index) => <li key={`${entry.field}-${index}`}>{entry.field}：{entry.text}</li>)}</ul>
+              </li>
+            ))}
+          </ul>
+          {batchAdvisory.bibleThreadReferences.length > 0 && (
+            <details>
+              <summary>Story Bible 開放伏筆字面參照（不代表已回收）</summary>
+              <ul>{batchAdvisory.bibleThreadReferences.map((thread, index) => (
+                <li key={index}>{thread.text}：{thread.chapterSequences.length ? `第 ${thread.chapterSequences.join('、')} 章出現相同文字` : '未找到相同文字；需人工核對'}</li>
+              ))}</ul>
+            </details>
+          )}
+        </section>
+      )}
       <p className="authoring-quality-status" role="status">
         Reviewed through chapter {checkpoint} · Unreviewed chapters: {status.unreviewedChapterSequences.length}
       </p>

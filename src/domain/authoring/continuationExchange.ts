@@ -1,3 +1,5 @@
+import { parseChapterContinuityMetadata, type ChapterContinuityMetadata } from './batchContinuityReview'
+
 export const MIN_CONTINUATION_CHAPTER_COUNT = 1
 export const MAX_CONTINUATION_CHAPTER_COUNT = 5
 export const DEFAULT_CONTINUATION_CHAPTER_COUNT = 2
@@ -6,6 +8,7 @@ export interface ContinuationExchangeChapter {
   readonly sequence: number
   readonly title: string
   readonly prose: string
+  readonly metadata?: ChapterContinuityMetadata
 }
 
 export interface ContinuationExchange {
@@ -24,6 +27,7 @@ export type ContinuationValidationErrorCode =
   | 'CHAPTER_SEQUENCE_INVALID'
   | 'CHAPTER_TITLE_REQUIRED'
   | 'CHAPTER_PROSE_REQUIRED'
+  | 'CHAPTER_METADATA_INVALID'
   | 'DUPLICATE_SEQUENCE'
   | 'SEQUENCE_START_INVALID'
   | 'SEQUENCE_GAP'
@@ -50,7 +54,7 @@ interface ContinuationParseOptions {
 }
 
 const ROOT_FIELDS = new Set(['chapters'])
-const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose'])
+const CHAPTER_FIELDS = new Set(['sequence', 'title', 'prose', 'metadata'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -94,6 +98,10 @@ function parseChapter(
   const sequence = value.sequence
   const title = value.title
   const prose = value.prose
+  const metadata = value.metadata === undefined ? undefined : parseChapterContinuityMetadata(value.metadata)
+  if (value.metadata !== undefined && metadata === undefined) {
+    errors.push({ code: 'CHAPTER_METADATA_INVALID', message: `${path}.metadata 必須符合有界的章節觀察欄位；不得包含發佈或存取設定。`, path: `${path}.metadata` })
+  }
 
   if (!Number.isInteger(sequence) || (sequence as number) < 1) {
     errors.push({
@@ -128,6 +136,7 @@ function parseChapter(
       sequence: sequence as number,
       title: (title as string).trim(),
       prose: (prose as string).trim(),
+      ...(metadata ? { metadata } : {}),
     },
     errors,
   }
