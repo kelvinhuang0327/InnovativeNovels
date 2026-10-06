@@ -25,6 +25,10 @@ test.describe('Journey 10 — Mobile Reader Emulation', () => {
     await expect(page.getByTestId('chapter-prose').first()).toBeVisible()
 
     // Verify touch / navigation controls are visible and reachable
-    await expect(page.getByRole('button', { name: '返回作品' })).toBeVisible()
+    const backToBook = page.getByRole('button', { name: '返回作品' }).first()
+    await backToBook.scrollIntoViewIfNeeded()
+    await expect(backToBook).toBeVisible()
+    await backToBook.click()
+    await expect(page.getByRole('heading', { level: 2, name: '章節目錄' })).toBeVisible()
   })
 })
