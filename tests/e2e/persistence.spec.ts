@@ -63,6 +63,9 @@ test.describe('Persistence & Preferences Journeys', () => {
 
     const readerContainer = page.getByRole('region', { name: '閱讀器' })
 
+    await page.getByRole('button', { name: '閱讀設定', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '閱讀設定' })).toBeVisible()
+
     // Change theme to Sepia / 護眼
     const sepiaThemeOption = page.getByRole('radio', { name: '護眼' })
     await sepiaThemeOption.click()
@@ -72,6 +75,7 @@ test.describe('Persistence & Preferences Journeys', () => {
     const fontLargeOption = page.getByRole('radio', { name: '大', exact: true })
     await fontLargeOption.click()
     await expect(readerContainer).toHaveAttribute('data-font-scale', 'large')
+    await page.getByRole('button', { name: '關閉閱讀設定' }).click()
 
     // Reload page
     await page.reload()

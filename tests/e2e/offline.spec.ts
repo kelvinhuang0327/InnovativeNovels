@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Journey 8 — Offline / PWA Service Worker', () => {
-  test('Chromium offline PWA caching allows viewing cached reader content offline', async ({ page, context }) => {
+  test('Offline PWA caching allows viewing cached reader content offline', async ({ page, context }) => {
 
     // Service Worker testing requires full registration & caching cycle
     await page.goto('/')

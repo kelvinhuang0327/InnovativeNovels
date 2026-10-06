@@ -17,7 +17,7 @@ test.describe('Journey 10 — Mobile Reader Emulation', () => {
     // Open book detail
     const bookCard = page.locator('article.book-card').first()
     await bookCard.getByRole('button', { name: '查看書籍' }).click()
-    await expect(page.getByRole('heading', { level: 2, name: '章節預覽' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: '章節目錄' })).toBeVisible()
 
     // Open reader
     await page.getByRole('button', { name: /閱讀本章|開始試閱|開始閱讀/ }).first().click()
