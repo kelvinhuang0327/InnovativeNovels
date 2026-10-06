@@ -1,3 +1,4 @@
+import { normalizeFingerprint, isDebugCertificate as isDebugSigningCertificate } from './android-distribution-signing.mjs'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -138,10 +139,6 @@ function run(command, args) {
   }
 }
 
-function normalizeFingerprint(value) {
-  return value.replace(/[^a-f0-9]/gi, '').toLowerCase()
-}
-
 function parseFingerprint(output) {
   const patterns = [
     /certificate SHA-256 digest:\s*([0-9a-f: ]{32,})/i,
@@ -217,8 +214,7 @@ function readDebugCertificateFingerprint() {
 }
 
 function isDebugCertificate(fingerprint, distinguishedName, debugFingerprint) {
-  return (fingerprint && debugFingerprint && fingerprint === debugFingerprint)
-    || /android\s+debug/i.test(distinguishedName || '')
+  return isDebugSigningCertificate({ sha256: fingerprint, distinguishedName, debugFingerprint })
 }
 
 function expectedFingerprint() {

@@ -54,3 +54,5 @@ ExportOptions.plist
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+android/keystore.properties
