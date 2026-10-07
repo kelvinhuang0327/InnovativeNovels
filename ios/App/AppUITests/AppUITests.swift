@@ -16,6 +16,10 @@ final class AppUITests: XCTestCase {
             attachment.lifetime = .keepAlways
             attachment.name = "FinalState_\(name)"
             add(attachment)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.lifetime = .keepAlways
+            hierarchy.name = "Hierarchy_\(name)"
+            add(hierarchy)
         }
         app = nil
     }
@@ -28,29 +32,67 @@ final class AppUITests: XCTestCase {
         add(attachment)
     }
 
+    // WebKit exposes dialog triggers as popup controls, not always as Buttons.
+    private func readerControl(_ label: String, mobileLabel: String) -> XCUIElement {
+        return app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR label == %@", label, mobileLabel)).firstMatch
+    }
+
+    private func revealReaderChrome(for control: XCUIElement) {
+        if control.exists { return }
+        // Mobile reading hides the toolbar while scrolling. A tap on prose reveals it.
+        let webView = app.webViews.firstMatch
+        webView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        if control.waitForExistence(timeout: 3.0) { return }
+        webView.swipeDown()
+        XCTAssertTrue(control.waitForExistence(timeout: 5.0), "Reader toolbar did not appear after tap/upward scroll")
+    }
+
+    private func chapterProgressPercent() throws -> Double {
+        let progress = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "本章閱讀進度")).firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5.0))
+        let value = try XCTUnwrap(progress.value as? String)
+        let number = value.components(separatedBy: CharacterSet.decimalDigits.inverted).first(where: { !$0.isEmpty })
+        return try XCTUnwrap(number.flatMap(Double.init), "Chapter progress has no numeric accessibility value")
+    }
+
+    private func isVisibleInWebView(_ element: XCUIElement) -> Bool {
+        guard element.exists, element.isHittable else { return false }
+        let viewport = app.webViews.firstMatch.frame
+        return element.frame.midY > viewport.minY + 80 && element.frame.midY < viewport.maxY - 80
+    }
+
+    private func scrollToVisible(_ element: XCUIElement, towardTop: Bool) {
+        let webView = app.webViews.firstMatch
+        for _ in 0..<12 {
+            if isVisibleInWebView(element) { return }
+            if towardTop { webView.swipeDown() } else { webView.swipeUp() }
+        }
+        XCTAssertTrue(isVisibleInWebView(element), "Element could not be reached within the visible WebView")
+    }
+
     /// Idempotently navigates back to Catalog screen if the app booted into a persisted reading session.
     private func ensureCatalogScreen() {
         let webView = app.webViews.firstMatch
         XCTAssertTrue(webView.waitForExistence(timeout: 20.0), "WebView failed to load")
 
         let catalogHeading = app.staticTexts["探索故事"]
-        if catalogHeading.waitForExistence(timeout: 3.0) {
-            return
-        }
+        for _ in 0..<3 {
+            if catalogHeading.waitForExistence(timeout: 3.0) { return }
+            let backToCatalog = app.buttons.matching(NSPredicate(format: "label == '返回書庫' OR label == '返回我的書架'")).firstMatch
+            if backToCatalog.exists {
+                if !backToCatalog.isHittable { webView.swipeDown() }
+                backToCatalog.tap()
+                continue
+            }
 
-        // If in Reader screen, tap back to Book Detail
-        let backToBook = app.buttons.matching(NSPredicate(format: "label == '返回作品' OR label == '返回'")).firstMatch
-        if backToBook.waitForExistence(timeout: 5.0) {
-            backToBook.tap()
-        }
-
-        // Ensure top of page is visible
-        webView.swipeDown()
-
-        // If in Book Detail screen, tap back to Catalog
-        let backToCatalog = app.buttons.matching(NSPredicate(format: "label == '返回書庫' OR label == '返回我的書架'")).firstMatch
-        if backToCatalog.waitForExistence(timeout: 5.0) {
-            backToCatalog.tap()
+            // Reveal the fixed reader header and use a visible return control.
+            webView.swipeDown()
+            let backToBook = app.buttons.matching(NSPredicate(format: "label == '返回作品'"))
+            _ = backToBook.firstMatch.waitForExistence(timeout: 5.0)
+            if let visibleBack = backToBook.allElementsBoundByIndex.first(where: { $0.isHittable }) {
+                visibleBack.tap()
+                _ = backToCatalog.waitForExistence(timeout: 5.0)
+            }
         }
 
         XCTAssertTrue(catalogHeading.waitForExistence(timeout: 15.0), "Step 2: Failed to reach Catalog screen")
@@ -72,6 +114,7 @@ final class AppUITests: XCTestCase {
     /// 10. Relaunch.
     /// 11. Verify the application returns to a valid reading/resume state consistent with the existing persistence contract.
     func testNativeReadingJourney() throws {
+        let acceptanceNote = "原生閱讀驗收筆記"
         // Step 1: Launch the app in an iOS Simulator
         app.launch()
         attachScreenshot(name: "01_AppLaunch")
@@ -94,21 +137,32 @@ final class AppUITests: XCTestCase {
 
         // Step 5: Enter Reader
         let chapter1Button = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '第一章'")).firstMatch
-        if chapter1Button.waitForExistence(timeout: 5.0) {
-            chapter1Button.tap()
-        } else {
-            let readButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "閱讀")).firstMatch
-            XCTAssertTrue(readButton.waitForExistence(timeout: 10.0), "Step 5: Start/Continue reading button not found on Book Detail")
-            readButton.tap()
-        }
+        XCTAssertTrue(chapter1Button.waitForExistence(timeout: 5.0))
+        scrollToVisible(chapter1Button, towardTop: false)
+        chapter1Button.tap()
 
         // Step 6: Verify substantive chapter prose is visible
         let chapter1Heading = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "第一章")).firstMatch
         XCTAssertTrue(chapter1Heading.waitForExistence(timeout: 10.0), "Step 6: Chapter 1 heading not visible in Reader")
 
-        let proseExcerpt = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] '燈火' OR label CONTAINS[c] '澄夏' OR label CONTAINS[c] '潮聲'")).firstMatch
+        let proseExcerpt = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "清晨的第一道潮聲穿過港口時")).firstMatch
+        scrollToVisible(proseExcerpt, towardTop: true)
         XCTAssertTrue(proseExcerpt.waitForExistence(timeout: 10.0), "Step 6: Substantive chapter prose not visible in Reader")
         attachScreenshot(name: "06_Chapter1ProseVisible")
+
+        let settings = readerControl("閱讀設定", mobileLabel: "設定")
+        revealReaderChrome(for: settings)
+        XCTAssertTrue(settings.waitForExistence(timeout: 10.0))
+        settings.tap()
+        let darkTheme = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "暗黑")).firstMatch
+        XCTAssertTrue(darkTheme.waitForExistence(timeout: 10.0))
+        darkTheme.tap()
+        XCTAssertTrue(darkTheme.isSelected || (darkTheme.value as? String) == "1", "Dark theme was not selected")
+        app.buttons["關閉閱讀設定"].tap()
+
+        let addBookmark = readerControl("加入章節書籤", mobileLabel: "☆")
+        if addBookmark.exists { addBookmark.tap() }
+        XCTAssertTrue(readerControl("移除章節書籤", mobileLabel: "★").waitForExistence(timeout: 10.0))
 
         // Step 7: Navigate to another chapter using the existing product UI
         let nextChapterButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '下章' OR label CONTAINS[c] '下一章'")).firstMatch
@@ -119,12 +173,42 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(chapter2Heading.waitForExistence(timeout: 10.0), "Step 7: Chapter 2 heading not visible after navigating to next chapter")
         attachScreenshot(name: "07_Chapter2Navigated")
 
+        let noteControl = readerControl("本章筆記", mobileLabel: "筆記")
+        revealReaderChrome(for: noteControl)
+        noteControl.tap()
+        let note = app.textViews["筆記內容"]
+        XCTAssertTrue(note.waitForExistence(timeout: 10.0))
+        if let existing = note.value as? String, !existing.isEmpty {
+            // Clear this simulator's synthetic note through the product UI before a repeat run.
+            XCTAssertTrue(existing.hasPrefix(acceptanceNote) || existing.hasPrefix("Native acceptance note"), "Unexpected note in the dedicated test simulator")
+            app.buttons["清除筆記"].tap()
+            XCTAssertFalse(note.waitForExistence(timeout: 2.0))
+            revealReaderChrome(for: noteControl)
+            noteControl.tap()
+            XCTAssertTrue(note.waitForExistence(timeout: 10.0))
+        }
+        note.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.15)).tap()
+        app.typeText(acceptanceNote)
+        // Commit text and uncover the save action before tapping it on a software keyboard.
+        let noteKeyboardDone = app.buttons["Done"]
+        if noteKeyboardDone.waitForExistence(timeout: 3.0) { noteKeyboardDone.tap() }
+        XCTAssertEqual(note.value as? String, acceptanceNote, "Note text was not entered before saving")
+        app.buttons["儲存筆記"].tap()
+        XCTAssertFalse(note.waitForExistence(timeout: 2.0))
+        revealReaderChrome(for: noteControl)
+        noteControl.tap()
+        XCTAssertTrue(note.waitForExistence(timeout: 10.0))
+        XCTAssertEqual(note.value as? String, acceptanceNote, "Note was not retained immediately after saving")
+        app.buttons["關閉本章筆記"].tap()
+
         // Step 8: Move materially into the chapter
         let webView = app.webViews.firstMatch
         webView.swipeUp()
 
         let chapter2Prose = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] '舊燈塔' OR label CONTAINS[c] '燈室' OR label CONTAINS[c] '鹽霧' OR label CONTAINS[c] '頂層'")).firstMatch
         XCTAssertTrue(chapter2Prose.waitForExistence(timeout: 10.0), "Step 8: Chapter 2 prose not visible after moving materially into chapter")
+        let savedProgress = try chapterProgressPercent()
+        XCTAssertGreaterThan(savedProgress, 0, "Reading did not move into the chapter")
         attachScreenshot(name: "08_MovedMateriallyIntoChapter2")
 
         // Step 9: Leave/terminate the application in the manner supported by the harness
@@ -137,13 +221,64 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(relaunchedWebView.waitForExistence(timeout: 20.0), "Step 10: WebView failed to load after relaunch")
 
         // Step 11: Verify the application returns to a valid reading/resume state consistent with the existing persistence contract
-        let resumedIndicator = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] '已恢復上次閱讀' OR label CONTAINS[c] '第二章'")).firstMatch
+        let resumedIndicator = app.staticTexts["第二章：燈塔守望"].firstMatch
         XCTAssertTrue(resumedIndicator.waitForExistence(timeout: 15.0), "Step 11: Application did not resume to valid reading state on Chapter 2")
 
         let resumedProse = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] '舊燈塔' OR label CONTAINS[c] '燈室' OR label CONTAINS[c] '澄夏' OR label CONTAINS[c] '頂層'")).firstMatch
         XCTAssertTrue(resumedProse.waitForExistence(timeout: 10.0), "Step 11: Resumed chapter prose not visible after relaunch")
+        XCTAssertEqual(try chapterProgressPercent(), savedProgress, accuracy: 2.0, "Chapter position did not survive relaunch")
 
         XCTAssertEqual(app.state, .runningForeground, "Step 11: Application should be running in foreground after relaunch")
+        revealReaderChrome(for: noteControl)
+        noteControl.tap()
+        let restoredNote = app.textViews["筆記內容"]
+        XCTAssertTrue(restoredNote.waitForExistence(timeout: 10.0))
+        XCTAssertEqual(restoredNote.value as? String, acceptanceNote)
+        app.buttons["關閉本章筆記"].tap()
+        readerControl("閱讀設定", mobileLabel: "設定").tap()
+        let restoredTheme = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "暗黑")).firstMatch
+        XCTAssertTrue(restoredTheme.waitForExistence(timeout: 10.0))
+        XCTAssertTrue(restoredTheme.isSelected || (restoredTheme.value as? String) == "1", "Theme did not survive relaunch")
+        app.buttons["關閉閱讀設定"].tap()
+        readerControl("開啟書籤列表", mobileLabel: "書籤").tap()
+        let jumpBookmark = app.buttons["移至章節"]
+        XCTAssertTrue(jumpBookmark.waitForExistence(timeout: 10.0))
+        jumpBookmark.tap()
+        XCTAssertTrue(app.staticTexts["第一章：潮聲來信"].firstMatch.waitForExistence(timeout: 10.0))
+        let bookmarked = readerControl("移除章節書籤", mobileLabel: "★")
+        revealReaderChrome(for: bookmarked)
+        XCTAssertTrue(bookmarked.exists)
         attachScreenshot(name: "11_ResumeStateVerified")
+    }
+
+    func testNativeManualAuthoringAvailability() throws {
+        app.launch()
+        ensureCatalogScreen()
+        // Filter the catalog through its public search UI so the footer is nearby.
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10.0))
+        search.tap()
+        search.typeText("潮汐之城")
+        let keyboardDone = app.buttons["Done"]
+        XCTAssertTrue(keyboardDone.waitForExistence(timeout: 5.0))
+        keyboardDone.tap()
+        let openAuthoring = app.buttons["開啟創作預覽"]
+        XCTAssertTrue(openAuthoring.waitForExistence(timeout: 10.0), "Manual authoring entry is missing")
+        for _ in 0..<8 {
+            if openAuthoring.isHittable { break }
+            app.webViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(openAuthoring.isHittable, "Manual authoring entry could not be reached by scrolling")
+        openAuthoring.tap()
+        XCTAssertTrue(app.staticTexts["AI 創作預覽"].waitForExistence(timeout: 10.0))
+        let unavailableNotice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "此版本尚未提供內建 AI 生成")).firstMatch
+        XCTAssertTrue(unavailableNotice.waitForExistence(timeout: 10.0), "Missing explanation of unavailable generation")
+        let preview = app.buttons["產生草稿預覽"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10.0))
+        XCTAssertFalse(preview.isEnabled, "Native build must not offer a development-only gateway")
+        let importDraft = app.buttons["Import Structured Draft"]
+        XCTAssertTrue(importDraft.waitForExistence(timeout: 10.0), "Manual draft import is missing")
+        XCTAssertTrue(importDraft.isEnabled)
+        attachScreenshot(name: "NativeManualAuthoringAvailability")
     }
 }

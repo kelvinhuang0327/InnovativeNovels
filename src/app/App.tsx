@@ -657,6 +657,7 @@ function App({
 
       {screen.name === 'authoring' && (
         <AuthoringPreviewScreen
+          previewGenerationAvailable={import.meta.env.DEV || dependencies.authoringGatewayClient !== undefined}
           clipboardPort={dependencies.clipboardPort}
           gatewayClient={
             dependencies.authoringGatewayClient ?? defaultAuthoringGatewayClient

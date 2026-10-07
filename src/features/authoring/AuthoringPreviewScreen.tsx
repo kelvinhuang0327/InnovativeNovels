@@ -91,6 +91,7 @@ import { ContinuityReviewPanel } from './ContinuityReviewPanel'
 
 interface AuthoringPreviewScreenProps {
   readonly gatewayClient: AuthoringGatewayClient
+  readonly previewGenerationAvailable?: boolean
   readonly onBack: () => void
   readonly projectRepository?: AuthoringProjectRepository
   readonly sessionRepository?: AuthoringSessionRepository
@@ -240,6 +241,7 @@ function draftsHaveSameContent(left: Draft | undefined, right: Draft): boolean {
 
 export function AuthoringPreviewScreen({
   gatewayClient,
+  previewGenerationAvailable = true,
   onBack,
   projectRepository,
   sessionRepository,
@@ -748,6 +750,9 @@ export function AuthoringPreviewScreen({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!previewGenerationAvailable) {
+      return
+    }
     setIsSubmitting(true)
     setErrorMessage(undefined)
     setImportErrors([])
@@ -1192,6 +1197,11 @@ export function AuthoringPreviewScreen({
       <p className="authoring-provider-note" role="status">
         Draft provider / AI provider not connected
       </p>
+      {!previewGenerationAvailable && (
+        <p className="authoring-provider-note" role="status">
+          此版本尚未提供內建 AI 生成；草稿預覽目前不可用。請匯入草稿，再使用本地編輯、檢查與匯出功能。
+        </p>
+      )}
 
       {productionBooks.length > 0 && (
         <section
@@ -1322,7 +1332,7 @@ export function AuthoringPreviewScreen({
           <button onClick={handleGeneratePrompt} type="button">
             Generate Agent Prompt
           </button>
-          <button disabled={isSubmitting} type="submit">
+          <button disabled={isSubmitting || !previewGenerationAvailable} type="submit">
             {isSubmitting ? '產生中…' : '產生草稿預覽'}
           </button>
         </div>

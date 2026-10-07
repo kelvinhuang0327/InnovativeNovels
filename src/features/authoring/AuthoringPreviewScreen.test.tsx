@@ -141,6 +141,22 @@ describe('AuthoringPreviewScreen', () => {
     window.localStorage.clear()
   })
 
+  it('keeps manual authoring available without calling an unavailable preview gateway', async () => {
+    const gatewayClient = createClient()
+    render(<AuthoringPreviewScreen gatewayClient={gatewayClient} previewGenerationAvailable={false} onBack={vi.fn()} />)
+    expect(screen.getByRole('button', { name: '產生草稿預覽' })).toBeDisabled()
+    expect(screen.getByText(/此版本尚未提供內建 AI 生成/)).toBeInTheDocument()
+    const premise = screen.getByLabelText('故事前提')
+    const form = premise.closest('form')
+    if (!form) throw new Error('Authoring form missing')
+    fireEvent.submit(form)
+    expect(gatewayClient.generateDraft).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Raw Agent JSON'), { target: { value: JSON.stringify({ title: '手動草稿', genre: '懸疑', chapters: [{ sequence: 1, title: '鐘', prose: '合成正文。' }] }) } })
+    fireEvent.click(screen.getByRole('button', { name: 'Import Structured Draft' }))
+    expect(await screen.findByRole('heading', { name: '手動草稿' })).toBeInTheDocument()
+    expect(gatewayClient.generateDraft).not.toHaveBeenCalled()
+  })
+
   it('uses the gateway client to display a draft-only preview with quality results', async () => {
     const gatewayClient = createClient()
     render(
