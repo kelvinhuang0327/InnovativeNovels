@@ -281,4 +281,135 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(importDraft.isEnabled)
         attachScreenshot(name: "NativeManualAuthoringAvailability")
     }
+
+    private func assertExportPreview(filename: String) -> String {
+        XCTAssertTrue(app.navigationBars["本機匯出預覽"].waitForExistence(timeout: 10.0))
+        XCTAssertEqual(app.staticTexts["native-export-filename"].label, filename)
+        let text = app.textViews["native-export-content"]
+        XCTAssertTrue(text.exists)
+        return text.value as? String ?? ""
+    }
+
+    private func openLibraryForExport() {
+        ensureCatalogScreen()
+        let library = app.buttons["我的書架"].firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 10.0))
+        library.tap()
+        XCTAssertTrue(app.staticTexts["我的書架"].firstMatch.waitForExistence(timeout: 10.0))
+    }
+
+    func testNativeReadingDataExport() throws {
+        let syntheticNote = "合成匯出筆記 20261007"
+        app.launchArguments = ["-native-export-fail-once"]
+        app.launch()
+        ensureCatalogScreen()
+        let book = app.buttons.matching(NSPredicate(format: "label == '查看書籍' OR label == '閱讀焦點作品'")).firstMatch
+        XCTAssertTrue(book.waitForExistence(timeout: 10.0))
+        book.tap()
+        let chapter = app.buttons.matching(NSPredicate(format: "label CONTAINS '第一章'")).firstMatch
+        XCTAssertTrue(chapter.waitForExistence(timeout: 10.0))
+        scrollToVisible(chapter, towardTop: false)
+        chapter.tap()
+        let prose = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '清晨的第一道潮聲穿過港口時'")).firstMatch
+        scrollToVisible(prose, towardTop: true)
+        let noteControl = readerControl("本章筆記", mobileLabel: "筆記")
+        revealReaderChrome(for: noteControl)
+        noteControl.tap()
+        let note = app.textViews["筆記內容"]
+        XCTAssertTrue(note.waitForExistence(timeout: 10.0))
+        if let old = note.value as? String, !old.isEmpty {
+            XCTAssertEqual(old, syntheticNote, "Only this test's synthetic note may be replaced")
+            app.buttons["清除筆記"].tap()
+            revealReaderChrome(for: noteControl)
+            noteControl.tap()
+            XCTAssertTrue(note.waitForExistence(timeout: 10.0))
+        }
+        note.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.15)).tap()
+        app.typeText(syntheticNote)
+        if app.buttons["Done"].waitForExistence(timeout: 3.0) { app.buttons["Done"].tap() }
+        XCTAssertEqual(note.value as? String, syntheticNote)
+        app.buttons["儲存筆記"].tap()
+        openLibraryForExport()
+        let scope = app.buttons["筆記"].firstMatch
+        XCTAssertTrue(scope.waitForExistence(timeout: 10.0))
+        scope.tap()
+        let export = app.buttons["匯出筆記"]
+        scrollToVisible(export, towardTop: true)
+        export.tap()
+        let expected = "章節筆記（1）\n筆記 1\n書名：潮汐之城\n章名：第一章：潮聲來信\n筆記內容：\n\(syntheticNote)\n—— 筆記結束 ——"
+        XCTAssertEqual(assertExportPreview(filename: "reading-data.txt"), expected)
+        attachScreenshot(name: "NativeNoteExportPreview")
+        app.buttons["取消匯出"].tap()
+        XCTAssertTrue(app.staticTexts["已取消匯出，原有資料保留。"].waitForExistence(timeout: 10.0))
+        export.tap()
+        XCTAssertEqual(assertExportPreview(filename: "reading-data.txt"), expected)
+        app.buttons["儲存到此裝置"].tap()
+        let failed = app.staticTexts["無法匯出檔案，原有資料保留。請重試。"]
+        XCTAssertTrue(failed.waitForExistence(timeout: 10.0), "Actual filesystem failure must reach the product UI")
+        attachScreenshot(name: "NativeNoteExportFailureRetainsData")
+        export.tap()
+        XCTAssertEqual(assertExportPreview(filename: "reading-data.txt"), expected)
+        app.buttons["儲存到此裝置"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '已儲存 reading-data.txt' ")).firstMatch.waitForExistence(timeout: 10.0))
+        export.tap()
+        XCTAssertEqual(assertExportPreview(filename: "reading-data-2.txt"), expected)
+        app.buttons["取消匯出"].tap()
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        openLibraryForExport()
+        let exportAgain = app.buttons["匯出書籤與筆記"]
+        scrollToVisible(exportAgain, towardTop: true)
+        exportAgain.tap()
+        XCTAssertEqual(assertExportPreview(filename: "reading-data-2.txt"), expected)
+        attachScreenshot(name: "NativeNoteExportAfterRestart")
+        app.buttons["取消匯出"].tap()
+    }
+
+    func testNativeDraftFileExport() throws {
+        app.launch()
+        ensureCatalogScreen()
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("潮汐之城")
+        if app.buttons["Done"].waitForExistence(timeout: 3.0) { app.buttons["Done"].tap() }
+        let authoring = app.buttons["開啟創作預覽"]
+        scrollToVisible(authoring, towardTop: false)
+        authoring.tap()
+        let input = app.textViews["Raw Agent JSON"]
+        scrollToVisible(input, towardTop: false)
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.15)).tap()
+        let json = "{\"title\":\"Synthetic Export\",\"genre\":\"測試\",\"chapters\":[{\"sequence\":1,\"title\":\"合成章節\",\"prose\":\"合成段落一。\\n\\n合成段落二。\\n\\n合成段落三。\\n\\n合成段落四。\\n\\n合成段落五。\"}]}"
+        app.typeText(json)
+        if app.buttons["Done"].waitForExistence(timeout: 3.0) { app.buttons["Done"].tap() }
+        XCTAssertEqual(input.value as? String, json)
+        let importDraft = app.buttons["Import Structured Draft"]
+        scrollToVisible(importDraft, towardTop: false)
+        importDraft.tap()
+        let export = app.buttons["匯出草稿 JSON"]
+        XCTAssertTrue(export.waitForExistence(timeout: 10.0))
+        scrollToVisible(export, towardTop: false)
+        XCTAssertTrue(export.isEnabled)
+        export.tap()
+        let content = assertExportPreview(filename: "innovative-novels-draft-Synthetic Export.json")
+        let parsed = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(content.utf8)) as? [String: Any])
+        XCTAssertEqual(parsed["title"] as? String, "Synthetic Export")
+        let chapters = try XCTUnwrap(parsed["chapters"] as? [[String: Any]])
+        XCTAssertEqual(chapters.count, 1)
+        XCTAssertEqual(chapters[0]["prose"] as? String, "合成段落一。\n\n合成段落二。\n\n合成段落三。\n\n合成段落四。\n\n合成段落五。")
+        attachScreenshot(name: "NativeDraftJSONExportPreview")
+        app.buttons["取消匯出"].tap()
+        export.tap()
+        XCTAssertEqual(assertExportPreview(filename: "innovative-novels-draft-Synthetic Export.json"), content)
+        app.buttons["儲存到此裝置"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '已儲存 innovative-novels-draft-Synthetic Export.json'")).firstMatch.waitForExistence(timeout: 10.0))
+        let projectExport = app.buttons["Export Current Project"]
+        scrollToVisible(projectExport, towardTop: true)
+        projectExport.tap()
+        let projectContent = assertExportPreview(filename: "innovative-novels-project-Untitled Project.json")
+        let project = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(projectContent.utf8)) as? [String: Any])
+        XCTAssertEqual(project["format"] as? String, "innovative-novels-authoring-project")
+        attachScreenshot(name: "NativePortableProjectExportPreview")
+        app.buttons["儲存到此裝置"].tap()
+    }
 }

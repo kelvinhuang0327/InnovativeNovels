@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type { RecentReadingEntry } from '../../application/library/libraryUseCases'
@@ -133,6 +133,35 @@ afterEach(() => {
 })
 
 describe('LibraryScreen', () => {
+  it('keeps notes on cancel/failure, prevents overlapping exports, and retries the current filter', async () => {
+    const notes = [makeReadingNoteEntry(bookA, '合成匯出測試'), makeReadingNoteEntry(bookB, '不在篩選內')]
+    let complete: (result: { status: 'cancelled' }) => void = () => {}
+    const exporter = { exportFile: vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { complete = resolve }))
+      .mockRejectedValueOnce(new Error('disk failure'))
+      .mockResolvedValueOnce({ status: 'saved', filename: 'reading-data.txt' }) }
+    render(<LibraryScreen {...baseProps} notes={notes} textFileExportPort={exporter} />)
+    fireEvent.change(screen.getByLabelText('搜尋已保存內容'), { target: { value: '合成匯出測試' } })
+    const button = screen.getByRole('button', { name: '匯出書籤與筆記' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(exporter.exportFile).toHaveBeenCalledTimes(1)
+    complete({ status: 'cancelled' })
+    expect(await screen.findByText('已取消匯出，原有資料保留。')).toBeInTheDocument()
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法匯出檔案，原有資料保留。請重試。')
+    expect(screen.getByText('合成匯出測試')).toBeInTheDocument()
+    fireEvent.click(button)
+    await waitFor(() => expect(button).toBeEnabled())
+    expect(exporter.exportFile).toHaveBeenCalledTimes(3)
+    const file = exporter.exportFile.mock.calls[2]?.[0]
+    expect(file).toMatchObject({ filename: 'reading-data.txt', mimeType: 'text/plain' })
+    expect(file.content).toContain('合成匯出測試')
+    expect(file.content).not.toContain('不在篩選內')
+    expect(baseProps.onRemoveReadingNote).not.toHaveBeenCalled()
+    expect(notes).toHaveLength(2)
+  })
   it('shows an unavailable export state without creating a download when nothing is saved', () => {
     const createObjectURL = vi.fn(() => 'blob:reading-data')
     const revokeObjectURL = vi.fn()

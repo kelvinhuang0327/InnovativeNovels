@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AuthoringGatewayClient } from '../../application/authoring/authoringGatewayClient'
 import type {
   AuthoringProjectStoreV1,
@@ -78,6 +78,50 @@ function seedStore(repository: LocalStorageAuthoringProjectRepository) {
 }
 
 describe('Authoring project library UI', () => {
+  it('exports editable Draft JSON, preserving the project through cancellation, failure and retry', async () => {
+    const repository = createRepository()
+    seedStore(repository)
+    const exporter = { exportFile: vi.fn()
+      .mockResolvedValueOnce({ status: 'cancelled' })
+      .mockRejectedValueOnce(new Error('disk failure'))
+      .mockResolvedValueOnce({ status: 'saved', filename: 'innovative-novels-draft-A Draft.json' }) }
+    const view = render(<AuthoringPreviewScreen gatewayClient={createGatewayClient()} onBack={vi.fn()} projectRepository={repository} textFileExportPort={exporter} />)
+    const original = repository.load()
+    const button = screen.getByRole('button', { name: '匯出草稿 JSON' })
+    fireEvent.click(button)
+    expect(await screen.findByText('已取消匯出，原有資料保留。')).toBeInTheDocument()
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法匯出檔案')
+    fireEvent.click(button)
+    await waitFor(() => expect(button).toBeEnabled())
+    expect(exporter.exportFile).toHaveBeenCalledTimes(3)
+    const file = exporter.exportFile.mock.calls[2]?.[0]
+    expect(file).toMatchObject({ filename: 'innovative-novels-draft-A Draft.json', mimeType: 'application/json' })
+    expect(JSON.parse(file.content)).toMatchObject({ title: 'A Draft', chapters: [{ sequence: 1, prose: '一\n\n二\n\n三\n\n四\n\n五' }] })
+    expect(repository.load()).toEqual(original)
+    view.unmount()
+    render(<AuthoringPreviewScreen gatewayClient={createGatewayClient()} onBack={vi.fn()} projectRepository={repository} />)
+    expect(screen.getByLabelText('草稿標題')).toHaveValue('A Draft')
+  })
+
+  it('guards a pending project export and reports failure without replacing the active project', async () => {
+    const repository = createRepository()
+    seedStore(repository)
+    let fail: (reason: Error) => void = () => {}
+    const download = vi.fn(() => new Promise<never>((_, reject) => { fail = reject }))
+    const port: PortableProjectFilePort = { download, read: vi.fn() }
+    render(<AuthoringPreviewScreen gatewayClient={createGatewayClient()} onBack={vi.fn()} projectRepository={repository} portableProjectFilePort={port} />)
+    const original = repository.load()
+    const button = screen.getByRole('button', { name: 'Export Current Project' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '匯出草稿 JSON' })).toBeDisabled()
+    fail(new Error('write failed'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法匯出檔案')
+    expect(button).toBeEnabled()
+    expect(repository.load()).toEqual(original)
+  })
   afterEach(() => {
     cleanup()
     window.localStorage.clear()
