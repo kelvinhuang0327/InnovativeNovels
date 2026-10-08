@@ -1,4 +1,6 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { describeFileExport, FILE_EXPORT_ERROR, type TextFileExportPort } from '../../application/export/textFileExportPort'
+import { defaultTextFileExportPort } from '../../infrastructure/export/platformTextFileExportAdapter'
 import type {
   AuthoringGatewayClient,
   AuthoringGatewayClientResult,
@@ -90,6 +92,7 @@ import { StoryBibleEditor } from './StoryBibleEditor'
 import { ContinuityReviewPanel } from './ContinuityReviewPanel'
 
 interface AuthoringPreviewScreenProps {
+  readonly textFileExportPort?: TextFileExportPort
   readonly gatewayClient: AuthoringGatewayClient
   readonly previewGenerationAvailable?: boolean
   readonly onBack: () => void
@@ -120,6 +123,13 @@ type DraftPreviewResult = SuccessfulDraftResult & {
 
 type ClipboardStatus = 'copying' | 'copied' | 'failed'
 type ClipboardTarget = 'prompt' | 'continuation-prompt' | 'draft' | 'append-candidate'
+
+interface FileExportFeedback {
+  readonly target: 'draft' | 'project'
+  readonly projectId?: string
+  readonly role: 'status' | 'alert'
+  readonly message: string
+}
 
 function restoredAppendBuildResult(
   candidate: PublishedAppendCandidate,
@@ -240,6 +250,7 @@ function draftsHaveSameContent(left: Draft | undefined, right: Draft): boolean {
 }
 
 export function AuthoringPreviewScreen({
+  textFileExportPort = defaultTextFileExportPort,
   gatewayClient,
   previewGenerationAvailable = true,
   onBack,
@@ -333,6 +344,18 @@ export function AuthoringPreviewScreen({
   const [clipboardTarget, setClipboardTarget] = useState<ClipboardTarget>()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPortableProjectBusy, setIsPortableProjectBusy] = useState(false)
+  const fileExportInFlight = useRef(false)
+  const [isFileExporting, setIsFileExporting] = useState(false)
+  const [fileExportFeedback, setFileExportFeedback] = useState<FileExportFeedback>()
+  const fileExportFeedbackRef = useRef<HTMLParagraphElement>(null)
+  const visibleFileExportFeedback =
+    fileExportFeedback?.projectId === projectStore?.activeProjectId
+      ? fileExportFeedback
+      : undefined
+
+  useEffect(() => {
+    fileExportFeedbackRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [visibleFileExportFeedback])
 
   useEffect(() => {
     if (projectRepository && projectStore) {
@@ -463,6 +486,7 @@ export function AuthoringPreviewScreen({
     setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
+    setFileExportFeedback(undefined)
   }
 
   const handleProjectSwitch = (nextProjectId: string) => {
@@ -553,8 +577,8 @@ export function AuthoringPreviewScreen({
     restoreProjectSession(newSession)
   }
 
-  const handleExportProject = () => {
-    if (!projectRepository || !projectStore || !portableProjectFilePort) {
+  const handleExportProject = async () => {
+    if (!projectRepository || !projectStore || !portableProjectFilePort || fileExportInFlight.current || isPortableProjectBusy) {
       return
     }
     const activeProject = getActiveProject(projectStore)
@@ -564,16 +588,52 @@ export function AuthoringPreviewScreen({
     }
     const serialized = projectRepository.exportPortableProject(project)
     if (getPortableProjectByteLength(serialized) > MAX_PORTABLE_PROJECT_FILE_BYTES) {
-      setProjectError(
-        'This project is too large to export safely with the current portable-file limit.',
-      )
+      setFileExportFeedback({
+        target: 'project', projectId: project.projectId, role: 'alert',
+        message: 'This project is too large to export safely with the current portable-file limit.',
+      })
       return
     }
-    portableProjectFilePort.download(
-      buildPortableProjectFileName(project.name, project.projectId),
-      serialized,
-    )
-    setProjectError(undefined)
+    fileExportInFlight.current = true
+    setIsFileExporting(true)
+    setFileExportFeedback(undefined)
+    try {
+      const outcome = await portableProjectFilePort.download(
+        buildPortableProjectFileName(project.name, project.projectId), serialized,
+      )
+      setFileExportFeedback({
+        target: 'project', projectId: project.projectId, role: 'status',
+        message: outcome ? describeFileExport(outcome) : '已開始匯出專案。',
+      })
+      setProjectError(undefined)
+    } catch {
+      setFileExportFeedback({
+        target: 'project', projectId: project.projectId, role: 'alert', message: FILE_EXPORT_ERROR,
+      })
+    } finally {
+      fileExportInFlight.current = false
+      setIsFileExporting(false)
+    }
+  }
+
+  const handleExportDraft = async () => {
+    if (!result || isExportBlocked || fileExportInFlight.current || isPortableProjectBusy) return
+    fileExportInFlight.current = true
+    setIsFileExporting(true)
+    setFileExportFeedback(undefined)
+    const projectId = projectStore?.activeProjectId
+    try {
+      const outcome = await textFileExportPort.exportFile({
+        filename: buildPortableProjectFileName(result.draft.title, 'draft').replace('innovative-novels-project-', 'innovative-novels-draft-'),
+        content: exportDraftJson(result.draft), mimeType: 'application/json',
+      })
+      setFileExportFeedback({ target: 'draft', projectId, role: 'status', message: describeFileExport(outcome) })
+    } catch {
+      setFileExportFeedback({ target: 'draft', projectId, role: 'alert', message: FILE_EXPORT_ERROR })
+    } finally {
+      fileExportInFlight.current = false
+      setIsFileExporting(false)
+    }
   }
 
   const handleImportProject = async (
@@ -957,6 +1017,7 @@ export function AuthoringPreviewScreen({
     setContinuationChapterCount(DEFAULT_CONTINUATION_CHAPTER_COUNT)
     setClipboardStatus(undefined)
     setClipboardTarget(undefined)
+    setFileExportFeedback(undefined)
   }
 
   const handleContinuePublishedBook = async () => {
@@ -1099,6 +1160,18 @@ export function AuthoringPreviewScreen({
     )
   }
 
+  const exportFeedback = visibleFileExportFeedback && (
+    <p
+      aria-atomic="true"
+      className={`authoring-file-export-feedback${visibleFileExportFeedback.role === 'alert' ? ' authoring-error' : ''}`}
+      id={`authoring-${visibleFileExportFeedback.target}-export-feedback`}
+      ref={fileExportFeedbackRef}
+      role={visibleFileExportFeedback.role}
+    >
+      {visibleFileExportFeedback.message}
+    </p>
+  )
+
   return (
     <section aria-labelledby="authoring-heading" className="authoring-screen">
       <div className="actions authoring-navigation">
@@ -1157,20 +1230,24 @@ export function AuthoringPreviewScreen({
             New Project
           </button>
           {portableProjectFilePort && (
-            <div className="actions">
-              <button
-                disabled={isPortableProjectBusy}
-                onClick={handleExportProject}
-                type="button"
-              >
-                Export Current Project
-              </button>
+            <div className="actions authoring-file-export-actions">
+              <div aria-label="專案檔案匯出" className="authoring-file-export" role="group">
+                {visibleFileExportFeedback?.target === 'project' && exportFeedback}
+                <button
+                  aria-describedby={visibleFileExportFeedback?.target === 'project' ? 'authoring-project-export-feedback' : undefined}
+                  disabled={isPortableProjectBusy || isFileExporting}
+                  onClick={() => void handleExportProject()}
+                  type="button"
+                >
+                  Export Current Project
+                </button>
+              </div>
               <label className="button-secondary" htmlFor="portable-project-file">
                 Import Project
                 <input
                   accept=".json,application/json"
                   aria-label="Import Project file"
-                  disabled={isPortableProjectBusy}
+                  disabled={isPortableProjectBusy || isFileExporting}
                   id="portable-project-file"
                   onChange={(event) => void handleImportProject(event)}
                   type="file"
@@ -2057,7 +2134,18 @@ export function AuthoringPreviewScreen({
                 value={exportDraftJson(result.draft)}
               />
             </label>
-            <div className="actions">
+            <div className="actions authoring-file-export-actions">
+              <div aria-label="草稿檔案匯出" className="authoring-file-export" role="group">
+                {visibleFileExportFeedback?.target === 'draft' && exportFeedback}
+                <button
+                  aria-describedby={visibleFileExportFeedback?.target === 'draft' ? 'authoring-draft-export-feedback' : undefined}
+                  disabled={isExportBlocked || isFileExporting || isPortableProjectBusy}
+                  onClick={() => void handleExportDraft()}
+                  type="button"
+                >
+                  匯出草稿 JSON
+                </button>
+              </div>
               <button
                 disabled={isExportBlocked || clipboardStatus === 'copying'}
                 onClick={() =>

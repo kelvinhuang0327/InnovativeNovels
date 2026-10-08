@@ -4,22 +4,18 @@ import {
   type PortableProjectFilePort,
   type PortableProjectFileReadResult,
 } from '../../application/authoring/portableProjectFilePort'
+import type { TextFileExportPort } from '../../application/export/textFileExportPort'
+import { defaultTextFileExportPort } from '../export/platformTextFileExportAdapter'
 
 export class BrowserPortableProjectFileAdapter implements PortableProjectFilePort {
-  download(filename: string, content: string): void {
-    const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = filename
-    anchor.rel = 'noopener'
-    document.body.appendChild(anchor)
-    try {
-      anchor.click()
-    } finally {
-      anchor.remove()
-      URL.revokeObjectURL(url)
-    }
+  private readonly exporter: TextFileExportPort
+
+  constructor(exporter: TextFileExportPort = defaultTextFileExportPort) {
+    this.exporter = exporter
+  }
+
+  download(filename: string, content: string) {
+    return this.exporter.exportFile({ filename, content, mimeType: 'application/json' })
   }
 
   async read(file: PortableProjectFile): Promise<PortableProjectFileReadResult> {

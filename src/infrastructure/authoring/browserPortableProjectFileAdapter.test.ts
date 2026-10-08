@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_PORTABLE_PROJECT_FILE_BYTES } from '../../application/authoring/portableProjectFilePort'
+import { buildPortableProjectFileName, getPortableProjectByteLength, MAX_PORTABLE_PROJECT_FILE_BYTES } from '../../application/authoring/portableProjectFilePort'
 import { BrowserPortableProjectFileAdapter } from './browserPortableProjectFileAdapter'
 
 describe('BrowserPortableProjectFileAdapter', () => {
+  it('keeps long Unicode filenames valid for native export without unsafe path characters', () => {
+    const filename = buildPortableProjectFileName('章📝'.repeat(80) + '/draft', 'id')
+    expect(getPortableProjectByteLength(filename)).toBeLessThanOrEqual(240)
+    expect(filename).toMatch(/^innovative-novels-project-.*\.json$/)
+    expect(filename).not.toContain('/')
+    expect(filename).not.toContain('\\')
+    expect(filename).not.toContain('\uFFFD')
+    const emojiBoundary = buildPortableProjectFileName('a'.repeat(79) + '📝', 'id')
+    expect(new TextDecoder().decode(new TextEncoder().encode(emojiBoundary))).toBe(emojiBoundary)
+  })
   it('rejects oversized files before reading their content', async () => {
     let readCount = 0
     const adapter = new BrowserPortableProjectFileAdapter()

@@ -1,3 +1,5 @@
+import type { TextFileExportResult } from '../export/textFileExportPort'
+
 export const MAX_PORTABLE_PROJECT_FILE_BYTES = 15 * 1024 * 1024
 
 export interface PortableProjectFile {
@@ -15,7 +17,7 @@ export type PortableProjectFileReadResult =
     }
 
 export interface PortableProjectFilePort {
-  download(filename: string, content: string): void
+  download(filename: string, content: string): void | Promise<TextFileExportResult>
   read(file: PortableProjectFile): Promise<PortableProjectFileReadResult>
 }
 
@@ -28,13 +30,18 @@ export function buildPortableProjectFileName(
   projectId: string,
 ): string {
   const source = projectName.trim() || projectId.trim() || 'authoring-project'
-  const safeName = Array.from(source, (character) =>
+  const cleanedName = Array.from(source, (character) =>
     character.charCodeAt(0) < 0x20 ? '-' : character,
   )
     .join('')
     .replace(/[<>:"/\\|?*]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 80)
+  // Keep CJK/emoji names within native filesystem limits, including prefix/extension.
+  let safeName = ''
+  for (const character of Array.from(cleanedName).slice(0, 80)) {
+    if (getPortableProjectByteLength(safeName + character) > 180) break
+    safeName += character
+  }
   return `innovative-novels-project-${safeName || 'authoring-project'}.json`
 }
