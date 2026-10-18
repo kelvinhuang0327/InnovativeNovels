@@ -12,6 +12,7 @@ import {
 import { importContinuation } from '../../application/authoring/continuationImport'
 import { buildAgentPrompt } from '../../application/authoring/agentPromptBuilder'
 import { exportDraftJson } from '../../application/authoring/draftExport'
+import { prepareDraftFileRestore } from '../../application/authoring/draftFileRestore'
 import type {
   AuthoringProjectLoadResult,
   AuthoringProjectRepository,
@@ -344,6 +345,15 @@ export function AuthoringPreviewScreen({
   const [clipboardTarget, setClipboardTarget] = useState<ClipboardTarget>()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPortableProjectBusy, setIsPortableProjectBusy] = useState(false)
+  const projectFileImportInFlight = useRef(false)
+  const projectFileImportRequest = useRef(0)
+  const [draftFilePreview, setDraftFilePreview] = useState<Draft>()
+  const draftFilePreviewRef = useRef<Draft | undefined>(undefined)
+  const clearDraftFilePreview = () => {
+    draftFilePreviewRef.current = undefined
+    setDraftFilePreview(undefined)
+    projectFileImportRequest.current += 1
+  }
   const fileExportInFlight = useRef(false)
   const [isFileExporting, setIsFileExporting] = useState(false)
   const [fileExportFeedback, setFileExportFeedback] = useState<FileExportFeedback>()
@@ -448,6 +458,7 @@ export function AuthoringPreviewScreen({
   })
 
   const restoreProjectSession = (session: AuthoringSession) => {
+    clearDraftFilePreview()
     setSpec(session.spec)
     setStoryBible(session.storyBible)
     setAgentPrompt(session.agentPrompt)
@@ -640,32 +651,53 @@ export function AuthoringPreviewScreen({
     event: ChangeEvent<HTMLInputElement>,
   ) => {
     const input = event.currentTarget
-    const files = input.files
+    const files = Array.from(input.files ?? [])
     input.value = ''
     if (!projectRepository || !projectStore || !portableProjectFilePort) {
       return
     }
-    if (!files || files.length !== 1 || !files[0]) {
-      setProjectError('Please select exactly one portable project JSON file.')
+    if (projectFileImportInFlight.current || fileExportInFlight.current || isSubmitting) return
+    clearDraftFilePreview()
+    setProjectError(undefined)
+    if (files.length === 0) return
+    if (files.length !== 1 || !files[0]) {
+      setProjectError('Please select exactly one project or draft JSON file.')
+      return
+    }
+    if (files[0].size > MAX_PORTABLE_PROJECT_FILE_BYTES) {
+      setProjectError('JSON 檔案超過 15 MB，未匯入；原有作品保留。')
       return
     }
 
+    projectFileImportInFlight.current = true
+    const request = projectFileImportRequest.current
     setIsPortableProjectBusy(true)
     setProjectError(undefined)
     try {
       const read = await portableProjectFilePort.read(files[0])
+      if (request !== projectFileImportRequest.current) return
       if (!read.ok) {
         setProjectError(read.message)
         return
       }
 
-      const currentStore = replaceProjectSession(
-        projectStore,
-        projectStore.activeProjectId,
-        currentSession(),
-      )
+      const prepared = prepareDraftFileRestore(read.text)
+      if (prepared.kind === 'error') {
+        setProjectError(prepared.message)
+        return
+      }
+      if (prepared.kind === 'draft') {
+        draftFilePreviewRef.current = prepared.draft
+        setDraftFilePreview(prepared.draft)
+        return
+      }
+      const loaded = projectRepository.load()
+      if (!loaded.ok) {
+        setProjectError(loaded.message)
+        return
+      }
       const imported = projectRepository.importPortableProject(
-        currentStore,
+        loaded.store,
         read.text,
       )
       if (!imported.ok) {
@@ -685,11 +717,46 @@ export function AuthoringPreviewScreen({
       restoreProjectSession(importedProject.session)
       setProjectError(undefined)
     } catch {
-      setProjectError(
-        'The imported project could not be loaded safely. Existing projects were not changed.',
-      )
+      if (request === projectFileImportRequest.current) {
+        setProjectError('The imported project could not be loaded safely. Existing projects were not changed.')
+      }
     } finally {
+      projectFileImportInFlight.current = false
       setIsPortableProjectBusy(false)
+    }
+  }
+
+  const handleConfirmDraftFileRestore = () => {
+    const draft = draftFilePreviewRef.current
+    if (!draft || !projectRepository || !projectStore || isPortableProjectBusy || isFileExporting || isSubmitting) return
+    // Consume the preview synchronously so two clicks before React renders save only once.
+    draftFilePreviewRef.current = undefined
+    try {
+      const loaded = projectRepository.load()
+      if (!loaded.ok) {
+        draftFilePreviewRef.current = draft
+        setProjectError(loaded.message)
+        return
+      }
+      const session: AuthoringSession = {
+        ...createEmptyAuthoringSession(),
+        spec: { ...INITIAL_SPEC, genre: draft.categoryLabel, titleHint: draft.title },
+        draft,
+      }
+      const created = projectRepository.createProject(loaded.store, draft.title, session, { requirePersistence: true })
+      if (!created.ok) {
+        draftFilePreviewRef.current = draft
+        setProjectError(`無法另存匯入專案：${created.message} 原有作品保留。`)
+        return
+      }
+      const imported = getActiveProject(created.store)
+      setProjectStore(created.store)
+      setProjectName(imported.name)
+      restoreProjectSession(imported.session)
+      setProjectError(undefined)
+    } catch {
+      draftFilePreviewRef.current = draft
+      setProjectError('無法安全保存匯入專案；原有作品保留，請重試。')
     }
   }
 
@@ -978,6 +1045,7 @@ export function AuthoringPreviewScreen({
   }
 
   const handleClearSession = () => {
+    clearDraftFilePreview()
     if (projectRepository && projectStore) {
       const emptySession = createEmptyAuthoringSession()
       const nextStore = replaceProjectSession(
@@ -1243,17 +1311,39 @@ export function AuthoringPreviewScreen({
                 </button>
               </div>
               <label className="button-secondary" htmlFor="portable-project-file">
-                Import Project
+                Import Project / Draft JSON
                 <input
                   accept=".json,application/json"
                   aria-label="Import Project file"
-                  disabled={isPortableProjectBusy || isFileExporting}
+                  disabled={isPortableProjectBusy || isFileExporting || isSubmitting}
                   id="portable-project-file"
                   onChange={(event) => void handleImportProject(event)}
                   type="file"
                 />
               </label>
             </div>
+          )}
+          {portableProjectFilePort && (
+            <p>可選擇完整專案或匯出的草稿 JSON。草稿先預覽，確認後另存新專案；原有作品保留。</p>
+          )}
+          {draftFilePreview && (
+            <section aria-labelledby="draft-file-preview-heading" className="draft-file-import-preview" role="region">
+              <h3 id="draft-file-preview-heading">草稿 JSON 還原預覽</h3>
+              <p><strong>{draftFilePreview.title}</strong></p>
+              <p>{draftFilePreview.categoryLabel} · 共 {draftFilePreview.chapters.length} 章。確認後會完整另存；以下顯示前 6 章的正文摘要。</p>
+              <ol>
+                {draftFilePreview.chapters.slice(0, 6).map((chapter) => (
+                  <li key={chapter.sequence}>
+                    <strong>{chapter.title}</strong>
+                    <p>{chapter.prose[0]?.slice(0, 200)}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="actions">
+                <button disabled={isPortableProjectBusy || isFileExporting || isSubmitting} onClick={handleConfirmDraftFileRestore} type="button">確認另存新專案</button>
+                <button className="button-secondary" onClick={() => { clearDraftFilePreview(); setProjectError(undefined) }} type="button">取消匯入</button>
+              </div>
+            </section>
           )}
           {projectError && (
             <p className="authoring-error" role="alert">
@@ -1500,6 +1590,9 @@ export function AuthoringPreviewScreen({
         <p>
           將外部 Agent 的完整回應貼上。V1 只接受 raw JSON object；不要貼上說明文字或 Markdown code fence。
         </p>
+        {projectRepository && portableProjectFilePort && (
+          <p>此處會替換目前草稿與故事設定。還原備份請使用上方 Import Project / Draft JSON，先預覽再另存新專案。</p>
+        )}
         <form onSubmit={handleImportDraft}>
           <label className="authoring-field" htmlFor="agent-draft-json">
             Raw Agent JSON

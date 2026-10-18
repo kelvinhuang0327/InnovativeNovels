@@ -74,7 +74,7 @@ function skipString(value: string, start: number): number | undefined {
   return undefined
 }
 
-function hasDuplicateJsonObjectKeys(serialized: string): boolean {
+export function hasDuplicateJsonObjectKeys(serialized: string): boolean {
   let index = 0
   let duplicateFound = false
 

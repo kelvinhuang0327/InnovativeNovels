@@ -428,11 +428,12 @@ describe('Authoring project library UI', () => {
       projectId: 'project-a',
       name: '潮汐檔案續寫',
     })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export Current Project' })).toBeEnabled())
 
     fireEvent.change(screen.getByLabelText('Import Project file'), {
       target: { files: [new File(['portable'], 'project.json', { type: 'text/plain' })] },
     })
-    expect(await screen.findByLabelText('Current Project')).toHaveValue('project-imported')
+    await waitFor(() => expect(screen.getByLabelText('Current Project')).toHaveValue('project-imported'))
 
     const loaded = repository.load()
     expect(loaded.ok).toBe(true)

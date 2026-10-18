@@ -26,6 +26,10 @@ interface StoredProject {
   readonly session: unknown
 }
 
+interface AuthoringStorage extends Storage {
+  setItemPersistently?(key: string, value: string): void
+}
+
 interface StoredProjectStore {
   readonly schemaVersion: 1
   readonly activeProjectId: string
@@ -166,7 +170,7 @@ function remapProjectLocalIdentity(
 export class LocalStorageAuthoringProjectRepository
   implements AuthoringProjectRepository
 {
-  private readonly storage: Storage
+  private readonly storage: AuthoringStorage
   private readonly idGenerator: () => string
 
   constructor(storage: Storage, idGenerator: () => string = createProjectId) {
@@ -232,7 +236,7 @@ export class LocalStorageAuthoringProjectRepository
     }
   }
 
-  save(store: AuthoringProjectStoreV1): boolean {
+  save(store: AuthoringProjectStoreV1, requirePersistence = false): boolean {
     let previous: string | null | undefined
     try {
       previous = this.storage.getItem(AUTHORING_PROJECTS_STORAGE_KEY)
@@ -240,9 +244,14 @@ export class LocalStorageAuthoringProjectRepository
       if (!parseProjectStore(serialized)) {
         return false
       }
-      this.storage.setItem(AUTHORING_PROJECTS_STORAGE_KEY, serialized)
+      if (requirePersistence && this.storage.setItemPersistently) {
+        this.storage.setItemPersistently(AUTHORING_PROJECTS_STORAGE_KEY, serialized)
+      } else {
+        this.storage.setItem(AUTHORING_PROJECTS_STORAGE_KEY, serialized)
+      }
       const readBack = this.storage.getItem(AUTHORING_PROJECTS_STORAGE_KEY)
-      const verified = readBack !== null && parseProjectStore(readBack) !== undefined
+      const verified = readBack !== null && parseProjectStore(readBack) !== undefined &&
+        (!requirePersistence || readBack === serialized)
       if (verified) return true
       if (previous === null) {
         this.storage.removeItem(AUTHORING_PROJECTS_STORAGE_KEY)
@@ -270,6 +279,7 @@ export class LocalStorageAuthoringProjectRepository
     store: AuthoringProjectStoreV1,
     name: string,
     session: AuthoringSession,
+    options?: { readonly requirePersistence: boolean },
   ): AuthoringProjectLoadResult {
     const normalizedName = normalizeName(name)
     if (!normalizedName) {
@@ -289,7 +299,7 @@ export class LocalStorageAuthoringProjectRepository
         { projectId, name: normalizedName, session },
       ],
     }
-    return this.save(nextStore)
+    return this.save(nextStore, options?.requirePersistence)
       ? { ok: true, store: nextStore }
       : { ok: false, message: 'The new project could not be saved.' }
   }

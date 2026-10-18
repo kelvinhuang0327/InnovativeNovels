@@ -621,6 +621,15 @@ button:focus-visible {
   gap: 1rem;
 }
 
+.draft-file-import-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.draft-file-import-preview .button-secondary:hover {
+  background: #f6ede4;
+}
+
 .agent-exchange-panel textarea {
   min-height: 12rem;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
@@ -740,6 +749,8 @@ button:focus-visible {
 }
 
 .draft-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin-top: 2rem;
   padding: clamp(1.25rem, 4vw, 2rem);
   border: 2px solid #8d3f2f;

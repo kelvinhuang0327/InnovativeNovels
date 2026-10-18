@@ -97,6 +97,22 @@ export class ResilientBrowserStorage implements Storage {
     }
   }
 
+  /** Use for explicit backup restoration, where session memory cannot count as saved. */
+  setItemPersistently(key: string, value: string): void {
+    const storage = this.getPersistentStorage()
+    if (!storage || this.hasClearedPersistentStorage) {
+      throw new Error('Persistent browser storage is unavailable.')
+    }
+    try {
+      storage.setItem(key, String(value))
+      this.sessionValues.delete(key)
+      this.removedKeys.delete(key)
+    } catch (error) {
+      this.markPersistenceFailed()
+      throw error
+    }
+  }
+
   private getPersistentStorage(): Storage | undefined {
     try {
       const storage = this.resolveStorage()

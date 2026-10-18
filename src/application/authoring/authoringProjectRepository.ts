@@ -36,6 +36,7 @@ export interface AuthoringProjectRepository {
     store: AuthoringProjectStoreV1,
     name: string,
     session: AuthoringSession,
+    options?: { readonly requirePersistence: boolean },
   ): AuthoringProjectOperationResult
   exportPortableProject(project: AuthoringProjectV1): string
   importPortableProject(
