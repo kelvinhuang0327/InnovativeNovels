@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "stdout": "\n> innovativenovels@0.0.0 build\n> tsc -b && npm run validate:content && vite build\n\n\n> innovativenovels@0.0.0 validate:content\n> vitest run src/infrastructure/content/catalogContentLoader.test.ts\n\n\n RUN  v4.1.10 /Users/kelvin/VibeCoding-WorkSpace/InnovativeNovels\n\n\n Test Files  1 passed (1)\n      Tests  10 passed (10)\n   Start at  20:11:24\n   Duration  1.24s (transform 155ms, setup 107ms, import 200ms, tests 6ms, environment 816ms)\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 94 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/manifest.webmanifest                          0.52 kB\ndist/index.html                                    0.89 kB │ gzip:   0.53 kB\ndist/assets/index-BDbhKNMR.css                    52.33 kB │ gzip:   9.48 kB\ndist/assets/workbox-window.prod.es5-Bd17z0YL.js    5.65 kB │ gzip:   2.20 kB\ndist/assets/index-COVcdAt4.js                    892.53 kB │ gzip: 328.50 kB\n\n✓ built in 174ms\n\nPWA v1.3.0\nmode      generateSW\nprecache  19 entries (940.75 KiB)\nfiles generated\n  dist/sw.js\n  dist/workbox-2fbc6a65.js\n",
+  "stderr": "[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n",
+  "exit_status": 0,
+  "started_at": "2026-09-29T12:11:18Z",
+  "ended_at": "2026-09-29T12:11:27Z"
+}

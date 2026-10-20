@@ -1,0 +1,83 @@
+import json, hashlib, re
+from pathlib import Path
+ROOT=Path('/Users/kelvin/VibeCoding-WorkSpace/fable-e2e-next-20261010-cto')
+OUT=ROOT/'three-repeat-resource-table-offline-20261015'
+SUMMARY=ROOT/'three-repeat-execution-20261015/summary.json'
+ANALYSIS=ROOT/'three-repeat-execution-20261015/batch-four-pairs-analysis.json'
+PARSER=ROOT/'first-pair-trajectory-analysis-20261015/parse_readonly.py'
+TABLE=OUT/'resource_table.json'
+source_hashes={}
+def read(path):
+ b=path.read_bytes(); source_hashes[str(path)]=hashlib.sha256(b).hexdigest(); return b.decode()
+def load(path): return json.loads(read(path))
+# Respect the packet's fixed paths: protocol/result/terminal paths are read only from summary.json.
+s=load(SUMMARY); a=load(ANALYSIS); read(PARSER)
+d=load(TABLE)
+for slot in s['new_slots']:
+ pair=slot['pair_id']; arm=slot['arm']; pp=Path(slot['protocol_path']); rp=Path(slot['result_path']); tp=Path(slot['terminal_path'])
+ protocol_text=read(pp); result=load(rp); terminal=load(tp)
+ events=[]
+ for line_no,line in enumerate(protocol_text.splitlines(),1):
+  events.append({'line':line_no,**json.loads(line)})
+ # Match the existing parser: repeated callIds/responseIds represent one logical event.
+ def unique(items,key):
+  out={}
+  for e in items:
+   k=key(e)
+   if k in out and out[k]['message']!=e['message']: raise ValueError('conflicting duplicate '+str(k))
+   out.setdefault(k,e)
+  return list(out.values())
+ calls=unique([e for e in events if e.get('message',{}).get('method')=='item/tool/call'],lambda e:e['message']['params']['callId'])
+ responses=unique([e for e in events if e.get('message',{}).get('method')=='rawResponse/completed'],lambda e:e['message']['params']['responseId'])
+ trace={t['call_id']:t for t in result['tool_trace']}
+ if set(trace)!={e['message']['params']['callId'] for e in calls}: raise ValueError('protocol/result callId mismatch '+pair+'/'+arm)
+ tool_rows=[]
+ for e in calls:
+  p=e['message']['params']; cid=p['callId']; t=trace[cid]
+  tool_rows.append({'callId':cid,'protocol_line':e['line'],'tool':p['tool'],'command':p.get('arguments',{}).get('command'),'exit_code':t['output']['exit_code'],'public_dispatch':t.get('proof',{}).get('public_dispatch')})
+ actual_checks=[]
+ for pc in result.get('model_public_commands',[]):
+  if pc.get('bridge_result',{}).get('processed') is True:
+   matching=[t['callId'] for t in tool_rows if t['command']==pc.get('command')]
+   actual_checks.append({'command':pc.get('command'),'callIds':matching,'bridge_result':pc['bridge_result'],'elapsed_seconds':pc.get('elapsed_seconds')})
+ usage={k:sum(e['message']['params']['usage'][k] for e in responses) for k in responses[0]['message']['params']['usage']} if responses else None
+ if usage and usage.get('totalTokens')!=result['token_usage']['total']['totalTokens']: raise ValueError('response usage mismatch '+pair+'/'+arm)
+ # Editing means a unique sandbox call whose command contains an explicit file write/update operation.
+ edits=[]
+ for tr in tool_rows:
+  c=tr['command'] or ''
+  if any(x in c for x in ['cat >','write_text(','open(\'w\')','open("w")','mkdir -p','s.replace(']): edits.append(tr['callId'])
+ dispatch_rejects=[x for x in tool_rows if x['public_dispatch']=='REJECTED']
+ row=next(x for x in d['rows'] if x['pair_id']==pair and x['arm']==arm)
+ row.update({'unique_tool_calls':len(calls),'nonzero_tool_exits':sum(x['exit_code']!=0 for x in tool_rows),'public_checks':len(actual_checks),'public_check_results':[x['bridge_result'].get('h_outcome') for x in actual_checks],'public_check_dispatch_rejections':len(dispatch_rejects),'edit_calls':len(edits),'tokens':{'input_tokens':usage['inputTokens'],'output_tokens':usage['outputTokens'],'cached_input_tokens':usage['cachedInputTokens'],'reasoning_output_tokens':usage['reasoningOutputTokens'],'total_tokens':usage['totalTokens']} if usage else None,'seconds':{'total_seconds':result.get('total_seconds'),'model_tool_seconds':result.get('model_tool_seconds'),'cleanup_seconds':result.get('native_cleanup_seconds')},'evidence':{'summary':str(SUMMARY),'summary_pointer':f"/new_slots/{s['new_slots'].index(slot)}",'batch_analysis':str(ANALYSIS),'pair_pointer':f"/pairs/{next(i for i,x in enumerate(a['pairs']) if x['pair_id']==pair)}",'protocol':str(pp),'result':str(rp),'terminal':str(tp),'protocol_sha256':source_hashes[str(pp)],'result_sha256':source_hashes[str(rp)],'terminal_sha256':source_hashes[str(tp)],'tool_calls':tool_rows,'public_checks':actual_checks,'dispatch_rejection_callIds':[x['callId'] for x in dispatch_rejects],'edit_callIds':edits,'response_usage':[{'responseId':e['message']['params']['responseId'],'line':e['line'],'usage':e['message']['params']['usage']} for e in responses],'metric_pointers':{k:f"/new_slots/{s['new_slots'].index(slot)}/metrics/{k}" for k in ['total_seconds','model_tool_seconds','cleanup_seconds','input_tokens','output_tokens','cached_input_tokens','reasoning_output_tokens','total_tokens']}}})
+# Explicitly retain fixed accounting denominators.
+d['counts'].update({'observed_arms':8,'reserved_slots':0,'reserved_actual_samples':6,'new_actual_samples':6,'valid_pairs':4,'new_valid_pairs':3,'new_host_verified_samples':6})
+# Source hash snapshot tracks required input artifacts and all six saved observation triplets.
+d['execution_sources']={'paths':[str(SUMMARY),str(ANALYSIS)],'sha256':{str(SUMMARY):source_hashes[str(SUMMARY)],str(ANALYSIS):source_hashes[str(ANALYSIS)]}}
+d['source_hashes']['execution_before']=dict(source_hashes)
+d['source_hashes']['unchanged']=True
+# Compute criterion only from three fixed pairs; missing observations remain UNKNOWN.
+pairs=[]
+for pair in ['n1-p1-repeat-02-20261015','n1-p1-repeat-03-20261015','n1-p1-repeat-04-20261015']:
+ f=next(r for r in d['rows'] if r['pair_id']==pair and r['arm']=='fable'); raw=next(r for r in d['rows'] if r['pair_id']==pair and r['arm']=='raw')
+ delta=None if f['unique_tool_calls'] is None or raw['unique_tool_calls'] is None else f['unique_tool_calls']-raw['unique_tool_calls']
+ pairs.append({'pair_id':pair,'fable_minus_raw_unique_tool_calls':delta})
+d['hypothesis']={'statement':'repeat-02、03、04 每組 Fable 的唯一 sandbox_shell callId 數均低於 raw','pair_differences':pairs,'verdict':'CONSISTENT' if all(x['fable_minus_raw_unique_tool_calls'] is not None and x['fable_minus_raw_unique_tool_calls']<0 for x in pairs) else ('REFUTED' if any(x['fable_minus_raw_unique_tool_calls'] is not None and x['fable_minus_raw_unique_tool_calls']>=0 for x in pairs) else 'UNKNOWN')}
+d['interpretation']='固定四組、八個樣本、四個有效配對；工具、時間及 token 數僅為描述性資源差異，不表示因果 uplift。'
+# Check source files remained byte-identical throughout reads.
+for path,h in source_hashes.items():
+ if hashlib.sha256(Path(path).read_bytes()).hexdigest()!=h: raise ValueError('source changed during build: '+path)
+OUT.joinpath('resource_table.json').write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n')
+# One-page readable result sheet.
+rows=d['rows']; lines=['# 資源表結果','', 'TASK_STATUS: PASS_RESOURCE_TABLE_OFFLINE_UPDATE。固定口徑為四組、八個實際樣本、四個有效配對。', '', '| 配對 / arm | outcome / H | 工具 / 非零 exit | 真正公開檢查 (結果；dispatch rejection) | 編輯呼叫 | input / output / cached / reasoning / total tokens | total / model_tool / cleanup 秒 |','|---|---|---:|---|---:|---|---|']
+for r in rows:
+ if r['tokens'] is None: lines.append(f"| {r['pair_id']} / {r['arm']} | null | null / null | null | null | null | null |")
+ else:
+  h=r.get('h_conditions') or {}; t=r['tokens']; sec=r['seconds']; checks=','.join(r.get('public_check_results') or []) or 'none'
+  lines.append(f"| {r['pair_id']} / {r['arm']} | {r['outcome']} {h.get('passed')}/{h.get('total')} | {r['unique_tool_calls']} / {r['nonzero_tool_exits']} | {r['public_checks']} ({checks}; rejection {r['public_check_dispatch_rejections']}) | {r['edit_calls']} | {t['input_tokens']} / {t['output_tokens']} / {t['cached_input_tokens']} / {t['reasoning_output_tokens']} / {t['total_tokens']} | {sec['total_seconds']:.6f} / {sec['model_tool_seconds']:.6f} / {sec['cleanup_seconds']:.6f} |")
+lines += ['', '工具假設的可重算差值：']
+for x in pairs: lines.append(f"- {x['pair_id']}: Fable − raw = {x['fable_minus_raw_unique_tool_calls']}")
+lines += [f"判定：{d['hypothesis']['verdict']}。", '', '公開檢查只計入結果中 processed=true、確實到達 trusted bridge 的 model_public_commands；dispatch rejection 獨立列出，不計為公開檢查。每個工具數附 protocol 行與 callId，每筆公開檢查附對應 command/callId、bridge 結果與結果檔，usage 附去重 responseId 及 protocol 行；時間與 token 欄位附 summary JSON pointer。', '', 'Usage 以唯一 responseId 相加；cached input 已含在 input，reasoning output 已含在 output，total=input+output，不重複加算。缺失 usage/工具軌跡保留 null。', '', '來源 SHA-256 及路徑見 resource_table.json。未修改原始候選、F1 檔案、summary、analysis、protocol、result 或 terminal。MODEL_TURNS=0；無 API/login/network/runtime。', '', '驗證命令：`python3 -B test_resource_table.py`。']
+(OUT/'RESULTS.md').write_text('\n'.join(lines)+'\n')
+# Keep the reproducible builder in the authorized delivery directory only.
+Path(__file__).with_name('build_resource_table.py').write_text(Path(__file__).read_text())

@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "browser": "installed Chrome in isolated context",
+  "viewport": "390x844",
+  "flows": [
+    "import warning provenance",
+    "export metadata",
+    "reload metadata persistence",
+    "reject invalid metadata and preserve draft",
+    "edit clears metadata",
+    "reload edited draft"
+  ],
+  "pageErrors": []
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "command": [
+    "npm",
+    "run",
+    "cap:sync"
+  ],
+  "stdout": "\n> innovativenovels@0.0.0 cap:sync\n> DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 PATH=\"/opt/homebrew/Cellar/node/24.9.0/bin:$PATH\" cap sync\n\n✔ Copying web assets from dist to android/app/src/main/assets/public in 231.29ms\n✔ Creating capacitor.config.json in android/app/src/main/assets in 788.33μs\n✔ copy android in 248.48ms\n✔ Updating Android plugins in 3.52ms\n✔ update android in 167.39ms\n✔ Copying web assets from dist to ios/App/App/public in 15.21ms\n✔ Creating capacitor.config.json in ios/App/App in 1.76ms\n✔ copy ios in 37.90ms\n✔ Updating iOS plugins in 6.29ms\n✔ Updating iOS native dependencies with pod install in 6.84s\n✔ update ios in 6.91s\n✔ copy web in 6.74ms\n✔ update web in 4.78ms\n[info] Sync finished in 12.021s\n",
+  "stderr": "",
+  "exit_status": 0,
+  "started_at": "2026-09-29T12:11:35Z",
+  "ended_at": "2026-09-29T12:11:49Z"
+}
