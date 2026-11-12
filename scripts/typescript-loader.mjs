@@ -13,7 +13,8 @@ export async function resolve(specifier, context, nextResolve) {
 
     for (const extension of SOURCE_EXTENSIONS) {
       try {
-        return await nextResolve(`${specifier}${extension}`, context)
+        const source = specifier.endsWith('.js') ? specifier.slice(0, -3) : specifier
+        return await nextResolve(`${source}${extension}`, context)
       } catch {
         continue
       }

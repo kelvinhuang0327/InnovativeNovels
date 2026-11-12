@@ -96,6 +96,7 @@ interface AuthoringPreviewScreenProps {
   readonly textFileExportPort?: TextFileExportPort
   readonly gatewayClient: AuthoringGatewayClient
   readonly previewGenerationAvailable?: boolean
+  readonly previewProviderName?: string
   readonly onBack: () => void
   readonly projectRepository?: AuthoringProjectRepository
   readonly sessionRepository?: AuthoringSessionRepository
@@ -254,6 +255,7 @@ export function AuthoringPreviewScreen({
   textFileExportPort = defaultTextFileExportPort,
   gatewayClient,
   previewGenerationAvailable = true,
+  previewProviderName,
   onBack,
   projectRepository,
   sessionRepository,
@@ -1362,11 +1364,13 @@ export function AuthoringPreviewScreen({
         並在本地編輯、檢查與匯出尚未發佈的草稿。
       </p>
       <p className="authoring-provider-note" role="status">
-        Draft provider / AI provider not connected
+        {previewProviderName
+          ? `已設定本機模型 ${previewProviderName}；服務可用性將於生成時確認。`
+          : 'Draft provider / AI provider not connected'}
       </p>
       {!previewGenerationAvailable && (
         <p className="authoring-provider-note" role="status">
-          此版本尚未提供內建 AI 生成；草稿預覽目前不可用。請匯入草稿，再使用本地編輯、檢查與匯出功能。
+          尚未接通本機 AI backend；草稿預覽目前不可用。請匯入草稿，再使用本地編輯、檢查與匯出功能。
         </p>
       )}
 

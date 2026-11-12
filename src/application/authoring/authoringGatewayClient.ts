@@ -35,6 +35,12 @@ export interface AuthoringGatewayClient {
 export interface AuthoringGatewayClientOptions {
   readonly endpoint?: string
   readonly fetchImpl?: typeof fetch
+  readonly timeoutMs?: number
+}
+
+export interface AuthoringGatewayStatus {
+  readonly configured: boolean
+  readonly providerName: string | null
 }
 
 const INTERNAL_GATEWAY_ERROR = '創作預覽暫時無法處理。'
@@ -70,17 +76,59 @@ function isGatewayResponse(value: unknown): value is AuthoringGatewayResponse {
 export class AuthoringGatewayClientAdapter implements AuthoringGatewayClient {
   private readonly endpoint: string
   private readonly fetchImpl: typeof fetch
+  private readonly timeoutMs: number
 
   constructor({
     endpoint = AUTHORING_GATEWAY_ENDPOINT,
-    fetchImpl = fetch,
+    fetchImpl = (input, init) => globalThis.fetch(input, init),
+    timeoutMs = 125_000,
   }: AuthoringGatewayClientOptions = {}) {
     this.endpoint = endpoint
     this.fetchImpl = fetchImpl
+    this.timeoutMs = timeoutMs
+  }
+
+  async getStatus(): Promise<AuthoringGatewayStatus> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3_000)
+    try {
+      const response = await this.fetchImpl('/api/authoring/status', {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      const value: unknown = await response.json()
+      if (
+        response.ok &&
+        isRecord(value) &&
+        value.configured === true &&
+        typeof value.providerName === 'string' &&
+        value.providerName.startsWith('ollama:')
+      ) {
+        return { configured: true, providerName: value.providerName }
+      }
+    } catch {
+      // Static and offline builds keep manual authoring available.
+    } finally {
+      clearTimeout(timer)
+    }
+    return { configured: false, providerName: null }
   }
 
   async generateDraft(
     spec: AuthoringSpec,
+  ): Promise<AuthoringGatewayClientResult> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+    try {
+      return await this.request(spec, controller.signal)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private async request(
+    spec: AuthoringSpec,
+    signal: AbortSignal,
   ): Promise<AuthoringGatewayClientResult> {
     const request: AuthoringGatewayRequest = {
       premise: spec.premise,
@@ -96,6 +144,7 @@ export class AuthoringGatewayClientAdapter implements AuthoringGatewayClient {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(request),
+        signal,
       })
     } catch {
       return {
@@ -124,8 +173,16 @@ export class AuthoringGatewayClientAdapter implements AuthoringGatewayClient {
       }
     }
 
-    if (payload.ok) {
+    if (payload.ok && response.ok) {
       return payload
+    }
+
+    if (payload.ok) {
+      return {
+        ok: false,
+        status: 'internal_error',
+        message: INTERNAL_GATEWAY_ERROR,
+      }
     }
 
     if (payload.error.code === 'INVALID_REQUEST') {

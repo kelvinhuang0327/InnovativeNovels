@@ -1,10 +1,13 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   getBookDetail,
   listCatalog,
 } from '../application/catalog/catalogUseCases'
 import type { ContentRepository } from '../application/catalog/contentRepository'
-import type { AuthoringGatewayClient } from '../application/authoring/authoringGatewayClient'
+import type {
+  AuthoringGatewayClient,
+  AuthoringGatewayStatus,
+} from '../application/authoring/authoringGatewayClient'
 import { AuthoringGatewayClientAdapter } from '../application/authoring/authoringGatewayClient'
 import type { AuthoringProjectRepository } from '../application/authoring/authoringProjectRepository'
 import type {
@@ -349,6 +352,23 @@ function App({
   const [preferences, setPreferences] = useState<ReaderPreferences>(() =>
     prefRepo.load(),
   )
+  const injectedGatewayClient = dependencies.authoringGatewayClient
+  const [gatewayStatus, setGatewayStatus] = useState<AuthoringGatewayStatus>({
+    configured: false,
+    providerName: null,
+  })
+  useEffect(() => {
+    if (screen.name !== 'authoring' || injectedGatewayClient) return
+    let active = true
+    void defaultAuthoringGatewayClient
+      .getStatus()
+      .then((status) => {
+        if (active) setGatewayStatus(status)
+      })
+    return () => {
+      active = false
+    }
+  }, [screen.name, injectedGatewayClient])
   const [bookmarks, setBookmarks] = useState<readonly BookmarkEntry[]>(() =>
     listChapterBookmarks(dependencies.contentRepository, bookmarkRepo),
   )
@@ -657,10 +677,13 @@ function App({
 
       {screen.name === 'authoring' && (
         <AuthoringPreviewScreen
-          previewGenerationAvailable={import.meta.env.DEV || dependencies.authoringGatewayClient !== undefined}
+          previewGenerationAvailable={
+            import.meta.env.DEV || injectedGatewayClient !== undefined || gatewayStatus.configured
+          }
+          previewProviderName={gatewayStatus.providerName ?? undefined}
           clipboardPort={dependencies.clipboardPort}
           gatewayClient={
-            dependencies.authoringGatewayClient ?? defaultAuthoringGatewayClient
+            injectedGatewayClient ?? defaultAuthoringGatewayClient
           }
           onBack={() => setScreen({ name: 'catalog' })}
           projectRepository={dependencies.authoringProjectRepository}
