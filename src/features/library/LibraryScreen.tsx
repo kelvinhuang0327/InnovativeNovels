@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { describeFileExport, FILE_EXPORT_ERROR, type TextFileExportPort } from '../../application/export/textFileExportPort'
+import { defaultTextFileExportPort } from '../../infrastructure/export/platformTextFileExportAdapter'
 import type { ContentBook } from '../../application/catalog/contentRepository'
 import type {
   BookmarkEntry,
@@ -14,6 +16,7 @@ import { serializeReadingDataExport } from '../../application/reading/readingDat
 import { ContinueReadingShelf } from './ContinueReadingShelf'
 
 interface LibraryScreenProps {
+  readonly textFileExportPort?: TextFileExportPort
   readonly books: readonly ContentBook[]
   readonly bookmarks: readonly BookmarkEntry[]
   readonly notes: readonly ChapterReadingNoteEntry[]
@@ -147,6 +150,7 @@ function RecentReadingCard({
 }
 
 export function LibraryScreen({
+  textFileExportPort = defaultTextFileExportPort,
   books,
   bookmarks,
   notes,
@@ -161,6 +165,10 @@ export function LibraryScreen({
   onRemoveReadingNote,
   onRemoveFromBookshelf,
 }: LibraryScreenProps) {
+  const exportInFlight = useRef(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState<string>()
+  const [exportError, setExportError] = useState<string>()
   const [bookshelfSearch, setBookshelfSearch] = useState('')
   const [savedItemsSearch, setSavedItemsSearch] = useState('')
   const [savedItemsScope, setSavedItemsScope] = useState<SavedItemsScope>('all')
@@ -189,8 +197,8 @@ export function LibraryScreen({
     ? `目前沒有符合搜尋條件可匯出的${savedItemsScopeLabel}。`
     : `目前沒有可匯出的${savedItemsScopeLabel}。`
 
-  function handleExportSavedItems() {
-    if (!hasExportableSavedItems) {
+  async function handleExportSavedItems() {
+    if (!hasExportableSavedItems || exportInFlight.current) {
       return
     }
 
@@ -200,16 +208,21 @@ export function LibraryScreen({
       return
     }
 
-    const file = new Blob([serialized], { type: 'text/plain;charset=utf-8' })
-    const objectUrl = URL.createObjectURL(file)
-    const downloadLink = document.createElement('a')
-    downloadLink.href = objectUrl
-    downloadLink.download = 'reading-data.txt'
-    downloadLink.hidden = true
-    document.body.append(downloadLink)
-    downloadLink.click()
-    downloadLink.remove()
-    URL.revokeObjectURL(objectUrl)
+    exportInFlight.current = true
+    setIsExporting(true)
+    setExportStatus(undefined)
+    setExportError(undefined)
+    try {
+      const outcome = await textFileExportPort.exportFile({
+        filename: 'reading-data.txt', content: serialized, mimeType: 'text/plain',
+      })
+      setExportStatus(describeFileExport(outcome))
+    } catch {
+      setExportError(FILE_EXPORT_ERROR)
+    } finally {
+      exportInFlight.current = false
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -300,13 +313,16 @@ export function LibraryScreen({
 
       <div className="library-book-actions">
         {hasExportableSavedItems ? (
-          <button type="button" onClick={handleExportSavedItems}>
+          <button disabled={isExporting} type="button" onClick={() => void handleExportSavedItems()}>
             {exportButtonLabel}
           </button>
         ) : (
           <p role="status">{exportEmptyState}</p>
         )}
       </div>
+
+      {exportStatus && <p role="status">{exportStatus}</p>}
+      {exportError && <p role="alert">{exportError}</p>}
 
       {continueReading.length > 0 && (
         <ContinueReadingShelf
